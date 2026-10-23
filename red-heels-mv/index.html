@@ -1,0 +1,1425 @@
+<title>红色高跟鞋 MV</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Noto+Serif+SC:wght@500;700&display=swap">
+<style>
+  :root {
+    /* Layout: a dark screening room; one 16:9 paper-cream stage, a transport bar and two source cards stacked under it */
+    --room: #1B1A18;
+    --card: #262522;
+    --well: #1F1E1C;
+    --rule: #3B3935;
+    --ink: #F0EEE6;
+    --muted: #ABA79D;
+    --clay: #D97757;
+    --clay-strong: #E8896A;
+    --stage: #FAF9F5;
+    --f-display: "Noto Serif SC", "Songti SC", "STSong", "SimSun", Georgia, serif;
+    --f-latin: "Newsreader", Georgia, "Times New Roman", serif;
+    --f-ui: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --f-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  html, body { background: var(--room); color: var(--ink); }
+  body {
+    font-family: var(--f-ui);
+    font-size: 15px;
+    line-height: 1.6;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 24px 48px;
+  }
+  .wrap { max-width: 1160px; margin: 0 auto; display: grid; gap: 18px; }
+
+  .masthead { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand svg { width: 30px; height: 30px; flex: none; }
+  h1 {
+    margin: 0;
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(26px, 4vw, 38px);
+    letter-spacing: .08em;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+  .tagline { margin: 0; font-family: var(--f-latin); font-style: italic; color: var(--muted); font-size: 17px; }
+
+  .stage {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--stage);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 40px 90px -40px rgba(0, 0, 0, .75), 0 0 0 1px rgba(255, 255, 255, .05);
+    cursor: pointer;
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+  .stage:fullscreen { border-radius: 0; background: #141413; display: flex; align-items: center; justify-content: center; }
+  .stage:fullscreen canvas { width: min(100vw, 177.78vh); height: min(56.25vw, 100vh); }
+  .stage.dragging::after {
+    content: "松开即可载入";
+    position: absolute; inset: 12px;
+    border: 3px dashed var(--clay);
+    border-radius: 12px;
+    display: grid; place-items: center;
+    background: rgba(250, 249, 245, .82);
+    color: #141413;
+    font: 700 clamp(18px, 3vw, 30px) var(--f-display);
+  }
+  .bigplay {
+    position: absolute;
+    right: 3.5%;
+    bottom: 6%;
+    width: clamp(46px, 7vw, 80px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 0;
+    background: var(--clay);
+    color: #FAF9F5;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    box-shadow: 0 14px 30px -12px rgba(120, 40, 20, .7);
+    transition: transform .2s ease;
+  }
+  .bigplay:hover { transform: scale(1.06); }
+  .bigplay svg { width: 42%; height: 42%; }
+
+  .transport { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+  .tbtn {
+    width: 44px; height: 44px; flex: none;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    background: var(--card);
+    color: var(--ink);
+    display: grid; place-items: center;
+    cursor: pointer;
+  }
+  .tbtn svg { width: 18px; height: 18px; }
+  .tbtn.play { background: var(--clay); border-color: var(--clay); color: #1B1A18; }
+  .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; min-width: 92px; }
+  #seek { flex: 1 1 220px; min-width: 0; accent-color: var(--clay); }
+  .now-playing {
+    display: inline-flex; align-items: center; gap: 8px;
+    max-width: 100%;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .now-playing b { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+
+  .panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 16px; align-items: start; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 18px 20px;
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    min-width: 0;
+  }
+  .card h2 { margin: 0; font-family: var(--f-display); font-weight: 500; font-size: 19px; letter-spacing: .05em; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; max-width: 64ch; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    appearance: none;
+    border: 1px solid var(--rule);
+    background: transparent;
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 9px 16px;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--clay); border-color: var(--clay); color: #1B1A18; font-weight: 600; }
+  .btn.primary:hover { background: var(--clay-strong); }
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--well);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font: 13px/1.5 var(--f-mono);
+    resize: vertical;
+    min-height: 92px;
+  }
+  .status { font-size: 13px; color: var(--clay-strong); }
+  .status:empty { display: none; }
+  .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .foot { color: var(--muted); font-size: 13px; margin: 0; max-width: 90ch; }
+  kbd {
+    font: 12px var(--f-mono);
+    border: 1px solid var(--rule);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 0 5px;
+    color: var(--ink);
+  }
+  :focus-visible { outline: 2px solid var(--clay-strong); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 520px) {
+    .time { min-width: 0; }
+    #seek { flex-basis: 100%; order: 5; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <svg viewBox="0 0 40 40" aria-hidden="true">
+        <g stroke="#D97757" stroke-width="4.2" stroke-linecap="round">
+          <line x1="20" y1="4" x2="20" y2="15"/><line x1="20" y1="25" x2="20" y2="36"/>
+          <line x1="4" y1="20" x2="15" y2="20"/><line x1="25" y1="20" x2="36" y2="20"/>
+          <line x1="8.7" y1="8.7" x2="16.4" y2="16.4"/><line x1="23.6" y1="23.6" x2="31.3" y2="31.3"/>
+          <line x1="31.3" y1="8.7" x2="23.6" y2="16.4"/><line x1="16.4" y1="23.6" x2="8.7" y2="31.3"/>
+        </g>
+      </svg>
+      <h1>红色高跟鞋</h1>
+    </div>
+    <p class="tagline">Red High Heels · 一支 Claude 风格的 MV</p>
+  </header>
+
+  <div class="stage" id="stage" title="点击播放 / 暂停，双击全屏">
+    <canvas id="mv" aria-label="《红色高跟鞋》MV 画面"></canvas>
+    <button class="bigplay" id="bigplay" aria-label="播放">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path id="bigIcon" fill="currentColor" d="M7 4.5v15l13-7.5z"/></svg>
+    </button>
+  </div>
+
+  <div class="transport">
+    <button class="tbtn play" id="playBtn" aria-label="播放">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path id="playIcon" fill="currentColor" d="M7 4.5v15l13-7.5z"/></svg>
+    </button>
+    <span class="time" id="time">0:10 / 2:12</span>
+    <input id="seek" type="range" min="0" max="1000" step="1" value="76" aria-label="播放进度">
+    <button class="tbtn" id="fsBtn" aria-label="全屏">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+    <span class="now-playing" id="nowPlaying">音乐：<b>还没有选择</b></span>
+  </div>
+
+  <section class="panel">
+    <div class="card">
+      <h2>背景音乐</h2>
+      <p>页面里没有内置原曲。选择你自己的《红色高跟鞋》音频文件（mp3、m4a、flac、wav 都可以），画面会跟着鼓点走。文件只在你的浏览器里播放，不会上传。</p>
+      <div class="row">
+        <button class="btn primary" id="pickAudio">选择《红色高跟鞋》音频</button>
+        <button class="btn" id="usePreview">先用原创伴奏预览</button>
+      </div>
+      <input class="file-input" id="audioFile" type="file" accept="audio/*,.mp3,.m4a,.flac,.wav,.ogg,.aac" tabindex="-1">
+      <p class="status" id="srcStatus" aria-live="polite"></p>
+    </div>
+
+    <div class="card">
+      <h2>歌词（可选）</h2>
+      <p>载入 .lrc 歌词文件，或把 LRC 文本粘贴到下面，画面里的原创字幕就会换成同步歌词。同一时间戳的第二行会显示成小字翻译。</p>
+      <label for="lrcText" class="file-input">LRC 歌词文本</label>
+      <textarea id="lrcText" spellcheck="false" placeholder="[00:16.20]第一句歌词&#10;[00:20.85]第二句歌词"></textarea>
+      <div class="row">
+        <button class="btn" id="pickLrc">选择 .lrc 文件</button>
+        <button class="btn" id="applyLrc">使用这段歌词</button>
+        <button class="btn" id="clearLrc">换回原创字幕</button>
+      </div>
+      <input class="file-input" id="lrcFile" type="file" accept=".lrc,.txt,text/plain" tabindex="-1">
+      <p class="status" id="lrcStatus" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <p class="foot">画面、字幕和预览伴奏都是原创的；《红色高跟鞋》（蔡健雅 演唱）的录音与歌词版权归原作者所有，请使用你合法拥有的音频。也可以把音频或 .lrc 文件直接拖到画面上。快捷键：<kbd>空格</kbd> 播放 / 暂停，<kbd>←</kbd> <kbd>→</kbd> 快退 / 快进 5 秒，<kbd>F</kbd> 全屏。</p>
+</div>
+
+<audio id="audio" preload="auto"></audio>
+
+<script>
+(() => {
+  'use strict';
+
+  // ------------------------------------------------------------------ constants
+  const W = 1920, H = 1080, TAU = Math.PI * 2;
+  const COL = {
+    ivory: '#FAF9F5', cream: '#F0EEE6', oat: '#E3DACC', slate: '#141413', gray: '#87867F',
+    clay: '#D97757', clayDeep: '#BD5D3A', clayPale: '#F2D3C4',
+    red: '#C8372D', redDeep: '#962920', redHi: '#E4604C', lining: '#EEC6AC',
+    kraft: '#D4A27F', kraftDeep: '#B07C55', kraftLid: '#DDB08C',
+    cactus: '#BCD1CA', heather: '#CBCADB', olive: '#9AAE7E'
+  };
+  const ZH = '"Noto Serif SC","Songti SC","STSong","SimSun",serif';
+  const LAT = '"Newsreader",Georgia,"Times New Roman",serif';
+  const SANS = 'system-ui,-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // The preview track is 44 bars at 80 BPM (3 s per bar). Scene cuts sit on its section changes;
+  // for a loaded song the same proportions are stretched over the song's length.
+  const BAR = 3;
+  const PREVIEW_LEN = 44 * BAR;
+  const PREVIEW_BOUNDS = [0, 4, 12, 16, 24, 28, 32, 40, 44].map(b => b * BAR);
+
+  // Original captions (not the song's lyrics). s = scene index, a/b = start/end as a fraction of that scene.
+  const CAPS = [
+    { s: 1, a: .08, b: .46, zh: '有些心动，说不出形状', en: 'Some feelings have no shape' },
+    { s: 1, a: .54, b: .94, zh: '我只好用脚步，慢慢丈量', en: 'So I measure them, step by step' },
+    { s: 2, a: .30, b: 1, zh: '像冬天午后的阳光，落在肩上', en: 'Like winter sun resting on a shoulder' },
+    { s: 2, a: .62, b: 1, zh: '温柔，又带一点点锋利', en: 'Soft, with a little edge' },
+    { s: 3, a: .04, b: .31, zh: '是一双红色的高跟鞋', en: 'A pair of red high heels' },
+    { s: 3, a: .36, b: .63, zh: '每一步，都踩在心跳上', en: 'Every step lands on a heartbeat' },
+    { s: 3, a: .68, b: .96, zh: '明知会累，还是想穿着它走', en: 'They may hurt, and I would still walk in them' },
+    { s: 4, a: .05, b: .46, zh: '小心翼翼，把心事收好', en: 'Carefully, I box the feeling away' },
+    { s: 4, a: .54, b: .95, zh: '又忍不住，再打开一次', en: 'Then open it, just once more' },
+    { s: 5, a: .05, b: .46, zh: '夜深了，城市安静下来', en: 'Late night. The city goes quiet' },
+    { s: 5, a: .54, b: .95, zh: '只剩咔嗒咔嗒，走向你的声音', en: 'Only the click-clack of me walking to you' },
+    { s: 6, a: .04, b: .31, zh: '不必完美合脚', en: 'It does not have to fit perfectly' },
+    { s: 6, a: .36, b: .63, zh: '我也愿意走很远很远', en: 'I would still walk a long, long way' },
+    { s: 6, a: .68, b: .90, zh: '为你，穿上红色高跟鞋', en: 'For you, in red high heels' }
+  ];
+
+  // ------------------------------------------------------------------ math helpers
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const seg = (p, a, b) => clamp((p - a) / (b - a));
+  const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const E = {
+    out: t => 1 - Math.pow(1 - t, 3),
+    inOut: t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+    back: t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+  };
+  function mulberry32(a) {
+    return () => {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const fmt = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+
+  // ------------------------------------------------------------------ canvas
+  const canvas = document.getElementById('mv');
+  const ctx = canvas.getContext('2d');
+  let grainPattern = null, grainCanvas = null;
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    let w = Math.max(320, Math.round(r.width * dpr));
+    if (w > 1920) w = 1920;
+    const h = Math.round(w * 9 / 16);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; grainPattern = null; }
+  }
+  new ResizeObserver(resize).observe(canvas);
+  resize();
+
+  // ------------------------------------------------------------------ drawing primitives
+  // Side-view stiletto pump, toe pointing right. Local units; ground sits at y = 138.
+  const HEEL = {
+    body: new Path2D('M30 22 C26 40 28 55 36 62 C72 64 98 128 136 134 C160 138 190 138 204 130 C213 124 209 111 194 108 C172 103 154 92 138 84 C106 86 66 50 30 22 Z'),
+    spike: new Path2D('M34 58 L64 66 C53 80 49 102 50 135 L43 135 C42 108 39 82 34 58 Z'),
+    lining: new Path2D('M33 26 C64 47 100 78 136 84 C114 89 92 80 74 68 C56 56 42 42 33 26 Z'),
+    sole: new Path2D('M37 63 C72 65 98 128 136 134 C160 138 190 138 204 130'),
+    gloss1: new Path2D('M160 106 C176 110 190 114 199 118'),
+    gloss2: new Path2D('M37 34 C37 44 39 52 43 57'),
+    tip: new Path2D('M42 134 L51 134 L51 139 L42 139 Z'),
+    cx: 118, cy: 84, ground: 139
+  };
+  const HEEL_DROP = HEEL.ground - HEEL.cy; // centre-to-ground distance in local units
+  let boil = 0; // hand-drawn line "boil": a new jitter seed 8 times per second
+
+  function drawHeel(c, x, y, s, rot = 0, o = {}) {
+    const draw = o.draw ?? 1, fill = o.fill ?? 1;
+    if (s <= 0.001 || (draw <= 0 && fill <= 0)) return;
+    c.save();
+    c.translate(x, y); c.rotate(rot); c.scale(o.flip ? -s : s, s);
+    c.translate(-HEEL.cx, -HEEL.cy);
+    if (o.alpha != null) c.globalAlpha *= o.alpha;
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    if (fill > 0) {
+      c.save();
+      c.globalAlpha *= fill;
+      const g = c.createLinearGradient(0, 22, 0, 139);
+      g.addColorStop(0, COL.redHi); g.addColorStop(.45, COL.red); g.addColorStop(1, COL.redDeep);
+      c.fillStyle = g;
+      c.fill(HEEL.spike); c.fill(HEEL.body);
+      c.fillStyle = COL.lining; c.fill(HEEL.lining);
+      c.fillStyle = COL.slate; c.fill(HEEL.tip);
+      c.strokeStyle = COL.redDeep; c.lineWidth = 5; c.stroke(HEEL.sole);
+      if (o.shade) { c.fillStyle = `rgba(20,20,19,${o.shade})`; c.fill(HEEL.spike); c.fill(HEEL.body); }
+      c.strokeStyle = 'rgba(255,240,230,.6)'; c.lineWidth = 3.4;
+      c.stroke(HEEL.gloss1); c.stroke(HEEL.gloss2);
+      c.restore();
+    }
+    if (draw > 0) {
+      const lw = 4.4 / Math.pow(s, .6);
+      const j = 1.3 / s;
+      const jx = (hash(boil * 1.7 + (o.seed || 0)) - .5) * 2 * j, jy = (hash(boil * 2.3 + 5 + (o.seed || 0)) - .5) * 2 * j;
+      c.strokeStyle = o.line || COL.slate;
+      if (draw < 1) { c.setLineDash([720 * draw, 720]); }
+      c.lineWidth = lw;
+      c.save(); c.translate(jx, jy); c.stroke(HEEL.body); c.stroke(HEEL.spike); c.restore();
+      c.globalAlpha *= .35; c.lineWidth = lw * .5;
+      c.save(); c.translate(-jx * .8, jy * .6 + j * .5); c.stroke(HEEL.body); c.restore();
+      c.setLineDash([]);
+    }
+    c.restore();
+  }
+
+  // An asterisk-like spark: round-capped rays of slightly uneven length.
+  function drawSpark(c, x, y, r, rot, color, o = {}) {
+    if (r <= .2) return;
+    const n = o.rays || 10;
+    c.save();
+    c.translate(x, y); c.rotate(rot);
+    c.strokeStyle = color; c.lineCap = 'round'; c.lineWidth = r * (o.w || .2);
+    c.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU + (hash(i * 7.7) - .5) * .16;
+      const len = r * (.74 + .26 * hash(i * 3.1 + 1));
+      c.moveTo(Math.cos(a) * r * .1, Math.sin(a) * r * .1);
+      c.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+    }
+    c.stroke();
+    c.restore();
+  }
+
+  function fillBg(c, color) { c.fillStyle = color; c.fillRect(-40, -40, W + 80, H + 80); }
+  function ellipse(c, x, y, rx, ry, color) { c.fillStyle = color; c.beginPath(); c.ellipse(x, y, Math.max(0, rx), Math.max(0, ry), 0, 0, TAU); c.fill(); }
+  function circle(c, x, y, r, color) { c.fillStyle = color; c.beginPath(); c.arc(x, y, Math.max(0, r), 0, TAU); c.fill(); }
+  function rrect(c, x, y, w, h, r) { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); }
+  function text(c, str, x, y, font, color, align = 'center', alpha = 1) {
+    if (alpha <= 0 || !str) return;
+    c.save(); c.font = font; c.fillStyle = color; c.textAlign = align; c.textBaseline = 'alphabetic';
+    c.globalAlpha *= alpha; c.fillText(str, x, y); c.restore();
+  }
+  // Shrinks a font until the string fits maxW.
+  function fitFont(c, str, size, weight, family, maxW) {
+    c.font = `${weight} ${size}px ${family}`;
+    const w = c.measureText(str).width;
+    if (w > maxW) size = Math.max(18, Math.floor(size * maxW / w));
+    return `${weight} ${size}px ${family}`;
+  }
+  // Characters rise in one by one.
+  function titleReveal(c, str, cx, y, size, prog, color, alpha = 1) {
+    if (prog <= 0 || alpha <= 0) return;
+    const chars = [...str], n = chars.length;
+    c.save();
+    c.font = `700 ${size}px ${ZH}`; c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillStyle = color;
+    const gap = size * .14;
+    const ws = chars.map(ch => c.measureText(ch).width);
+    let x = cx - (ws.reduce((a, b) => a + b, 0) + gap * (n - 1)) / 2;
+    chars.forEach((ch, i) => {
+      const cp = E.out(clamp(prog * (n + 1.2) - i));
+      c.globalAlpha = cp * alpha;
+      c.fillText(ch, x, y + (1 - cp) * size * .35);
+      x += ws[i] + gap;
+    });
+    c.restore();
+  }
+
+  const DOODLES = Array.from({ length: 26 }, (_, i) => ({
+    x: hash(i + .1) * W, y: hash(i + .2) * H, r: 9 + hash(i + .3) * 20, k: Math.floor(hash(i + .4) * 4),
+    c: [COL.clay, COL.cactus, COL.heather, COL.kraft, COL.olive][Math.floor(hash(i + .5) * 5)],
+    sp: 8 + hash(i + .6) * 18, rot: hash(i + .7) * 6
+  }));
+  function drawDoodles(c, s, alpha, count = 26) {
+    if (alpha <= 0) return;
+    c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.lineWidth = 4;
+    for (let i = 0; i < count; i++) {
+      const d = DOODLES[i];
+      const y = ((d.y - s.clock * d.sp) % (H + 120) + H + 120) % (H + 120) - 60;
+      const x = d.x + Math.sin(s.clock * .4 + i) * 14;
+      c.globalAlpha = alpha * .55; c.strokeStyle = d.c; c.fillStyle = d.c;
+      c.save(); c.translate(x, y); c.rotate(d.rot + s.clock * .2 * (i % 2 ? 1 : -1));
+      c.beginPath();
+      if (d.k === 0) { c.arc(0, 0, d.r, 0, TAU); c.stroke(); }
+      else if (d.k === 1) { c.arc(0, 0, d.r * .4, 0, TAU); c.fill(); }
+      else if (d.k === 2) { c.moveTo(-d.r * .6, 0); c.lineTo(d.r * .6, 0); c.moveTo(0, -d.r * .6); c.lineTo(0, d.r * .6); c.stroke(); }
+      else { c.moveTo(-d.r, 0); for (let k = 1; k <= 8; k++) c.lineTo(-d.r + k * d.r / 4, Math.sin(k * 1.6) * d.r * .3); c.stroke(); }
+      c.restore();
+    }
+    c.restore();
+  }
+
+  // ------------------------------------------------------------------ particles
+  const parts = [];
+  function spawn(p) {
+    if (parts.length > 420) return;
+    parts.push(Object.assign({ x: 0, y: 0, vx: 0, vy: 0, ay: 0, drag: 0, life: 0, max: 1, size: 10, rot: 0, vr: 0, color: COL.clay, kind: 'dot', sway: 0, ph: Math.random() * TAU }, p));
+  }
+  function burst(x, y, n, speed, colors, kind = 'spark', size = [10, 22]) {
+    if (reduceMotion) n = Math.ceil(n / 2);
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU + Math.random() * .5, v = speed * (.6 + Math.random() * .6);
+      spawn({ kind, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, drag: 2.4, max: .9 + Math.random() * .5,
+        size: lerp(size[0], size[1], Math.random()), rot: Math.random() * TAU, vr: (Math.random() - .5) * 6,
+        color: colors[i % colors.length] });
+    }
+  }
+  function updateParts(dt) {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const q = parts[i];
+      q.life += dt;
+      if (q.life >= q.max) { parts.splice(i, 1); continue; }
+      const k = Math.exp(-q.drag * dt);
+      q.vx *= k; q.vy = q.vy * k + q.ay * dt;
+      q.x += (q.vx + (q.sway ? Math.sin(q.life * 2.2 + q.ph) * q.sway : 0)) * dt;
+      q.y += q.vy * dt;
+      q.rot += q.vr * dt;
+    }
+  }
+  function drawParts(c) {
+    for (const q of parts) {
+      const lp = q.life / q.max;
+      const a = q.kind === 'print' ? 1 - lp : Math.min(1, q.life * 8) * (1 - lp * lp);
+      c.save(); c.globalAlpha = a; c.translate(q.x, q.y); c.rotate(q.rot);
+      switch (q.kind) {
+        case 'spark': drawSpark(c, 0, 0, q.size, 0, q.color, { rays: 8, w: .24 }); break;
+        case 'print': drawSpark(c, 0, 0, q.size, 0, q.color, { rays: 6, w: .26 }); break;
+        case 'dot': circle(c, 0, 0, q.size, q.color); break;
+        case 'petal': c.fillStyle = q.color; c.beginPath(); c.ellipse(0, 0, q.size, q.size * .5, 0, 0, TAU); c.fill(); break;
+        case 'confetti': c.fillStyle = q.color; c.fillRect(-q.size / 2, -q.size / 4, q.size, q.size / 2); break;
+        case 'text': c.fillStyle = q.color; c.font = `700 ${q.size}px ${ZH}`; c.textAlign = 'center'; c.fillText(q.text, 0, 0); break;
+        case 'ring': c.strokeStyle = q.color; c.lineWidth = q.lw * (1 - lp); c.beginPath(); c.arc(0, 0, q.size + q.grow * E.out(lp), 0, TAU); c.stroke(); break;
+      }
+      c.restore();
+    }
+  }
+
+  // ------------------------------------------------------------------ scene 0: intro
+  function sIntro(c, s) {
+    fillBg(c, COL.ivory);
+    drawDoodles(c, s, .5 * E.out(seg(s.p, 0, .3)), 18);
+    const drawP = E.inOut(seg(s.p, .03, .48)), fillP = E.out(seg(s.p, .4, .6));
+    const bob = Math.sin(s.clock * 1.5) * 7;
+    c.save(); c.globalAlpha = fillP; ellipse(c, 960, 588, 250 - bob * 2, 18, 'rgba(20,20,19,.10)'); c.restore();
+    drawHeel(c, 960, 410 + bob, 2.6, -.04, { draw: drawP, fill: fillP });
+    titleReveal(c, '红色高跟鞋', 960, 765, 118, seg(s.p, .5, .78), COL.slate);
+    const sp = E.out(seg(s.p, .66, .82));
+    drawSpark(c, 960, 826, 15 * sp, s.clock * .8, COL.clay);
+    text(c, 'Red High Heels', 960, 900, `italic 400 42px ${LAT}`, COL.gray, 'center', sp);
+  }
+
+  // ------------------------------------------------------------------ scene 1: walking through town
+  const CITY = (() => {
+    const r = mulberry32(11);
+    const mk = (minH, maxH, minW, maxW, gap) => {
+      const a = []; let x = 0;
+      while (x < 2500) {
+        const w = minW + r() * (maxW - minW), h = minH + r() * (maxH - minH);
+        a.push({ x, w, h, roof: r(), c: Math.floor(r() * 4), tree: r() });
+        x += w + gap * (.4 + r());
+      }
+      a.W = x; return a;
+    };
+    return { far: mk(230, 470, 120, 240, 12), near: mk(130, 320, 110, 180, 80) };
+  })();
+  const NEAR_FILLS = [COL.oat, '#ECD9C6', COL.cactus, COL.heather];
+  const GY = 770;
+
+  function eachWrapped(list, off, fn) {
+    for (const b of list) {
+      const x0 = ((b.x - off) % list.W + list.W) % list.W - 220;
+      for (const x of [x0, x0 - list.W]) if (x < W + 20 && x + b.w > -20) fn(b, x);
+    }
+  }
+
+  function sWalk(c, s) {
+    fillBg(c, COL.cream);
+    circle(c, 1540, 250, 150, 'rgba(242,211,196,.7)');
+    circle(c, 1540, 250, 92, COL.clay);
+    for (let i = 0; i < 3; i++) {
+      const x = ((300 + i * 700 - s.clock * (14 + i * 5)) % 2300 + 2300) % 2300 - 200, y = 170 + i * 70;
+      c.fillStyle = 'rgba(255,255,255,.85)';
+      c.beginPath(); c.arc(x, y, 38, 0, TAU); c.arc(x + 46, y - 18, 50, 0, TAU); c.arc(x + 98, y, 36, 0, TAU); c.rect(x, y, 98, 36); c.fill();
+    }
+    const off = s.lt * 170;
+    c.fillStyle = '#E5DED1';
+    eachWrapped(CITY.far, off * .35, (b, x) => c.fillRect(x, GY - b.h, b.w, b.h));
+
+    c.lineJoin = 'round'; c.lineWidth = 3.5; c.strokeStyle = COL.slate;
+    eachWrapped(CITY.near, off, (b, x) => {
+      const top = GY - b.h;
+      c.fillStyle = NEAR_FILLS[b.c];
+      c.beginPath();
+      if (b.roof < .3) { c.moveTo(x, GY); c.lineTo(x, top); c.lineTo(x + b.w / 2, top - 46); c.lineTo(x + b.w, top); c.lineTo(x + b.w, GY); }
+      else if (b.roof < .45) { c.moveTo(x, GY); c.lineTo(x, top); c.arc(x + b.w / 2, top, b.w / 2, Math.PI, 0); c.lineTo(x + b.w, GY); }
+      else { c.rect(x, top, b.w, b.h); }
+      c.fill(); c.stroke();
+      const cols = Math.max(1, Math.floor((b.w - 24) / 38)), rows = Math.max(1, Math.floor((b.h - 40) / 52));
+      const gx = (b.w - cols * 38) / 2 + 9;
+      c.fillStyle = COL.ivory;
+      for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+        rrect(c, x + gx + k * 38, top + 22 + r * 52, 20, 28, 5); c.fill();
+      }
+      if (b.tree > .55) {
+        const tx = x + b.w + 30;
+        c.beginPath(); c.moveTo(tx, GY); c.lineTo(tx, GY - 70); c.stroke();
+        circle(c, tx, GY - 96, 34, COL.olive);
+        c.beginPath(); c.arc(tx, GY - 96, 34, 0, TAU); c.stroke();
+      }
+    });
+
+    c.fillStyle = '#E8E1D4'; c.fillRect(-40, GY, W + 80, H - GY + 40);
+    c.lineWidth = 4; c.beginPath(); c.moveTo(-40, GY + (hash(boil + 3) - .5) * 2); c.lineTo(W + 40, GY + (hash(boil + 4) - .5) * 2); c.stroke();
+    c.strokeStyle = COL.oat; c.lineWidth = 8;
+    for (let x = -((off) % 220); x < W; x += 220) { c.beginPath(); c.moveTo(x, GY + 70); c.lineTo(x + 90, GY + 70); c.stroke(); }
+
+    // A pair of heels marching in place: the lifted foot lands on the next beat.
+    const lifted = s.count % 2;
+    const feet = [{ x: 850, y: GY - 10, sc: 1.36, shade: .16 }, { x: 1020, y: GY, sc: 1.5, shade: 0 }];
+    if (s.beatNow) {
+      const f = feet[1 - lifted];
+      for (const dx of [-70, 80]) spawn({ kind: 'print', x: f.x + dx * f.sc, y: f.y + 8, vx: -170, max: 3, size: 11, color: COL.clay });
+      for (let i = 0; i < 4; i++) spawn({ kind: 'dot', x: f.x + 60 * f.sc, y: f.y - 4, vx: -120 - Math.random() * 120, vy: -60 - Math.random() * 90, ay: 260, max: .6, size: 4 + Math.random() * 3, color: COL.kraft });
+    }
+    feet.forEach((f, i) => {
+      const L = (i === lifted && s.playing) ? Math.sin(Math.PI * s.phase) : 0;
+      ellipse(c, f.x, f.y + 4, 130 * f.sc * (1 - L * .35), 9 * f.sc, 'rgba(20,20,19,.12)');
+      drawHeel(c, f.x, f.y - HEEL_DROP * f.sc - L * 64, f.sc, L * .22, { shade: f.shade, seed: i * 9 });
+    });
+  }
+
+  // ------------------------------------------------------------------ scene 2: "thinking about you"
+  function sThink(c, s) {
+    fillBg(c, COL.ivory);
+    drawDoodles(c, s, .35, 20);
+    const p = s.p;
+
+    const ub = E.back(seg(p, .02, .1));
+    if (ub > 0) {
+      c.save(); c.translate(1350, 265); c.scale(ub, ub);
+      rrect(c, -300, -110, 600, 220, 44); c.fillStyle = '#EEE8DC'; c.fill();
+      drawHeel(c, -196, 4, .9, -.05, { seed: 3 });
+      text(c, '这是什么感觉？', 96, 18, `500 50px ${ZH}`, COL.slate);
+      c.restore();
+    }
+
+    const sx = 418, sy = 520;
+    const thinking = p < .3;
+    const appear = E.back(seg(p, .09, .14));
+    drawSpark(c, sx, sy, 32 * appear * (1 + .08 * s.pulse), s.clock * (thinking ? 3.2 : .5), COL.clay, { rays: 12 });
+    if (thinking && appear > 0) {
+      c.save();
+      c.font = `500 36px ${SANS}`; c.textAlign = 'left';
+      const g = c.createLinearGradient(470, 0, 690, 0);
+      const k = (s.clock * .7) % 1;
+      g.addColorStop(0, COL.gray); g.addColorStop(clamp(k - .15), COL.gray); g.addColorStop(k, COL.slate); g.addColorStop(clamp(k + .15), COL.gray); g.addColorStop(1, COL.gray);
+      c.fillStyle = g; c.globalAlpha = appear;
+      c.fillText('正在想你…', 470, sy + 13);
+      c.restore();
+    }
+
+    // Lines stream in like a reply, newest at the bottom; at most three on screen.
+    const lines = s.caps.filter(l => l.start >= s.B[2] - .01 && l.start < s.B[3] && l.start <= s.t).slice(-3);
+    lines.forEach((l, j) => {
+      const y = 650 + j * 128;
+      const chars = [...(l.zh || '')];
+      const shown = Math.min(chars.length, Math.floor((s.t - l.start) * 15) + 1);
+      const older = j < lines.length - 1 ? .5 : 1;
+      c.save(); c.globalAlpha = older;
+      const font = fitFont(c, l.zh || '', 60, 600, ZH, 1400);
+      text(c, chars.slice(0, shown).join(''), 470, y, font, COL.slate, 'left');
+      if (shown >= chars.length && l.en) {
+        text(c, l.en, 472, y + 46, `italic 400 30px ${LAT}`, COL.gray, 'left', E.out(seg(s.t, l.start + chars.length / 15, l.start + chars.length / 15 + .6)));
+      }
+      if (j === lines.length - 1 && (shown < chars.length || (s.clock * 2) % 1 < .5)) {
+        c.font = font;
+        const w = c.measureText(chars.slice(0, shown).join('')).width;
+        c.fillStyle = COL.clay; c.fillRect(478 + w, y - 46, 8, 54);
+      }
+      c.restore();
+    });
+  }
+
+  // ------------------------------------------------------------------ scene 3: first chorus
+  function sChorus(c, s) {
+    fillBg(c, COL.clay);
+    const cx = 960, cy = 455;
+    c.save(); c.translate(cx, cy); c.rotate(s.clock * .06); c.fillStyle = 'rgba(189,93,58,.38)';
+    for (let i = 0; i < 24; i += 2) { c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, 1500, i / 24 * TAU, (i + 1) / 24 * TAU); c.closePath(); c.fill(); }
+    c.restore();
+    const enter = E.back(seg(s.p, 0, .07));
+    circle(c, cx, cy, (300 + 18 * s.pulse) * enter, COL.ivory);
+    c.save(); c.setLineDash([4, 16]); c.lineCap = 'round'; c.strokeStyle = COL.clay; c.lineWidth = 5;
+    c.beginPath(); c.arc(cx, cy, Math.max(0, (268 + 18 * s.pulse) * enter), s.clock * .3, s.clock * .3 + TAU); c.stroke(); c.restore();
+
+    if (s.beatNow) {
+      burst(cx, cy, 8, 900, [COL.ivory, COL.red, COL.slate, COL.kraft]);
+      spawn({ kind: 'ring', x: cx, y: cy, size: 300, grow: 380, lw: 10, max: 1, color: COL.ivory });
+    }
+    if (Math.random() < s.dt * 7) {
+      spawn({ kind: 'petal', x: Math.random() * W, y: -30, vy: 90 + Math.random() * 70, sway: 50, max: 13, size: 10 + Math.random() * 9,
+        rot: Math.random() * TAU, vr: (Math.random() - .5) * 2.5, color: Math.random() < .5 ? COL.ivory : COL.red });
+    }
+    const sway = Math.sin(s.clock * 1.2) * .06;
+    drawHeel(c, cx, cy + 10, 3.15 * (1 + .04 * s.pulse) * enter, sway, { seed: 2 });
+  }
+
+  // ------------------------------------------------------------------ scene 4: the shoebox
+  let wallpaper = null;
+  function getWallpaper() {
+    if (wallpaper) return wallpaper;
+    wallpaper = document.createElement('canvas'); wallpaper.width = W; wallpaper.height = H;
+    const g = wallpaper.getContext('2d');
+    g.globalAlpha = .17;
+    for (let y = 0, row = 0; y < H; y += 120, row++) for (let x = (row % 2) * 60; x < W + 60; x += 120) drawSpark(g, x, y + 40, 11, .2, COL.clayDeep, { rays: 8, w: .22 });
+    return wallpaper;
+  }
+  function drawLid(c, x, y, rot, bw) {
+    c.save(); c.translate(x, y); c.rotate(rot);
+    c.lineJoin = 'round'; c.lineWidth = 3.5; c.strokeStyle = COL.slate;
+    const hw = bw / 2 + 14;
+    c.beginPath(); c.moveTo(-hw, 0); c.lineTo(hw, 0); c.lineTo(hw - 34, -46); c.lineTo(-hw + 34, -46); c.closePath();
+    c.fillStyle = COL.kraftLid; c.fill(); c.stroke();
+    c.beginPath(); c.rect(-hw, 0, hw * 2, 46); c.fillStyle = COL.kraft; c.fill(); c.stroke();
+    c.restore();
+  }
+  function sBox(c, s) {
+    fillBg(c, COL.oat);
+    c.drawImage(getWallpaper(), 0, 0);
+    c.fillStyle = '#D8CCB8'; c.fillRect(-40, 800, W + 80, 320);
+    c.strokeStyle = COL.slate; c.lineWidth = 3.5; c.beginPath(); c.moveTo(-40, 800); c.lineTo(W + 40, 800); c.stroke();
+
+    const p = s.p, bx = 960, bw = 520, bh = 220;
+    const lidOn = p >= .42 && p < .64;
+    const hop = lidOn ? s.pulse * 16 : 0;
+    const top = 580 - hop;
+    const rest = { x: 380, y: 754, r: .06 }, on = { x: bx, y: top - 26, r: 0 };
+
+    const fly = 330 + Math.sin(s.clock * 1.6) * 10;
+    let hy = fly, hr = 0, hvis = true;
+    if (p >= .12 && p < .32) hy = lerp(fly, 712, E.inOut(seg(p, .12, .32)));
+    else if (p >= .32 && p < .68) hvis = false;
+    else if (p >= .68) { const q = seg(p, .68, .84); hy = lerp(712, fly, E.back(q)); hr = E.out(q) * TAU; }
+
+    if (!st.puff && p >= .42) { st.puff = true; if (p < .46) { for (const dx of [-280, 280]) burst(bx + dx, top, 5, 260, [COL.ivory, COL.kraft], 'dot', [4, 8]); } }
+    if (!st.pop && p >= .64) { st.pop = true; if (p < .68) {
+      burst(bx, top - 40, 12, 1000, [COL.red, COL.clay, COL.ivory, COL.slate]);
+      for (let i = 0; i < 14; i++) spawn({ kind: 'confetti', x: bx + (Math.random() - .5) * 300, y: top - 20, vx: (Math.random() - .5) * 500, vy: -500 - Math.random() * 400, ay: 900, drag: .8, max: 1.8, size: 26, rot: Math.random() * TAU, vr: (Math.random() - .5) * 10, color: COL.ivory });
+    } }
+    if (lidOn && s.beatNow && p > .44) {
+      const left = s.count % 2 === 0;
+      spawn({ kind: 'text', text: '怦', x: bx + (left ? -330 : 330), y: top - 70, vy: -70, max: 1.2, size: 66, color: COL.clayDeep, rot: (left ? -.2 : .2) });
+    }
+
+    ellipse(c, bx, 806, 330, 20, 'rgba(20,20,19,.12)');
+    // inside of the box
+    c.lineJoin = 'round'; c.lineWidth = 3.5; c.strokeStyle = COL.slate;
+    c.beginPath(); c.moveTo(bx - bw / 2 + 34, top - 52); c.lineTo(bx + bw / 2 - 34, top - 52); c.lineTo(bx + bw / 2, top); c.lineTo(bx - bw / 2, top); c.closePath();
+    c.fillStyle = COL.kraftDeep; c.fill(); c.stroke();
+    if (!lidOn) {
+      c.fillStyle = COL.ivory;
+      for (const [x0, h] of [[-170, 120], [-40, 150], [110, 110]]) {
+        c.beginPath(); c.moveTo(bx + x0 - 70, top - 6); c.lineTo(bx + x0, top - h); c.lineTo(bx + x0 + 70, top - 6); c.closePath(); c.fill(); c.stroke();
+      }
+    }
+    if (hvis) drawHeel(c, bx, hy, 1.6, hr - .04, { seed: 4 });
+    // front face
+    c.beginPath(); c.rect(bx - bw / 2, top, bw, bh); c.fillStyle = COL.kraft; c.fill(); c.stroke();
+    drawSpark(c, bx - 160, top + 112, 40, .3, 'rgba(250,249,245,.85)', { rays: 10 });
+    rrect(c, bx + 70, top + 56, 150, 112, 10); c.fillStyle = COL.ivory; c.fill(); c.stroke();
+    text(c, '37', bx + 145, top + 128, `600 58px ${LAT}`, COL.slate);
+    text(c, 'RED · 红', bx + 145, top + 156, `600 18px ${LAT}`, COL.clayDeep);
+
+    // lid: resting -> onto the box -> pops off -> resting
+    let lx = rest.x, ly = rest.y, lr = rest.r;
+    if (p >= .3 && p < .42) { const q = E.inOut(seg(p, .3, .42)); lx = lerp(rest.x, on.x, q); ly = lerp(rest.y, on.y, q) - Math.sin(q * Math.PI) * 220; lr = lerp(rest.r, on.r, q); }
+    else if (lidOn) { lx = on.x; ly = on.y; lr = on.r; }
+    else if (p >= .64 && p < .8) { const q = seg(p, .64, .8); lx = lerp(on.x, rest.x, E.inOut(q)); ly = lerp(on.y, rest.y, q) - Math.sin(q * Math.PI) * 420; lr = lerp(0, rest.r + TAU, E.out(q)); }
+    drawLid(c, lx, ly, lr, bw);
+  }
+
+  // ------------------------------------------------------------------ scene 5: night bridge
+  const STARS = Array.from({ length: 90 }, (_, i) => ({ x: hash(i * 3.7) * W, y: hash(i * 5.3) * 600, r: 3 + hash(i * 1.9) * 6, sp: .6 + hash(i * 2.3) * 1.8, ph: hash(i * 9.1) * TAU }));
+  const NIGHT_CITY = (() => {
+    const r = mulberry32(29), a = []; let x = -40;
+    while (x < W + 40) { const w = 70 + r() * 130, h = 80 + r() * 220; a.push({ x, w, h, seed: r() * 100 }); x += w + 6 + r() * 16; }
+    return a;
+  })();
+  function sNight(c, s) {
+    const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#121211'); g.addColorStop(1, '#2A2724');
+    c.fillStyle = g; c.fillRect(-40, -40, W + 80, H + 80);
+    for (const st of STARS) {
+      c.globalAlpha = Math.min(1, .3 + .7 * Math.abs(Math.sin(s.clock * st.sp + st.ph)) + s.pulse * .25);
+      drawSpark(c, st.x, st.y, st.r, st.ph, COL.ivory, { rays: 4, w: .34 });
+    }
+    c.globalAlpha = 1;
+    const halo = c.createRadialGradient(1530, 220, 50, 1530, 220, 280);
+    halo.addColorStop(0, 'rgba(217,119,87,.32)'); halo.addColorStop(1, 'rgba(217,119,87,0)');
+    c.fillStyle = halo; c.fillRect(1200, -80, 680, 620);
+    circle(c, 1530, 220, 76, COL.clay);
+    c.save(); c.beginPath(); c.arc(1530, 220, 76, 0, TAU); c.clip(); circle(c, 1574, 192, 70, '#1A1918'); c.restore();
+
+    const base = 1080 - 190;
+    for (const b of NIGHT_CITY) {
+      const top = base - b.h;
+      c.fillStyle = '#1D1C1A'; c.fillRect(b.x, top, b.w, H - top);
+      const cols = Math.max(1, Math.floor((b.w - 20) / 30)), rows = Math.floor((b.h - 20) / 40);
+      for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+        const on = hash(b.seed + r * 13 + k * 7 + Math.floor(s.clock / 2.6 + b.seed)) > .62;
+        c.fillStyle = on ? 'rgba(224,176,127,.85)' : '#292724';
+        c.fillRect(b.x + 12 + k * 30, top + 16 + r * 40, 14, 20);
+      }
+    }
+
+    const sg = c.createLinearGradient(0, 0, 0, 700);
+    sg.addColorStop(0, 'rgba(250,249,245,.24)'); sg.addColorStop(1, 'rgba(250,249,245,.05)');
+    c.fillStyle = sg; c.beginPath(); c.moveTo(905, -20); c.lineTo(1015, -20); c.lineTo(1240, 700); c.lineTo(680, 700); c.closePath(); c.fill();
+    for (let i = 0; i < 22; i++) {
+      const y = (hash(i + 40) * 680 + s.clock * 18 * (.5 + hash(i + 41))) % 680;
+      const x = 960 + (hash(i + 42) - .5) * (110 + 440 * y / 700);
+      circle(c, x, y, 2 + hash(i + 43) * 2.5, 'rgba(250,249,245,.35)');
+    }
+
+    ellipse(c, 960, 846, 236, 38, '#33302C');
+    c.fillStyle = '#3B3833'; c.fillRect(724, 700, 472, 146);
+    ellipse(c, 960, 700, 236, 38, '#5B564E');
+    const pool = c.createRadialGradient(960, 700, 10, 960, 700, 236);
+    pool.addColorStop(0, 'rgba(250,249,245,.45)'); pool.addColorStop(1, 'rgba(250,249,245,0)');
+    c.save(); c.scale(1, 38 / 236); c.fillStyle = pool; c.beginPath(); c.arc(960, 700 * 236 / 38, 236, 0, TAU); c.fill(); c.restore();
+
+    const sx = Math.cos(s.clock * .9);
+    c.save(); c.translate(960, 704 - HEEL_DROP * 2.3); c.scale(Math.sign(sx || 1) * Math.max(.05, Math.abs(sx)), 1);
+    drawHeel(c, 0, 0, 2.3, 0, { line: '#0E0E0D', seed: 6 });
+    c.restore();
+
+    if (s.beatNow) {
+      const left = s.count % 2 === 1;
+      spawn({ kind: 'text', text: left ? '咔' : '嗒', x: 960 + (left ? -330 : 330) + (Math.random() - .5) * 60, y: 620, vy: -70, max: 1.4, size: 70, color: COL.clay, rot: (Math.random() - .5) * .3 });
+    }
+  }
+
+  // ------------------------------------------------------------------ scene 6: final chorus, a spark made of heels
+  function sFinal(c, s) {
+    const cx = 960, cy = 455;
+    const g = c.createRadialGradient(cx, cy, 40, cx, cy, 1150);
+    g.addColorStop(0, '#FCF8F3'); g.addColorStop(.48, '#F5DFD1'); g.addColorStop(1, '#E39B7F');
+    c.fillStyle = g; c.fillRect(-40, -40, W + 80, H + 80);
+    if (s.beatNow) {
+      spawn({ kind: 'ring', x: cx, y: cy, size: 120, grow: 900, lw: 12, max: 1.6, color: COL.clay });
+      burst(cx, cy, 6, 700, [COL.clay, COL.red, COL.slate]);
+    }
+    if (Math.random() < s.dt * 9) {
+      spawn({ kind: 'confetti', x: Math.random() * W, y: -20, vy: 120 + Math.random() * 90, sway: 60, max: 10, size: 16 + Math.random() * 10,
+        rot: Math.random() * TAU, vr: (Math.random() - .5) * 5, color: [COL.clay, COL.red, COL.cactus, COL.heather, COL.kraft][Math.floor(Math.random() * 5)] });
+    }
+    const enter = E.back(seg(s.p, 0, .1)), exit = E.inOut(seg(s.p, .86, 1));
+    const R = (285 + 22 * s.pulse) * enter * (1 - exit);
+    const N = 10, rot0 = s.clock * .35;
+    for (let i = 0; i < N; i++) {
+      const a = rot0 + i * TAU / N;
+      drawHeel(c, cx + Math.cos(a) * R, cy + Math.sin(a) * R, 1.05 * enter * (1 - exit * .7), a, { seed: i });
+    }
+    drawSpark(c, cx, cy, (70 + 22 * s.pulse) * enter * (1 + exit * 3), -s.clock * .5, COL.clay, { rays: 12, w: .19 });
+  }
+
+  // ------------------------------------------------------------------ scene 7: outro and credits
+  function sOutro(c, s) {
+    fillBg(c, COL.ivory);
+    drawDoodles(c, s, .3 * (1 - seg(s.p, .8, .95)), 14);
+    const inP = E.back(seg(s.p, 0, .14));
+    const bob = Math.sin(s.clock * 1.5) * 6;
+    const fade = 1 - E.inOut(seg(s.p, .72, .84));
+    const undraw = 1 - E.inOut(seg(s.p, .8, .95));
+    c.save(); c.globalAlpha = fade * inP; ellipse(c, 960, 528, 210, 15, 'rgba(20,20,19,.1)'); c.restore();
+    drawHeel(c, 960, 375 + bob, 2.2 * inP, -.04, { fill: fade, draw: undraw, seed: 8 });
+    const out = 1 - seg(s.p, .78, .9);
+    titleReveal(c, '红色高跟鞋', 960, 690, 96, seg(s.p, .12, .34), COL.slate, out);
+    const cr = E.out(seg(s.p, .3, .44)) * out;
+    text(c, 'Red High Heels · 一支 Claude 风格的 MV', 960, 772, `italic 400 36px ${LAT}`, COL.gray, 'center', cr);
+    text(c, mode === 'preview' ? '配乐：原创预览伴奏（不是原曲）' : '音乐：《红色高跟鞋》 蔡健雅', 960, 832, `500 32px ${ZH}`, COL.slate, 'center', cr);
+    text(c, '画面与字幕原创 · 歌曲版权归原作者所有', 960, 882, `500 26px ${ZH}`, COL.gray, 'center', cr);
+    drawSpark(c, 960, 520, 34 * E.out(seg(s.p, .88, .95)) * (1 - E.inOut(seg(s.p, .97, 1))), s.clock * .8, COL.clay, { rays: 12 });
+  }
+
+  const SCENES = [
+    { draw: sIntro, cap: COL.slate, sub: COL.gray },
+    { draw: sWalk, cap: COL.slate, sub: '#6E6D66', bug: [COL.clay, COL.slate] },
+    { draw: sThink, card: true, bug: [COL.clay, COL.slate] },
+    { draw: sChorus, cap: COL.slate, sub: 'rgba(20,20,19,.75)', bug: [COL.ivory, COL.slate] },
+    { draw: sBox, cap: COL.slate, sub: '#6E6D66', bug: [COL.clayDeep, COL.slate] },
+    { draw: sNight, cap: COL.ivory, sub: '#C9C5BA', bug: [COL.clay, COL.ivory] },
+    { draw: sFinal, cap: COL.slate, sub: '#6E6D66', bug: [COL.clayDeep, COL.slate] },
+    { draw: sOutro, cap: COL.slate, sub: COL.gray }
+  ];
+
+  // ------------------------------------------------------------------ captions
+  let lyricLines = null; // [{t, zh, en}] from a loaded LRC
+  function captionList(B) {
+    if (lyricLines) {
+      const out = [];
+      for (let i = 0; i < lyricLines.length; i++) {
+        const L = lyricLines[i];
+        if (!L.zh && !L.en) continue;
+        const next = lyricLines[i + 1];
+        out.push({ start: L.t, end: Math.min(next ? next.t : L.t + 6, L.t + 9), zh: L.zh, en: L.en });
+      }
+      return out;
+    }
+    return CAPS.map(cp => { const a = B[cp.s], b = B[cp.s + 1]; return { start: a + (b - a) * cp.a, end: a + (b - a) * cp.b, zh: cp.zh, en: cp.en }; });
+  }
+  function drawLowerThird(c, caps, t, sc) {
+    for (const l of caps) {
+      if (t < l.start || t > l.end) continue;
+      const fi = E.out(seg(t, l.start, l.start + .45)), fo = 1 - seg(t, l.end - .4, l.end);
+      const a = Math.min(fi, fo), dy = (1 - fi) * 16;
+      if (l.zh) text(c, l.zh, 960, 950 + dy, fitFont(c, l.zh, 62, 600, ZH, 1720), sc.cap, 'center', a);
+      if (l.en) text(c, l.en, 960, l.zh ? 1004 + dy : 960 + dy, fitFont(c, l.en, 32, 'italic 400', LAT, 1720), sc.sub, 'center', a);
+    }
+  }
+  function drawBug(c, sc) {
+    if (!sc.bug) return;
+    drawSpark(c, 70, 66, 17, boil * .02, sc.bug[0], { rays: 10 });
+    text(c, '红色高跟鞋', 100, 76, `700 28px ${ZH}`, sc.bug[1], 'left', .9);
+  }
+  function drawWipe(c, t, B) {
+    const w = .5;
+    for (let j = 1; j < B.length - 1; j++) {
+      const d = t - B[j];
+      if (Math.abs(d) >= w) continue;
+      const r = E.inOut(1 - Math.abs(d) / w) * 1160;
+      circle(c, W / 2, H / 2, r, COL.clay);
+      drawSpark(c, W / 2, H / 2, r * .16, t * 2, COL.ivory, { rays: 12 });
+    }
+  }
+  function drawGrain(c) {
+    if (!grainCanvas) {
+      grainCanvas = document.createElement('canvas'); grainCanvas.width = grainCanvas.height = 220;
+      const g = grainCanvas.getContext('2d'), id = g.createImageData(220, 220);
+      for (let i = 0; i < id.data.length; i += 4) { const v = Math.random() < .5 ? 30 : 235; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = Math.random() * 16; }
+      g.putImageData(id, 0, 0);
+    }
+    if (!grainPattern) grainPattern = c.createPattern(grainCanvas, 'repeat');
+    c.save();
+    c.translate((hash(boil) * 220) | 0, (hash(boil + 1) * 220) | 0);
+    c.fillStyle = grainPattern; c.fillRect(-220, -220, W + 440, H + 440);
+    c.restore();
+    const v = c.createRadialGradient(W / 2, H / 2, 420, W / 2, H / 2, 1150);
+    v.addColorStop(0, 'rgba(60,30,15,0)'); v.addColorStop(1, 'rgba(60,30,15,.16)');
+    c.fillStyle = v; c.fillRect(0, 0, W, H);
+  }
+
+  // ------------------------------------------------------------------ audio, beats, sources
+  const audio = document.getElementById('audio');
+  let mode = 'none'; // 'none' | 'preview' | 'file'
+  let virtualT = 10, userScrubbed = false, pendingSeek = 0;
+  let actx = null, analyser = null, freq = null;
+  let previewPromise = null, previewURL = null, previewBeats = [];
+  let fileURL = null;
+
+  function ensureGraph() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!actx && AC) {
+      try {
+        actx = new AC();
+        const src = actx.createMediaElementSource(audio);
+        analyser = actx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = .5;
+        freq = new Uint8Array(analyser.frequencyBinCount);
+        src.connect(analyser); analyser.connect(actx.destination);
+      } catch (e) { analyser = null; }
+    }
+    if (actx && actx.state === 'suspended') actx.resume().catch(() => {});
+  }
+
+  const beat = { pulse: 0, count: 0, last: -10, interval: .75, now: false, ivals: [], hist: [], idx: 0, lastT: 0 };
+  function fireBeat(t, strength) {
+    const iv = t - beat.last;
+    if (iv > .25 && iv < 2.4) {
+      beat.ivals.push(iv); if (beat.ivals.length > 8) beat.ivals.shift();
+      const sorted = [...beat.ivals].sort((a, b) => a - b); beat.interval = sorted[sorted.length >> 1];
+    }
+    beat.last = t; beat.count++; beat.pulse = Math.max(beat.pulse, strength); beat.now = true;
+  }
+  function updateBeats(t, dt, playing) {
+    beat.now = false;
+    beat.pulse *= Math.exp(-dt * 6);
+    const jumped = t < beat.lastT - .05 || t > beat.lastT + .6;
+    if (jumped) { beat.last = t - 10; beat.hist.length = 0; }
+    if (playing && mode === 'preview' && previewBeats.length) {
+      if (jumped) { let i = 0; while (i < previewBeats.length && previewBeats[i].t < t) i++; beat.idx = i; }
+      while (beat.idx < previewBeats.length && previewBeats[beat.idx].t <= t) {
+        const b = previewBeats[beat.idx++];
+        if (t - b.t < .15) fireBeat(b.t, b.s);
+      }
+    } else if (playing && mode === 'file' && analyser) {
+      analyser.getByteFrequencyData(freq);
+      const binHz = actx.sampleRate / analyser.fftSize;
+      const lo = Math.max(1, Math.floor(40 / binHz)), hi = Math.ceil(160 / binHz);
+      let e = 0; for (let i = lo; i <= hi; i++) e += freq[i]; e /= (hi - lo + 1);
+      const avg = beat.hist.length ? beat.hist.reduce((a, b) => a + b, 0) / beat.hist.length : e;
+      beat.hist.push(e); if (beat.hist.length > 45) beat.hist.shift();
+      if (beat.hist.length > 10 && e > avg * 1.16 + 5 && e > 60 && t - beat.last > .28) fireBeat(t, clamp((e - avg) / 40, .5, 1));
+    }
+    beat.lastT = t;
+  }
+
+  // ---- original preview track, rendered offline into a WAV so it plays through the same <audio> element
+  function renderPreview() {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) return Promise.reject(new Error('浏览器不支持离线音频合成'));
+    const SR = 32000, SPB = BAR / 4, BARS = 44, TOTAL = BARS * BAR + 4;
+    const ac = new OAC(2, Math.ceil(TOTAL * SR), SR);
+    const beats = [];
+    const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+    const master = ac.createGain();
+    master.gain.setValueAtTime(1.05, 0); master.gain.setValueAtTime(1.05, 40 * BAR); master.gain.linearRampToValueAtTime(0, TOTAL - .2);
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 3; comp.attack.value = .008; comp.release.value = .2;
+    master.connect(comp); comp.connect(ac.destination);
+    // Reverb from damped feedback delays, spread left and right (much cheaper to render than a convolver).
+    const verb = ac.createGain();
+    const verbOut = ac.createGain(); verbOut.gain.value = .3; verbOut.connect(master);
+    [.0297, .0371, .0411, .0437, .0533, .0617].forEach((d, i) => {
+      const dl = ac.createDelay(.1); dl.delayTime.value = d;
+      const damp = ac.createBiquadFilter(); damp.type = 'lowpass'; damp.frequency.value = 3200; damp.Q.value = -6; // no resonant peak, so the loop stays below unity gain
+      const fbk = ac.createGain(); fbk.gain.value = Math.min(.86, Math.pow(10, -3 * d / 1.9));
+      const pan = ac.createStereoPanner(); pan.pan.value = i % 2 ? .7 : -.7;
+      const lvl = ac.createGain(); lvl.gain.value = .22;
+      verb.connect(dl); dl.connect(damp); damp.connect(fbk); fbk.connect(dl);
+      damp.connect(lvl); lvl.connect(pan); pan.connect(verbOut);
+    });
+    const delay = ac.createDelay(1); delay.delayTime.value = SPB * .75;
+    const fb = ac.createGain(); fb.gain.value = .3;
+    const dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2600;
+    const dOut = ac.createGain(); dOut.gain.value = .22;
+    delay.connect(dlp); dlp.connect(fb); fb.connect(delay); dlp.connect(dOut); dOut.connect(master); dOut.connect(verb);
+    const noise = ac.createBuffer(1, SR, SR);
+    { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+
+    function bus(g, send, pan = 0) {
+      const n = ac.createGain(); n.gain.value = g;
+      const p = ac.createStereoPanner(); p.pan.value = pan;
+      n.connect(p); p.connect(master);
+      if (send) { const sg = ac.createGain(); sg.gain.value = send; p.connect(sg); sg.connect(verb); }
+      return n;
+    }
+    const epBus = bus(.62, .5, -.12), padBus = bus(.2, .9), bassBus = bus(.75, .04), leadBus = bus(.34, .45, .08),
+      drumBus = bus(.9, .1), hatBus = bus(.28, .08, .25), bellBus = bus(.16, .8, .3);
+    leadBus.connect(delay);
+
+    // Each note's last node is unplugged from its bus once the note is over; idle nodes left
+    // in the graph keep costing render time.
+    let finished = [];
+    const done = (node, end) => finished.push({ node, end });
+    function sweep(now) { finished = finished.filter(f => { if (f.end < now) { f.node.disconnect(); return false; } return true; }); }
+    function env(g, t, a, peak, d, sus, rel, end) {
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(peak, t + a);
+      g.gain.exponentialRampToValueAtTime(Math.max(.0001, peak * sus), t + a + d);
+      g.gain.setValueAtTime(Math.max(.0001, peak * sus), end);
+      g.gain.exponentialRampToValueAtTime(.0001, end + rel);
+    }
+    function osc(type, f, t, stop, dest, detune = 0) {
+      const o = ac.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = detune;
+      o.connect(dest); o.start(t); o.stop(stop); return o;
+    }
+    function ep(t, m, dur, vel) {
+      const f = mtof(m), g = ac.createGain(); g.connect(epBus); done(g, t + dur + .7);
+      env(g, t, .006, vel, .45, .3, .5, t + dur);
+      osc('sine', f, t, t + dur + .6, g);
+      const g2 = ac.createGain(); g2.gain.value = .25; g2.connect(g); osc('triangle', f, t, t + dur + .6, g2, 4);
+      const g3 = ac.createGain(); g3.connect(g); g3.gain.setValueAtTime(.18, t); g3.gain.exponentialRampToValueAtTime(.0001, t + .18);
+      osc('sine', f * 4, t, t + .2, g3);
+    }
+    function pad(t, notes, dur, vel) {
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100; lp.connect(padBus); done(lp, t + dur + 1.3);
+      const g = ac.createGain(); g.connect(lp);
+      g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vel, t + .7); g.gain.setValueAtTime(vel, t + dur); g.gain.linearRampToValueAtTime(.0001, t + dur + 1.1);
+      for (const m of notes) for (const dt of [-8, 8]) osc('sawtooth', mtof(m), t, t + dur + 1.2, g, dt);
+    }
+    function bass(t, m, dur, vel) {
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; lp.connect(bassBus); done(lp, t + dur + .3);
+      const g = ac.createGain(); g.connect(lp);
+      env(g, t, .01, vel, .25, .6, .08, t + dur);
+      osc('sine', mtof(m), t, t + dur + .2, g);
+      const g2 = ac.createGain(); g2.gain.value = .45; g2.connect(g); osc('triangle', mtof(m), t, t + dur + .2, g2);
+    }
+    function lead(t, m, dur, vel) {
+      const f = mtof(m), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3000; lp.connect(leadBus); done(lp, t + dur + .45);
+      const g = ac.createGain(); g.connect(lp);
+      env(g, t, .035, vel, .2, .75, .28, t + dur);
+      const o1 = osc('triangle', f, t, t + dur + .35, g);
+      const g2 = ac.createGain(); g2.gain.value = .14; g2.connect(g); const o2 = osc('sine', f * 2, t, t + dur + .35, g2);
+      const lfo = ac.createOscillator(); lfo.frequency.value = 5.2;
+      const lg = ac.createGain(); lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * .006, t + Math.min(.4, dur));
+      lfo.connect(lg); lg.connect(o1.frequency); lfo.start(t); lfo.stop(t + dur + .35);
+      void o2;
+    }
+    function bell(t, m, vel) {
+      const f = mtof(m), g = ac.createGain(); g.connect(bellBus); done(g, t + 1.4);
+      g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vel, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + 1.3);
+      osc('sine', f, t, t + 1.35, g);
+      const g2 = ac.createGain(); g2.gain.value = .3; g2.connect(g); osc('sine', f * 2.76, t, t + 1.35, g2);
+    }
+    function noiseHit(t, type, freqHz, q, vel, dec, dest) {
+      const src = ac.createBufferSource(); src.buffer = noise;
+      const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freqHz; f.Q.value = q;
+      const g = ac.createGain(); g.gain.setValueAtTime(vel, t); g.gain.exponentialRampToValueAtTime(.0001, t + dec);
+      src.connect(f); f.connect(g); g.connect(dest); src.start(t, Math.random() * .5); src.stop(t + dec + .05); done(g, t + dec + .1);
+    }
+    function kick(t, vel) {
+      const o = ac.createOscillator(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(44, t + .14);
+      const g = ac.createGain(); g.gain.setValueAtTime(vel, t); g.gain.exponentialRampToValueAtTime(.0001, t + .42);
+      o.connect(g); g.connect(drumBus); o.start(t); o.stop(t + .45); done(g, t + .5);
+      noiseHit(t, 'highpass', 3000, .7, vel * .15, .012, drumBus);
+      beats.push({ t, s: 1 });
+    }
+    function snare(t, vel, logBeat = true) {
+      noiseHit(t, 'bandpass', 1900, .8, vel * .55, .2, drumBus);
+      const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(200, t); o.frequency.exponentialRampToValueAtTime(150, t + .08);
+      const g = ac.createGain(); g.gain.setValueAtTime(vel * .3, t); g.gain.exponentialRampToValueAtTime(.0001, t + .1);
+      o.connect(g); g.connect(drumBus); o.start(t); o.stop(t + .12); done(g, t + .2);
+      if (logBeat) beats.push({ t, s: Math.min(.8, .35 + vel) });
+    }
+    const hat = (t, vel, open) => noiseHit(t, 'highpass', 7600, .6, vel, open ? .28 : .045, hatBus);
+    const crash = t => noiseHit(t, 'highpass', 5200, .5, .22, 2.4, hatBus);
+    function riser(t, dur) {
+      const src = ac.createBufferSource(); src.buffer = noise; src.loop = true;
+      const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2; f.frequency.setValueAtTime(400, t); f.frequency.exponentialRampToValueAtTime(7000, t + dur);
+      const g = ac.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.14, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + .03);
+      src.connect(f); f.connect(g); g.connect(hatBus); src.start(t); src.stop(t + dur + .05); done(g, t + dur + .1);
+    }
+
+    const CH = {
+      F: { b: 41, n: [53, 57, 60, 64] }, G: { b: 43, n: [55, 59, 62, 67] }, Em: { b: 40, n: [52, 55, 59, 62] },
+      Am: { b: 45, n: [57, 60, 64, 67] }, Dm: { b: 38, n: [50, 53, 57, 60] }, C: { b: 36, n: [52, 55, 59, 60] }, C7: { b: 36, n: [52, 55, 58, 60] }
+    };
+    const SECTIONS = [[0, 'intro'], [4, 'verse'], [12, 'pre'], [16, 'chorus'], [24, 'inter'], [28, 'bridge'], [32, 'final'], [40, 'outro']];
+    const PROG = {
+      intro: ['F', 'G', 'Em', 'Am'], verse: ['F', 'G', 'Em', 'Am', 'F', 'G', 'Em', 'Am'], pre: ['Dm', 'Em', 'F', 'G'],
+      chorus: ['F', 'G', 'Em', 'Am', 'Dm', 'G', 'C', 'C7'], inter: ['F', 'G', 'Em', 'Am'], bridge: ['Dm', 'Am', 'F', 'G'],
+      final: ['F', 'G', 'Em', 'Am', 'Dm', 'G', 'C', 'C7'], outro: ['F', 'G', 'C', 'C']
+    };
+    const MEL = [
+      [[0, 1.5, 72], [1.5, .5, 74], [2, 1, 76], [3, 1, 79]],
+      [[0, 1.5, 79], [1.5, .5, 76], [2, 2, 74]],
+      [[0, 1, 76], [1, 1, 79], [2, 1.5, 83], [3.5, .5, 81]],
+      [[0, 1, 79], [1, 1, 76], [2, 2, 72]],
+      [[0, 1.5, 74], [1.5, .5, 76], [2, 1, 77], [3, 1, 81]],
+      [[0, 1.5, 79], [1.5, .5, 77], [2, 1, 76], [3, 1, 74]],
+      [[0, 1, 76], [1, 1, 79], [2, 2, 84]],
+      [[0, 1, 82], [1, 1, 81], [2, 2, 79]]
+    ];
+    const SCALE = [0, 2, 4, 5, 7, 9, 11];
+    const thirdBelow = m => { for (let d = 3; d <= 4; d++) if (SCALE.includes((m - d) % 12)) return m - d; return m - 3; };
+    const secOf = bar => { let s = SECTIONS[0]; for (const x of SECTIONS) if (bar >= x[0]) s = x; return { name: s[1], i: bar - s[0] }; };
+
+    function scheduleBar(bar) {
+      const T = bar * BAR, bt = b => T + b * SPB;
+      const { name, i } = secOf(bar);
+      const ch = CH[PROG[name][i]];
+      const pat = [0, 1, 2, 3, 2, 1, 2, 3];
+      // keys
+      if (name === 'bridge') {
+        ch.n.forEach((m, j) => ep(bt(j * .08), m, BAR * .95, .22));
+        ep(bt(2), ch.n[3] + 12, SPB * 1.8, .14);
+      } else if (name === 'outro' && i >= 2) {
+        if (i === 2) ch.n.concat([ch.n[0] + 12]).forEach((m, j) => ep(bt(j * .1), m, BAR * 2, .13));
+      } else {
+        const vel = { intro: .3, verse: .15, pre: .15, chorus: .1, inter: .14, final: .09, outro: .14 }[name] * (name === 'outro' ? 1 - i * .25 : 1);
+        for (let k = 0; k < 8; k++) ep(bt(k * .5), ch.n[pat[k]] + (k === 3 || k === 7 ? 12 : 0), SPB * .9, vel * (k % 2 ? .78 : 1));
+      }
+      // pad
+      if (['pre', 'chorus', 'bridge', 'final'].includes(name)) pad(T, ch.n, BAR, name === 'bridge' ? .13 : .055);
+      if (name === 'outro' && i === 2) pad(T, ch.n, BAR * 2, .05);
+      // bass
+      if (name === 'verse') { bass(bt(0), ch.b, SPB * 1.4, .5); bass(bt(2.5), ch.b, SPB * 1.2, .38); }
+      else if (name === 'pre') { for (let b = 0; b < 4; b++) bass(bt(b), ch.b, SPB * .8, .45); }
+      else if (name === 'chorus' || name === 'final') {
+        for (const [b, d, o, v] of [[0, 1, 0, .55], [1, .5, 0, .4], [1.5, .5, 12, .4], [2, 1, 0, .5], [3, .5, 0, .4], [3.5, .5, 7, .4]]) bass(bt(b), ch.b + o, SPB * d * .9, v);
+      }
+      else if (name === 'inter') bass(bt(0), ch.b, BAR * .9, .4);
+      else if (name === 'outro') { if (i < 2) bass(bt(0), ch.b, BAR * .9, .35); else if (i === 2) bass(bt(0), ch.b, BAR * 2, .35); }
+      // drums
+      if (name === 'verse') {
+        kick(bt(0), .8); kick(bt(2), .7); snare(bt(1), .18); snare(bt(3), .18);
+        for (let k = 0; k < 4; k++) hat(bt(k + .5), .07, false);
+      } else if (name === 'pre') {
+        kick(bt(0), .85); kick(bt(2), .8);
+        if (i >= 2) { snare(bt(1), .45); snare(bt(3), .45); } else { snare(bt(1), .2); snare(bt(3), .2); }
+        for (let k = 0; k < 8; k++) hat(bt(k * .5), k % 2 ? .1 : .06, false);
+        if (i === 3) { for (const b of [3.25, 3.5, 3.75]) snare(bt(b), .3 + (b - 3) * .4, false); riser(T, BAR); }
+      } else if (name === 'chorus' || name === 'final') {
+        if (i === 0) crash(T);
+        kick(bt(0), 1); kick(bt(1.5), .75); kick(bt(2), .9);
+        snare(bt(1), .6); snare(bt(3), .6);
+        for (let k = 0; k < 8; k++) hat(bt(k * .5), k % 2 ? .16 : .1, k === 7);
+        if (name === 'final' && i === 7) { for (const b of [3.25, 3.5, 3.75]) snare(bt(b), .45, false); }
+      } else if (name === 'inter') {
+        kick(bt(0), .7); kick(bt(2), .6); snare(bt(3), .25);
+        for (let k = 0; k < 4; k++) hat(bt(k + .5), .09, false);
+      } else if (name === 'bridge' && i === 3) {
+        riser(T, BAR);
+        for (const b of [2, 2.5, 3, 3.25, 3.5, 3.75]) snare(bt(b), .2 + (b - 2) * .2, false);
+      }
+      // melody and bells
+      if (name === 'chorus' || name === 'final') {
+        for (const [b, d, m] of MEL[i]) {
+          lead(bt(b), m, SPB * d * .95, .22);
+          if (name === 'final') lead(bt(b), thirdBelow(m), SPB * d * .95, .1);
+        }
+        if (name === 'final') for (let k = 0; k < 8; k++) bell(bt(k * .5), ch.n[(k * 3) % 4] + 24, .05);
+      } else if (name === 'inter') {
+        bell(bt(0), ch.n[3] + 12, .1); bell(bt(1.5), ch.n[2] + 12, .08); bell(bt(2), ch.n[1] + 24, .07);
+      } else if (name === 'bridge') {
+        bell(bt(0), ch.n[2] + 24, .07); bell(bt(2.5), ch.n[3] + 24, .06);
+      } else if (name === 'intro' && i === 0) {
+        bell(bt(0), 88, .06);
+      } else if (name === 'outro' && i === 3) {
+        bell(bt(0), 84, .08); bell(bt(1), 88, .06); bell(bt(2), 91, .05);
+      }
+    }
+
+    // Schedule one bar at a time, just before it plays: nodes waiting to start cost render time.
+    scheduleBar(0);
+    for (let bar = 1; bar < BARS; bar++) ac.suspend(bar * BAR - .5).then(() => { sweep(ac.currentTime); scheduleBar(bar); ac.resume(); });
+    return ac.startRendering().then(buf => {
+      beats.sort((a, b) => a.t - b.t);
+      return { url: toWavURL(buf), beats };
+    });
+  }
+  function toWavURL(buf) {
+    const ch = buf.numberOfChannels, len = buf.length, sr = buf.sampleRate;
+    const ab = new ArrayBuffer(44 + len * ch * 2), v = new DataView(ab);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + len * ch * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true); v.setUint32(24, sr, true);
+    v.setUint32(28, sr * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, len * ch * 2, true);
+    const out = new Int16Array(ab, 44), data = [];
+    for (let c = 0; c < ch; c++) data.push(buf.getChannelData(c));
+    for (let i = 0, o = 0; i < len; i++) for (let c = 0; c < ch; c++, o++) { const x = Math.max(-1, Math.min(1, data[c][i])); out[o] = x < 0 ? x * 0x8000 : x * 0x7FFF; }
+    return URL.createObjectURL(new Blob([ab], { type: 'audio/wav' }));
+  }
+  function ensurePreview() {
+    if (!previewPromise) {
+      previewPromise = renderPreview().then(r => { previewURL = r.url; previewBeats = r.beats; return r.url; });
+      previewPromise.catch(() => { previewPromise = null; });
+    }
+    return previewPromise;
+  }
+
+  // ------------------------------------------------------------------ UI wiring
+  const stage = document.getElementById('stage');
+  const bigplay = document.getElementById('bigplay');
+  const playBtn = document.getElementById('playBtn');
+  const playIcon = document.getElementById('playIcon');
+  const bigIcon = document.getElementById('bigIcon');
+  const seek = document.getElementById('seek');
+  const timeEl = document.getElementById('time');
+  const nowPlaying = document.getElementById('nowPlaying');
+  const srcStatus = document.getElementById('srcStatus');
+  const lrcStatus = document.getElementById('lrcStatus');
+  const audioFile = document.getElementById('audioFile');
+  const lrcFile = document.getElementById('lrcFile');
+  const lrcText = document.getElementById('lrcText');
+  const ICON_PLAY = 'M7 4.5v15l13-7.5z', ICON_PAUSE = 'M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z', ICON_REPLAY = 'M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z';
+
+  const setNow = (label) => { nowPlaying.innerHTML = ''; nowPlaying.append('音乐：'); const b = document.createElement('b'); b.textContent = label; nowPlaying.append(b); };
+  const songD = () => mode === 'none' ? PREVIEW_LEN : (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : PREVIEW_LEN);
+  const songT = () => mode === 'none' ? virtualT : (audio.currentTime || 0);
+  const bounds = D => mode === 'file' ? PREVIEW_BOUNDS.map(x => x / PREVIEW_LEN * D) : PREVIEW_BOUNDS;
+  const isPlaying = () => mode !== 'none' && !audio.paused && !audio.ended;
+
+  function syncButtons() {
+    const playing = isPlaying();
+    const d = playing ? ICON_PAUSE : (audio.ended ? ICON_REPLAY : ICON_PLAY);
+    playIcon.setAttribute('d', d); bigIcon.setAttribute('d', d);
+    const label = playing ? '暂停' : '播放';
+    playBtn.setAttribute('aria-label', label); bigplay.setAttribute('aria-label', label);
+    bigplay.hidden = playing;
+  }
+
+  async function usePreview(autoplay) {
+    ensureGraph();
+    srcStatus.textContent = '正在生成原创预览伴奏，大约需要几秒…';
+    try {
+      const url = await ensurePreview();
+      if (mode !== 'preview') {
+        mode = 'preview'; pendingSeek = userScrubbed ? virtualT : 0;
+        audio.src = url;
+      }
+      setNow('原创预览伴奏');
+      srcStatus.textContent = '正在使用原创预览伴奏（不是原曲，2 分 12 秒）。想看完整版，请选择你的《红色高跟鞋》音频。';
+      if (autoplay) await audio.play();
+    } catch (e) {
+      srcStatus.textContent = e && e.name === 'NotAllowedError' ? '浏览器拦下了自动播放，请再点一次播放。' : '预览伴奏生成失败，请直接选择一个音频文件。';
+    }
+    syncButtons();
+  }
+  function loadAudioFile(file) {
+    if (!file) return;
+    if (fileURL) URL.revokeObjectURL(fileURL);
+    fileURL = URL.createObjectURL(file);
+    mode = 'file'; pendingSeek = 0;
+    audio.src = fileURL;
+    setNow(file.name.replace(/\.[^.]+$/, ''));
+    srcStatus.textContent = `已载入「${file.name}」。画面会按歌曲长度排布，并跟着低音鼓点跳动。`;
+    audio.play().catch(() => { srcStatus.textContent = `已载入「${file.name}」，点播放键开始。`; });
+    syncButtons();
+  }
+  async function togglePlay() {
+    ensureGraph();
+    if (mode === 'none') { await usePreview(true); return; }
+    if (isPlaying()) { audio.pause(); return; }
+    if (audio.ended || audio.currentTime >= songD() - .05) audio.currentTime = 0;
+    try { await audio.play(); } catch (e) { srcStatus.textContent = '浏览器拦下了播放，请再点一次播放键。'; }
+    syncButtons();
+  }
+  function seekBy(d) {
+    if (mode === 'none') { virtualT = clamp(virtualT + d, 0, PREVIEW_LEN); userScrubbed = true; }
+    else audio.currentTime = clamp(audio.currentTime + d, 0, songD());
+  }
+  function toggleFullscreen() {
+    const doc = document;
+    if (doc.fullscreenElement || doc.webkitFullscreenElement) { (doc.exitFullscreen || doc.webkitExitFullscreen).call(doc); return; }
+    const req = stage.requestFullscreen || stage.webkitRequestFullscreen;
+    if (req) { try { const r = req.call(stage); if (r && r.catch) r.catch(() => {}); } catch (e) { /* not available here */ } }
+  }
+
+  audio.addEventListener('loadedmetadata', () => { if (pendingSeek > 0 && pendingSeek < songD()) audio.currentTime = pendingSeek; pendingSeek = 0; });
+  ['play', 'pause', 'ended', 'playing'].forEach(ev => audio.addEventListener(ev, () => { if (ev !== 'pause') ensureGraph(); syncButtons(); }));
+  audio.addEventListener('error', () => { if (mode === 'file') srcStatus.textContent = '这个文件播放不了，换一个 mp3 或 m4a 试试。'; });
+
+  stage.addEventListener('click', togglePlay);
+  stage.addEventListener('dblclick', e => { e.preventDefault(); toggleFullscreen(); });
+  playBtn.addEventListener('click', togglePlay);
+  document.getElementById('fsBtn').addEventListener('click', toggleFullscreen);
+  document.getElementById('pickAudio').addEventListener('click', () => { ensureGraph(); audioFile.click(); });
+  document.getElementById('usePreview').addEventListener('click', () => usePreview(true));
+  audioFile.addEventListener('change', () => { loadAudioFile(audioFile.files[0]); audioFile.value = ''; });
+
+  let dragging = false;
+  seek.addEventListener('pointerdown', () => { dragging = true; });
+  window.addEventListener('pointerup', () => { dragging = false; });
+  seek.addEventListener('input', () => {
+    const v = seek.value / 1000 * songD();
+    if (mode === 'none') { virtualT = v; userScrubbed = true; } else audio.currentTime = v;
+  });
+
+  document.addEventListener('keydown', e => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'textarea' || (tag === 'input' && e.target.type !== 'range') || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space' && tag !== 'button') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'ArrowLeft' && tag !== 'input') { e.preventDefault(); seekBy(-5); }
+    else if (e.key === 'ArrowRight' && tag !== 'input') { e.preventDefault(); seekBy(5); }
+    else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  });
+
+  // ---- lyrics
+  function parseLRC(src) {
+    let offset = 0; const raw = [];
+    for (const line of src.split(/\r?\n/)) {
+      const off = line.match(/^\s*\[offset:\s*([+-]?\d+)\s*\]/i);
+      if (off) { offset = +off[1] / 1000; continue; }
+      const tags = [...line.matchAll(/\[(\d{1,3}):(\d{1,2}(?:[.:]\d{1,3})?)\]/g)];
+      if (!tags.length) continue;
+      const body = line.replace(/\[[^\]]*\]/g, '').trim();
+      for (const m of tags) raw.push({ t: +m[1] * 60 + parseFloat(m[2].replace(':', '.')) - offset, text: body });
+    }
+    raw.sort((a, b) => a.t - b.t);
+    const out = [];
+    for (const r of raw) {
+      const prev = out[out.length - 1];
+      if (prev && Math.abs(prev.t - r.t) < .02 && r.text && !prev.en) { if (!prev.zh) prev.zh = r.text; else prev.en = r.text; }
+      else out.push({ t: Math.max(0, r.t), zh: r.text, en: '' });
+    }
+    return out;
+  }
+  function applyLRC(src) {
+    const lines = parseLRC(src || '');
+    const n = lines.filter(l => l.zh || l.en).length;
+    if (!n) { lrcStatus.textContent = '没有找到带时间标签的歌词行，格式应该像 [01:23.45]歌词。'; return; }
+    lyricLines = lines;
+    const all = lines.map(l => l.zh + l.en).join('');
+    if (document.fonts && document.fonts.load) { document.fonts.load(`600 62px "Noto Serif SC"`, all).catch(() => {}); }
+    lrcStatus.textContent = `已载入 ${n} 行同步歌词。` + (mode === 'file' ? '' : '选好原曲音频后，歌词才会对上。');
+  }
+  document.getElementById('pickLrc').addEventListener('click', () => lrcFile.click());
+  document.getElementById('applyLrc').addEventListener('click', () => applyLRC(lrcText.value));
+  document.getElementById('clearLrc').addEventListener('click', () => { lyricLines = null; lrcStatus.textContent = '已换回原创字幕。'; });
+  function readLrcFile(file) {
+    const r = new FileReader();
+    r.onload = () => { lrcText.value = String(r.result || ''); applyLRC(lrcText.value); };
+    r.onerror = () => { lrcStatus.textContent = '读不了这个歌词文件。'; };
+    r.readAsText(file);
+  }
+  lrcFile.addEventListener('change', () => { if (lrcFile.files[0]) readLrcFile(lrcFile.files[0]); lrcFile.value = ''; });
+
+  // ---- drag and drop
+  let dragDepth = 0;
+  window.addEventListener('dragenter', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { dragDepth++; stage.classList.add('dragging'); } });
+  window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) stage.classList.remove('dragging'); });
+  window.addEventListener('dragover', e => { e.preventDefault(); });
+  window.addEventListener('drop', e => {
+    e.preventDefault(); dragDepth = 0; stage.classList.remove('dragging');
+    for (const f of (e.dataTransfer && e.dataTransfer.files) || []) {
+      if (/\.(lrc|txt)$/i.test(f.name) || f.type === 'text/plain') readLrcFile(f);
+      else if (f.type.startsWith('audio/') || /\.(mp3|m4a|flac|wav|ogg|aac)$/i.test(f.name)) { ensureGraph(); loadAudioFile(f); }
+    }
+  });
+
+  // ---- fonts for canvas text: request every glyph the scenes draw
+  if (document.fonts && document.fonts.load) {
+    const all = CAPS.map(c => c.zh).join('') + '红色高跟鞋这是什么感觉？正在想你…咔嗒怦配乐原创预览伴奏不是原曲音乐蔡健雅画面与字幕歌曲版权归作者所有一支风格的';
+    for (const f of [`700 60px "Noto Serif SC"`, `600 60px "Noto Serif SC"`, `500 60px "Noto Serif SC"`]) document.fonts.load(f, all).catch(() => {});
+    for (const f of [`italic 400 32px "Newsreader"`, `600 32px "Newsreader"`]) document.fonts.load(f, 'Red High Heels 37 RED').catch(() => {});
+  }
+
+  // ------------------------------------------------------------------ main loop
+  let clock = 0, lastNow = performance.now(), sceneIdx = -1, st = {}, uiSecond = -1;
+  function frame(now) {
+    const dt = Math.min(.05, Math.max(0, (now - lastNow) / 1000)); lastNow = now;
+    clock += dt; boil = Math.floor(clock * 8);
+    const playing = isPlaying();
+    const t = songT(), D = songD(), B = bounds(D);
+    updateBeats(t, dt, playing);
+    let i = 0; while (i < 7 && t >= B[i + 1]) i++;
+    if (i !== sceneIdx) { sceneIdx = i; st = {}; parts.length = 0; }
+    const len = B[i + 1] - B[i], lt = t - B[i];
+    const caps = captionList(B);
+    const s = {
+      t, D, B, lt, len, p: clamp(lt / len), clock, dt, playing, caps,
+      pulse: reduceMotion ? beat.pulse * .4 : beat.pulse, beatNow: beat.now, count: beat.count,
+      phase: clamp((t - beat.last) / beat.interval)
+    };
+    const k = canvas.width / W;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.save();
+    if (!reduceMotion && s.pulse > .01) { const z = 1 + .012 * s.pulse; ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); }
+    SCENES[i].draw(ctx, s);
+    updateParts(dt); drawParts(ctx);
+    ctx.restore();
+    if (!SCENES[i].card) drawLowerThird(ctx, caps, t, SCENES[i]);
+    drawBug(ctx, SCENES[i]);
+    drawWipe(ctx, t, B);
+    drawGrain(ctx);
+
+    if (!dragging) seek.value = String(Math.round(clamp(t / D) * 1000));
+    const sec = Math.floor(t) * 10000 + Math.floor(D);
+    if (sec !== uiSecond) { uiSecond = sec; timeEl.textContent = `${fmt(t)} / ${fmt(D)}`; }
+    requestAnimationFrame(frame);
+  }
+  syncButtons();
+  requestAnimationFrame(frame);
+
+  // Render the preview track in the background so the first play starts quickly.
+  setTimeout(() => {
+    ensurePreview().then(() => {
+      if (mode === 'none') srcStatus.textContent = '原创预览伴奏已准备好：直接点播放就能先看一遍。';
+    }).catch(() => {});
+  }, 1500);
+
+  // Test hook: jump the timeline without audio (used for screenshots).
+  window.__mv = { seek: t => { if (mode === 'none') virtualT = t; else audio.currentTime = t; } };
+})();
+</script>
