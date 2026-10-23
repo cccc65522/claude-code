@@ -213,7 +213,7 @@
   <section class="panel">
     <div class="card">
       <h2>背景音乐</h2>
-      <p>页面里没有内置原曲。选择你自己的《红色高跟鞋》音频文件（mp3、m4a、flac、wav 都可以），画面会跟着鼓点走。文件只在你的浏览器里播放，不会上传。</p>
+      <p>页面里没有内置原曲。选择你自己的《红色高跟鞋》音频文件（mp3、m4a、flac、wav 都可以），页面会先分析这首歌，让副歌、桥段对上画面里对应的场景，鼓点也一拍一拍对齐。文件只在你的浏览器里处理，不会上传。</p>
       <div class="row">
         <button class="btn primary" id="pickAudio">选择《红色高跟鞋》音频</button>
         <button class="btn" id="usePreview">先用原创伴奏预览</button>
@@ -913,6 +913,7 @@
   let virtualT = 10, userScrubbed = false, pendingSeek = 0;
   let actx = null, analyser = null, freq = null;
   let previewPromise = null, previewURL = null, previewBeats = [];
+  let songBounds = null, songBeats = null, analysisToken = 0;
   let fileURL = null;
 
   function ensureGraph() {
@@ -943,10 +944,11 @@
     beat.pulse *= Math.exp(-dt * 6);
     const jumped = t < beat.lastT - .05 || t > beat.lastT + .6;
     if (jumped) { beat.last = t - 10; beat.hist.length = 0; }
-    if (playing && mode === 'preview' && previewBeats.length) {
-      if (jumped) { let i = 0; while (i < previewBeats.length && previewBeats[i].t < t) i++; beat.idx = i; }
-      while (beat.idx < previewBeats.length && previewBeats[beat.idx].t <= t) {
-        const b = previewBeats[beat.idx++];
+    const list = mode === 'preview' ? previewBeats : mode === 'file' ? songBeats : null;
+    if (playing && list && list.length) {
+      if (jumped || beat.list !== list) { beat.list = list; let i = 0; while (i < list.length && list[i].t < t) i++; beat.idx = i; }
+      while (beat.idx < list.length && list[beat.idx].t <= t) {
+        const b = list[beat.idx++];
         if (t - b.t < .15) fireBeat(b.t, b.s);
       }
     } else if (playing && mode === 'file' && analyser) {
@@ -959,6 +961,109 @@
       if (beat.hist.length > 10 && e > avg * 1.16 + 5 && e > 60 && t - beat.last > .28) fireBeat(t, clamp((e - avg) / 40, .5, 1));
     }
     beat.lastT = t;
+  }
+
+  // ---- reading a loaded song: kick-drum onsets for the beat, loudness changes for the scene cuts
+  async function analyzeSong(arrayBuffer) {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('no OfflineAudioContext');
+    const SR = 11025;
+    const buf = await new Promise((res, rej) => {
+      const p = new OAC(1, 1, SR).decodeAudioData(arrayBuffer, res, rej);
+      if (p && p.catch) p.catch(rej);
+    });
+    const D = buf.duration, n = buf.length, nch = buf.numberOfChannels;
+    const mono = new Float32Array(n);
+    for (let c = 0; c < nch; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[i] / nch; }
+
+    // Low band (kick and bass) through two stacked low-pass filters.
+    const lac = new OAC(1, n, SR);
+    const src = lac.createBufferSource(); src.buffer = buf;
+    let node = src;
+    for (let k = 0; k < 2; k++) { const f = lac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 150; node.connect(f); node = f; }
+    node.connect(lac.destination); src.start();
+    const low = (await lac.startRendering()).getChannelData(0);
+
+    // 10 ms frames
+    const HOP = Math.round(SR * .01), frames = Math.floor(n / HOP);
+    const lowE = new Float32Array(frames), fullE = new Float32Array(frames);
+    for (let f = 0; f < frames; f++) {
+      let a = 0, b = 0;
+      for (let i = f * HOP, e = i + HOP; i < e; i++) { a += low[i] * low[i]; b += mono[i] * mono[i]; }
+      lowE[f] = Math.sqrt(a / HOP); fullE[f] = Math.sqrt(b / HOP);
+    }
+    const pct = (arr, q) => { const s = Array.from(arr).sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))] || 0; };
+
+    // Beats: sharp rises in low-band energy above a local adaptive threshold.
+    const odf = new Float32Array(frames);
+    for (let f = 3; f < frames; f++) odf[f] = Math.max(0, lowE[f] - lowE[f - 3]);
+    const loudFloor = pct(lowE, .9) * .15, odfMean = odf.reduce((a, b) => a + b, 0) / frames;
+    const picked = [];
+    let last = -1e9;
+    for (let f = 50, sum = 0, cnt = 0; f < frames - 50; f++) {
+      if (f === 50) { for (let g = 0; g <= 100; g++) sum += odf[g]; cnt = 101; } else { sum += odf[f + 50] - odf[f - 51]; }
+      const thr = sum / cnt * 1.6 + odfMean * .4;
+      if (odf[f] <= thr || lowE[f] < loudFloor || f - last < 28) continue;
+      let peak = true;
+      for (let g = f - 5; g <= f + 5; g++) if (odf[g] > odf[f]) { peak = false; break; }
+      if (peak) { picked.push(f); last = f; }
+    }
+    const ref = pct(picked.map(f => odf[f]), .85) || 1;
+    const beats = picked.map(f => ({ t: f * HOP / SR, s: clamp(odf[f] / ref, .45, 1) }));
+
+    // Scene cuts. Find the song's loudness changes, then choose all seven cuts together: each cut
+    // prefers a change in its own direction (a rise into a chorus, a drop into the bridge or the
+    // outro) and pays for straying from its default share of the song.
+    const props = PREVIEW_BOUNDS.map(x => x / PREVIEW_LEN);
+    if (D < 60) return { bounds: props.map(p => p * D), beats };
+    const STEP = 50; // 0.5 s blocks
+    const blocks = Math.floor(frames / STEP), L = new Float32Array(blocks);
+    for (let b = 0; b < blocks; b++) { let a = 0; for (let f = b * STEP; f < (b + 1) * STEP; f++) a += fullE[f] * fullE[f]; L[b] = 10 * Math.log10(a / STEP + 1e-9); }
+    const mean = (a, b) => { a = Math.max(0, a); b = Math.min(blocks, b); let s = 0; for (let i = a; i < b; i++) s += L[i]; return b > a ? s / (b - a) : 0; };
+    const nov = new Float32Array(blocks);
+    for (let b = 0; b < blocks; b++) nov[b] = mean(b, b + 10) - mean(b - 10, b); // dB change across 5 s on each side
+    const changes = [];
+    for (let b = 10; b < blocks - 10; b++) {
+      const m = Math.abs(nov[b]);
+      if (m < 1.2) continue;
+      let top = true;
+      for (let g = b - 6; g <= b + 6; g++) if (Math.abs(nov[g]) > m) { top = false; break; }
+      if (top) changes.push({ t: b / 2, nv: nov[b] });
+    }
+    const DIR = [0, 1, 0, 1, -1, -1, 1, -1], GAP = Math.min(6, D * .05), LAMBDA = 20;
+    const opts = [[{ t: 0, s: 0 }]];
+    for (let k = 1; k < 8; k++) {
+      const def = props[k] * D, list = [];
+      // plain positions near the default, so a cut can step aside for its neighbours
+      const n = Math.floor(.1 * D);
+      for (let i = -n; i <= n; i++) list.push({ t: def + i * 2, s: -.3 * LAMBDA * Math.abs(i * 2) / D });
+      for (const c of changes) {
+        if (Math.abs(c.t - def) > .2 * D) continue;
+        const match = DIR[k] ? DIR[k] * c.nv : Math.abs(c.nv) * .6;
+        if (match > 0) list.push({ t: c.t, s: match - LAMBDA * Math.abs(c.t - def) / D });
+      }
+      opts.push(list);
+    }
+    const score = [[0]], from = [[-1]];
+    for (let k = 1; k < 8; k++) {
+      score.push([]); from.push([]);
+      opts[k].forEach((o, j) => {
+        let best = -Infinity, arg = -1;
+        opts[k - 1].forEach((p, i) => { if (score[k - 1][i] > -Infinity && p.t + GAP <= o.t && score[k - 1][i] > best) { best = score[k - 1][i]; arg = i; } });
+        score[k][j] = (k === 7 && o.t > D - GAP) || arg < 0 ? -Infinity : best + o.s;
+        from[k][j] = arg;
+      });
+    }
+    let j = 0;
+    score[7].forEach((v, i) => { if (v > score[7][j]) j = i; });
+    if (score[7][j] === -Infinity) return { bounds: props.map(p => p * D), beats };
+    const cuts = new Array(9); cuts[0] = 0; cuts[8] = D;
+    for (let k = 7; k >= 1; k--) {
+      let t = opts[k][j].t, snap = t, gap = .5;
+      for (const bt of beats) { const g = Math.abs(bt.t - t); if (g < gap) { gap = g; snap = bt.t; } }
+      cuts[k] = snap; j = from[k][j];
+    }
+    return { bounds: cuts, beats };
   }
 
   // ---- original preview track, rendered offline into a WAV so it plays through the same <audio> element
@@ -1227,7 +1332,7 @@
   const setNow = (label) => { nowPlaying.innerHTML = ''; nowPlaying.append('音乐：'); const b = document.createElement('b'); b.textContent = label; nowPlaying.append(b); };
   const songD = () => mode === 'none' ? PREVIEW_LEN : (isFinite(audio.duration) && audio.duration > 0 ? audio.duration : PREVIEW_LEN);
   const songT = () => mode === 'none' ? virtualT : (audio.currentTime || 0);
-  const bounds = D => mode === 'file' ? PREVIEW_BOUNDS.map(x => x / PREVIEW_LEN * D) : PREVIEW_BOUNDS;
+  const bounds = D => mode === 'file' ? (songBounds || PREVIEW_BOUNDS.map(x => x / PREVIEW_LEN * D)) : PREVIEW_BOUNDS;
   const isPlaying = () => mode !== 'none' && !audio.paused && !audio.ended;
 
   function syncButtons() {
@@ -1263,9 +1368,20 @@
     mode = 'file'; pendingSeek = 0;
     audio.src = fileURL;
     setNow(file.name.replace(/\.[^.]+$/, ''));
-    srcStatus.textContent = `已载入「${file.name}」。画面会按歌曲长度排布，并跟着低音鼓点跳动。`;
-    audio.play().catch(() => { srcStatus.textContent = `已载入「${file.name}」，点播放键开始。`; });
+    songBounds = null; songBeats = null;
+    const token = ++analysisToken;
+    srcStatus.textContent = `已载入「${file.name}」，正在分析这首歌的段落和鼓点…`;
+    audio.play().catch(() => {});
     syncButtons();
+    file.arrayBuffer().then(analyzeSong).then(r => {
+      if (token !== analysisToken) return;
+      songBounds = r.bounds; songBeats = r.beats;
+      const b = r.bounds;
+      srcStatus.textContent = `已按「${file.name}」对齐画面：第一段副歌 ${fmt(b[3])}，桥段 ${fmt(b[5])}，最后的副歌 ${fmt(b[6])}，共找到 ${r.beats.length} 个鼓点。`;
+    }).catch(() => {
+      if (token !== analysisToken) return;
+      srcStatus.textContent = `已载入「${file.name}」。这个格式没法提前分析，画面会按歌曲长度排布，边播边跟鼓点。`;
+    });
   }
   async function togglePlay() {
     ensureGraph();
@@ -1420,6 +1536,6 @@
   }, 1500);
 
   // Test hook: jump the timeline without audio (used for screenshots).
-  window.__mv = { seek: t => { if (mode === 'none') virtualT = t; else audio.currentTime = t; } };
+  window.__mv = { seek: t => { if (mode === 'none') virtualT = t; else audio.currentTime = t; }, bounds: () => bounds(songD()) };
 })();
 </script>
