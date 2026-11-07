@@ -921,6 +921,7 @@ test('锄头和面包的配方', () => {
 import {
   createAnimal, canAnimalSpawnAt, trySpawnAnimal, stepAnimal, feedAnimal, breed, damageAnimal, animalDrops,
   shouldRemoveAnimal, MAX_ANIMALS, ANIMAL_HEALTH, LOVE_SECONDS, GROW_UP_SECONDS, BREED_COOLDOWN,
+  serializeAnimals, deserializeAnimals, nearbyCount, MAX_TOTAL, NEARBY,
 } from '../src/game/animals.js';
 import { RAW_MEAT, COOKED_MEAT } from '../src/game/items.js';
 
@@ -1000,8 +1001,10 @@ test('打绒耳兔：6 点血，成年掉生肉，小兔不掉；远了会被移
   assert.deepEqual(animalDrops(a, () => 0.2), [[RAW_MEAT, 1]]);
   assert.deepEqual(animalDrops(a, () => 0.8), [[RAW_MEAT, 2]]);
   assert.deepEqual(animalDrops(createAnimal([0, 0, 0], { baby: true })), []);
-  assert.equal(shouldRemoveAnimal(createAnimal([200, 2, 200]), createPlayer([0, 2, 0])), true);
-  assert.equal(shouldRemoveAnimal(createAnimal([5, 2, 5]), createPlayer([0, 2, 0])), false);
+  assert.equal(shouldRemoveAnimal(createAnimal([200, 2, 200])), false, '离得远也不会消失（会存档）');
+  const dead = createAnimal([5, 2, 5]);
+  dead.dissolve = 1;
+  assert.equal(shouldRemoveAnimal(dead), true, '被打死的消散完才去掉');
   // 准星也能选中动物（和怪物同一个求交函数）
   assert.ok(rayHitMonster([2.5, 2.3, 5.5], [1, 0, 0], 4, [createAnimal([5.5, 2, 5.5])]));
 });
@@ -1014,4 +1017,64 @@ test('烤肉：生肉 ×2 + 煤炭 → 烤肉 ×2，烤过的顶饱得多', () =
   assert.equal(countOf(inv, COOKED_MEAT), 2);
   assert.equal(countOf(inv, RAW_MEAT), 3);
   assert.ok(foodValue(COOKED_MEAT) >= foodValue(RAW_MEAT) * 4);
+});
+
+test('动物存档：保存后读回来位置、朝向、血量、小兔和冷却都在；坏数据会被丢掉', () => {
+  const w = farmWorld();
+  const a = createAnimal([5.5, 2, 6.25]);
+  a.yaw = 1.234;
+  a.health = 4;
+  a.loveCooldown = 30.2;
+  const baby = createAnimal([8.5, 2, 8.5], { baby: true });
+  baby.grow = 12.3;
+  const dying = createAnimal([9.5, 2, 9.5]);
+  dying.dissolve = 0.2;
+  const saved = JSON.parse(JSON.stringify(serializeAnimals([a, baby, dying])));
+  assert.equal(saved.length, 2, '正在消散的不存');
+  const back = deserializeAnimals([...saved, 'x', [1, 2, 3], [1, 2, 3, 0, 0, 0, 99], [999, 2, 5, 0, 0, 0, 6], [1, 2, NaN, 0, 0, 0, 6]], w);
+  assert.equal(back.length, 2);
+  const [a2, b2] = back;
+  assert.deepEqual(a2.pos, [5.5, 2, 6.25]);
+  assert.equal(a2.yaw, 1.23);
+  assert.equal(a2.health, 4);
+  assert.equal(a2.loveCooldown, 31);
+  assert.equal(a2.baby, false);
+  assert.equal(b2.baby, true);
+  assert.equal(b2.grow, 13);
+  assert.ok(b2.height < a2.height, '小兔还是小的');
+  assert.ok(a2.id !== a.id, '读回来是新的对象');
+  assert.deepEqual(deserializeAnimals(undefined, w), []);
+});
+
+test('动物读档时如果原地被方块占了，会放到这一列最上面', () => {
+  const w = farmWorld();
+  w.set(5, 2, 5, STONE);
+  w.set(5, 3, 5, STONE);
+  const [a] = deserializeAnimals([[5.5, 2, 5.5, 0, 0, 0, 6]], w);
+  assert.equal(a.pos[1], 4);
+});
+
+test('野生的只在附近不够 10 只时出现，整个世界最多 40 只', () => {
+  const big = new World({ seed: 1, chunks: 8, generate: false });
+  for (let x = 0; x < big.sizeX; x++) for (let z = 0; z < big.sizeZ; z++) {
+    big.rawSet(x, 0, z, STONE);
+    big.rawSet(x, 1, z, GRASS_ID);
+  }
+  // 远处（另一个角落）已经有 20 只：不影响玩家身边出现新的
+  const animals = [];
+  for (let i = 0; i < 20; i++) animals.push(createAnimal([120.5, 2, 120.5 - i * 0.1]));
+  const player = createPlayer([20.5, 2, 20.5]);
+  assert.equal(nearbyCount(animals, player), 0);
+  for (let i = 0; i < 80; i++) trySpawnAnimal(big, animals, player);
+  assert.equal(nearbyCount(animals, player), MAX_ANIMALS);
+  assert.equal(animals.length, 20 + MAX_ANIMALS);
+  // 全世界到上限就不再出现，也不再生小兔
+  while (animals.length < MAX_TOTAL) animals.push(createAnimal([120.5, 2, 100.5]));
+  const far = createPlayer([64.5, 2, 64.5]);
+  assert.equal(trySpawnAnimal(big, animals, far), null);
+  const [p1, p2] = [animals[0], animals[1]];
+  feedAnimal(p1);
+  feedAnimal(p2);
+  assert.equal(breed(animals), null);
+  assert.ok(NEARBY > 0);
 });

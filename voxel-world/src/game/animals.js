@@ -9,10 +9,11 @@ export const ANIMAL_HALF = 0.3;
 export const ANIMAL_HEIGHT = 0.6;
 export const ANIMAL_HEALTH = 6;
 export const BABY_SCALE = 0.6;
-export const MAX_ANIMALS = 10;
+export const MAX_ANIMALS = 10; // 玩家附近（NEARBY 格内）最多几只野生的会自己出现
+export const MAX_TOTAL = 40; // 整个世界最多几只（包括生出来的）
+export const NEARBY = 48;
 export const SPAWN_MIN = 10;
 export const SPAWN_MAX = 28;
-export const DESPAWN_DISTANCE = 64;
 export const LURE_DISTANCE = 8;
 export const LOVE_SECONDS = 8;
 export const BREED_COOLDOWN = 60;
@@ -57,8 +58,14 @@ export function canAnimalSpawnAt(world, x, y, z) {
   return world.get(x, y, z) === AIR && world.get(x, y + 1, z) === AIR;
 }
 
+export function nearbyCount(animals, player, radius = NEARBY) {
+  let n = 0;
+  for (const a of animals) if (Math.hypot(a.pos[0] - player.pos[0], a.pos[2] - player.pos[2]) <= radius) n++;
+  return n;
+}
+
 export function trySpawnAnimal(world, animals, player, rand = Math.random) {
-  if (animals.length >= MAX_ANIMALS) return null;
+  if (animals.length >= MAX_TOTAL || nearbyCount(animals, player) >= MAX_ANIMALS) return null;
   for (let attempt = 0; attempt < 6; attempt++) {
     const angle = rand() * Math.PI * 2;
     const r = SPAWN_MIN + rand() * (SPAWN_MAX - SPAWN_MIN);
@@ -140,7 +147,7 @@ export function feedAnimal(a) {
 
 // 两只都喂过、离得够近：生一只小兔。返回新的小兔或 null。
 export function breed(animals, rand = Math.random) {
-  if (animals.length >= MAX_ANIMALS + 4) return null;
+  if (animals.length >= MAX_TOTAL) return null;
   for (let i = 0; i < animals.length; i++) {
     const a = animals[i];
     if (a.love <= 0) continue;
@@ -187,7 +194,41 @@ export function animalDrops(a, rand = Math.random) {
   return [[RAW_MEAT, rand() < 0.5 ? 1 : 2]];
 }
 
-export function shouldRemoveAnimal(a, player) {
-  if (a.dissolve >= 0.8) return true;
-  return Math.hypot(a.pos[0] - player.pos[0], a.pos[2] - player.pos[2]) > DESPAWN_DISTANCE;
+// 动物会存档，所以不会因为离得远就消失，只有被打死才去掉
+export function shouldRemoveAnimal(a) {
+  return a.dissolve >= 0.8;
+}
+
+// ---------- 存档 ----------
+const r2 = (v) => Math.round(v * 100) / 100;
+
+// [x, y, z, 朝向, 小兔还要几秒长大（成年是 0）, 繁殖冷却秒数, 血量]
+export function serializeAnimals(animals) {
+  return animals
+    .filter((a) => a.dissolve === 0 && a.health > 0)
+    .map((a) => [r2(a.pos[0]), r2(a.pos[1]), r2(a.pos[2]), r2(a.yaw), a.baby ? Math.ceil(a.grow) : 0, Math.ceil(a.loveCooldown), a.health]);
+}
+
+// 读档：丢掉坏数据；如果原来的位置被方块占了（比如之后在那儿盖了东西），放到这一列的最上面
+export function deserializeAnimals(list, world) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const e of list) {
+    if (out.length >= MAX_TOTAL) break;
+    if (!Array.isArray(e) || e.length !== 7 || !e.every(Number.isFinite)) continue;
+    const [x, y, z, yaw, grow, cooldown, health] = e;
+    if (!world.inBounds(Math.floor(x), 0, Math.floor(z)) || y < 0 || y >= world.sizeY) continue;
+    if (!Number.isInteger(health) || health < 1 || health > ANIMAL_HEALTH) continue;
+    const baby = grow > 0;
+    const a = createAnimal([x, y, z], { baby });
+    a.yaw = yaw;
+    a.grow = baby ? Math.min(grow, GROW_UP_SECONDS) : 0;
+    a.loveCooldown = Math.max(0, Math.min(cooldown, BREED_COOLDOWN));
+    a.health = health;
+    if (world.isSolid(Math.floor(x), Math.floor(y), Math.floor(z))) {
+      a.pos[1] = world.topY(Math.floor(x), Math.floor(z)) + 1;
+    }
+    out.push(a);
+  }
+  return out;
 }

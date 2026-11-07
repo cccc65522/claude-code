@@ -577,7 +577,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       }
       if (breed(animals)) onMessage('生了一只小绒耳兔！');
       for (let i = animals.length - 1; i >= 0; i--) {
-        if (shouldRemoveAnimal(animals[i], p)) animals.splice(i, 1);
+        if (shouldRemoveAnimal(animals[i])) animals.splice(i, 1);
       }
     }
 

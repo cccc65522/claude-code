@@ -10,6 +10,7 @@ import { createAtlasCanvas } from './game/atlas.js';
 import { HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
 import { SURVIVAL_HOTBAR, bestFood, eat, itemName, sanitizeInventory } from './game/items.js';
 import { craft } from './game/crafting.js';
+import { deserializeAnimals, serializeAnimals } from './game/animals.js';
 import { MAX_AIR, MAX_HEALTH, MAX_HUNGER, sanitizeHealth, sanitizeHunger } from './game/health.js';
 import { Sim } from './game/sim.js';
 import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
@@ -79,8 +80,8 @@ function buildSession(save) {
   // 新世界默认生存模式；加合成之前的老存档没有 mode，保持原来的创造模式
   const mode = save ? (save.mode === 'survival' ? 'survival' : 'creative') : 'survival';
   const inventory = sanitizeInventory(save?.inventory);
-  const monsters = []; // 怪物和动物都不存档，会重新出现
-  const animals = [];
+  const monsters = []; // 怪物不存档，会重新出现
+  const animals = deserializeAnimals(save?.animals, world); // 动物存档
   return { world, sim, player, time, mode, inventory, monsters, animals, id: Math.random().toString(36).slice(2) };
 }
 
@@ -178,6 +179,7 @@ export default function App() {
       time: timeRef.current,
       mode: modeRef.current,
       inventory: session.inventory,
+      animals: serializeAnimals(session.animals),
     });
   }, [session]);
 
