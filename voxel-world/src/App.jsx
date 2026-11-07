@@ -4,16 +4,20 @@ import Game from './components/Game.jsx';
 import Hud from './components/Hud.jsx';
 import TouchControls from './components/TouchControls.jsx';
 import Inventory from './components/Inventory.jsx';
+import Chest from './components/Chest.jsx';
 import { World } from './game/world.js';
 import { createPlayer } from './game/player.js';
 import { createAtlasCanvas } from './game/atlas.js';
 import { HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
-import { SURVIVAL_HOTBAR, bestFood, eat, itemName, sanitizeInventory } from './game/items.js';
+import { SEEDS, SURVIVAL_HOTBAR, bestFood, eat, itemName, sanitizeInventory } from './game/items.js';
 import { craft } from './game/crafting.js';
 import { deserializeAnimals, serializeAnimals } from './game/animals.js';
+import {
+  canUseCustomSlot, chestKey, deserializeChests, respawnPoint, serializeChests, sleepCheck, transfer,
+} from './game/home.js';
 import { MAX_AIR, MAX_HEALTH, MAX_HUNGER, sanitizeHealth, sanitizeHunger } from './game/health.js';
 import { Sim } from './game/sim.js';
-import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
+import { MORNING, NIGHT, clockText, skyAt, wrapTime } from './game/daynight.js';
 
 const SAVE_KEY = 'voxel-world:v1';
 // 和平开关是玩家的设置，不跟着世界走：换新世界、重置世界都保留
@@ -72,6 +76,8 @@ function buildSession(save) {
     player.flying = !!p.flying;
     player.health = sanitizeHealth(p.health);
     player.hunger = sanitizeHunger(p.hunger);
+    // 睡过的床（重生点）
+    if (Array.isArray(p.spawn) && p.spawn.length === 3 && p.spawn.every(Number.isInteger)) player.spawn = p.spawn;
   } else {
     player = createPlayer(world.spawnPoint(), Math.PI / 4, -0.2);
   }
@@ -82,7 +88,9 @@ function buildSession(save) {
   const inventory = sanitizeInventory(save?.inventory);
   const monsters = []; // 怪物不存档，会重新出现
   const animals = deserializeAnimals(save?.animals, world); // 动物存档
-  return { world, sim, player, time, mode, inventory, monsters, animals, id: Math.random().toString(36).slice(2) };
+  const chests = deserializeChests(save?.chests, world); // 箱子里的东西
+  const custom = canUseCustomSlot(save?.custom) ? save.custom : SEEDS; // 快捷栏最后一格
+  return { world, sim, player, time, mode, inventory, monsters, animals, chests, custom, id: Math.random().toString(36).slice(2) };
 }
 
 export default function App() {
@@ -97,19 +105,28 @@ export default function App() {
   const peacefulRef = useRef(peaceful);
   peacefulRef.current = peaceful;
   const [bagOpen, setBagOpen] = useState(false);
+  const [chestOpen, setChestOpen] = useState(null); // 打开的箱子的坐标 "x,y,z"
+  const [custom, setCustom] = useState(session.custom);
+  const [sleeping, setSleeping] = useState(false);
+  const [, setTimeTick] = useState(0);
+  const panelOpen = bagOpen || chestOpen !== null;
   const [health, setHealth] = useState(session.player.health);
   const [dead, setDead] = useState(null); // 死了的话是死因
   const [air, setAir] = useState(MAX_AIR);
   const [hunger, setHunger] = useState(session.player.hunger);
   const [, setInvVersion] = useState(0); // 背包变化时刷新界面
 
-  const hotbar = mode === 'creative' ? HOTBAR : SURVIVAL_HOTBAR;
+  // 快捷栏最后一格是自选的（默认麦种）
+  const hotbar = useMemo(
+    () => [...(mode === 'creative' ? HOTBAR : SURVIVAL_HOTBAR).slice(0, -1), custom],
+    [mode, custom],
+  );
   const hotbarRef = useRef(hotbar);
   hotbarRef.current = hotbar;
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const bagOpenRef = useRef(false);
-  bagOpenRef.current = bagOpen;
+  bagOpenRef.current = panelOpen;
 
   const input = useMemo(makeInput, []);
   const selectedRef = useRef(hotbar[0]);
@@ -148,6 +165,8 @@ export default function App() {
     setAir(MAX_AIR);
     setDead(null);
     setMode(session.mode);
+    setCustom(session.custom);
+    setChestOpen(null);
     timeRef.current = session.time;
   }, [session]);
 
@@ -156,13 +175,13 @@ export default function App() {
   selectedRef.current = hotbar[slot];
 
   useEffect(() => {
-    activeRef.current = started && !paused && !bagOpen && !dead;
+    activeRef.current = started && !paused && !panelOpen && !dead && !sleeping;
     if (!activeRef.current) {
       input.keys.clear();
       input.held = {};
       input.move = { x: 0, y: 0 };
     }
-  }, [started, paused, bagOpen, dead, input]);
+  }, [started, paused, panelOpen, dead, sleeping, input]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -175,11 +194,13 @@ export default function App() {
     writeSave({
       seed: session.world.seed,
       edits: session.world.exportEdits(),
-      player: { pos: p.pos, yaw: p.yaw, pitch: p.pitch, flying: p.flying, health: p.health, hunger: p.hunger },
+      player: { pos: p.pos, yaw: p.yaw, pitch: p.pitch, flying: p.flying, health: p.health, hunger: p.hunger, spawn: p.spawn ?? null },
       time: timeRef.current,
       mode: modeRef.current,
       inventory: session.inventory,
       animals: serializeAnimals(session.animals),
+      chests: serializeChests(session.chests),
+      custom: session.custom,
     });
   }, [session]);
 
@@ -220,28 +241,48 @@ export default function App() {
     }
     const canvas = canvasRef.current;
     try {
-      const r = canvas?.requestPointerLock?.();
-      // 有的浏览器拒绝锁定鼠标时返回被拒绝的 Promise
-      if (r && typeof r.catch === 'function') r.catch(() => setPaused(false));
-      if (!canvas?.requestPointerLock) setPaused(false);
+      if (!canvas?.requestPointerLock) {
+        setPaused(false); // 浏览器不支持锁定鼠标：只能用键盘玩
+        return;
+      }
+      const r = canvas.requestPointerLock();
+      // 浏览器有时会拒绝（比如刚松开鼠标又马上锁定）。这时停在暂停菜单，
+      // 点“继续”会再锁一次；不能假装回到了游戏，不然点鼠标没有反应。
+      if (r && typeof r.catch === 'function') r.catch(() => setPaused(true));
     } catch {
-      setPaused(false);
+      setPaused(true);
     }
   }, []);
 
   // 打开背包：松开鼠标，游戏停下；关上时回到游戏
+  // 创造模式打开的是方块选择器
   const openBag = useCallback(() => {
-    if (modeRef.current !== 'survival') {
-      showToast('创造模式下方块无限，不需要合成；可以在暂停菜单切换到生存模式');
-      return;
-    }
     setBagOpen(true);
     if (!isTouch && document.pointerLockElement) document.exitPointerLock();
-  }, [showToast]);
+  }, []);
+
+  const openChest = useCallback((key) => {
+    if (!session.chests.has(key)) session.chests.set(key, {});
+    setChestOpen(key);
+    if (!isTouch && document.pointerLockElement) document.exitPointerLock();
+  }, [session]);
+
+  // 把一样东西放到快捷栏最后一格
+  const setCustomSlot = useCallback(
+    (id) => {
+      if (!canUseCustomSlot(id)) return;
+      session.custom = id;
+      setCustom(id);
+      setSelected(hotbarRef.current.length - 1);
+      showToast(`${itemName(id)} 放到了快捷栏最后一格（=）`);
+    },
+    [session, showToast],
+  );
 
   const closeBag = useCallback(
     (resume = true) => {
       setBagOpen(false);
+      setChestOpen(null);
       if (resume) lockPointer();
       else setPaused(true);
     },
@@ -251,13 +292,19 @@ export default function App() {
   const onDeath = useCallback((reason) => {
     setDead(reason);
     setBagOpen(false);
+    setChestOpen(null);
     if (!isTouch && document.pointerLockElement) document.exitPointerLock();
   }, []);
 
   // 重生：回到出生点，满血，背包保留
   const respawn = () => {
     const p = playerRef.current;
-    p.pos = session.world.spawnPoint();
+    const r = respawnPoint(session.world, p.spawn);
+    p.pos = r.pos;
+    if (r.lostBed) {
+      p.spawn = null;
+      showToast('你的床不见了，回到了出生点');
+    }
     p.vel = [0, 0, 0];
     p.flying = false;
     p.fallStartY = null;
@@ -298,6 +345,39 @@ export default function App() {
     },
     [session, showToast, onInventory, onEdit],
   );
+
+  // 对着床右键：设重生点；晚上、附近没有夜影就睡到天亮
+  const onSleep = useCallback(
+    (pos) => {
+      const p = playerRef.current;
+      p.spawn = pos;
+      const check = sleepCheck(skyAt(timeRef.current).day, session.monsters, pos);
+      if (!check.ok) {
+        showToast(`${check.reason}；重生点已设在这张床`);
+        save();
+        return;
+      }
+      setSleeping(true);
+      setTimeout(() => {
+        timeRef.current = MORNING;
+        setTimeTick((n) => n + 1);
+        setSleeping(false);
+        save();
+        showToast('睡了一觉，天亮了。重生点设在这张床');
+      }, 1600);
+    },
+    [session, save, showToast],
+  );
+
+  const moveChest = (fromChest, id, n) => {
+    const box = session.chests.get(chestOpen);
+    if (!box) return;
+    const moved = fromChest ? transfer(box, session.inventory, id, n) : transfer(session.inventory, box, id, n);
+    if (moved) {
+      onInventory();
+      onEdit();
+    }
+  };
 
   const onCraft = (recipe, times) => {
     const n = craft(session.inventory, recipe, times);
@@ -425,8 +505,7 @@ export default function App() {
     showToast('世界已重置');
   };
 
-  // 跳到白天 / 夜晚，用 timeTick 让面板上的时间刷新
-  const [, setTimeTick] = useState(0);
+  // 跳到白天 / 夜晚，用 timeTick 让面板上的时间刷新（setTimeTick 在上面定义）
   const setTime = (t, text) => {
     timeRef.current = t;
     setTimeTick((n) => n + 1);
@@ -461,6 +540,9 @@ export default function App() {
         onDeath={onDeath}
         onAir={setAir}
         onHunger={setHunger}
+        chests={session.chests}
+        onOpenChest={openChest}
+        onSleep={onSleep}
         monsters={session.monsters}
         animals={session.animals}
         onEdit={onEdit}
@@ -480,19 +562,19 @@ export default function App() {
         atlasUrl={atlas.url}
         statsRef={statsRef}
         toast={toast}
-        hideHotbar={bagOpen}
+        hideHotbar={panelOpen}
         health={mode === 'survival' ? health : null}
         air={air}
         hunger={hunger}
       />
 
-      {isTouch && started && !paused && !bagOpen && !dead && (
+      {isTouch && started && !paused && !panelOpen && !dead && (
         <TouchControls
           input={input}
           flying={flying}
           onToggleFly={toggleFly}
           onPause={() => setPaused(true)}
-          onBag={mode === 'survival' ? openBag : null}
+          onBag={openBag}
           onEat={mode === 'survival' ? () => eatFood() : null}
         />
       )}
@@ -506,8 +588,25 @@ export default function App() {
           hunger={hunger}
           onClose={() => closeBag(true)}
           isTouch={isTouch}
+          creative={mode === 'creative'}
+          custom={custom}
+          onSetCustom={setCustomSlot}
         />
       )}
+
+      {chestOpen !== null && session.chests.has(chestOpen) && (
+        <Chest
+          box={session.chests.get(chestOpen)}
+          inventory={session.inventory}
+          atlasUrl={atlas.url}
+          onTake={(id, n) => moveChest(true, id, n)}
+          onStore={(id, n) => moveChest(false, id, n)}
+          onClose={() => closeBag(true)}
+          isTouch={isTouch}
+        />
+      )}
+
+      {sleeping && <div className="sleep-fade" aria-label="正在睡觉" />}
 
       {dead && (
         <div className="overlay death">
@@ -522,7 +621,7 @@ export default function App() {
         </div>
       )}
 
-      {(!started || paused) && !bagOpen && !dead && (
+      {(!started || paused) && !panelOpen && !dead && !sleeping && (
         <div className="overlay">
           <div className="panel">
             <h1>方块小镇</h1>
@@ -547,7 +646,9 @@ export default function App() {
                 <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块；<kbd>0</kbd>、<kbd>-</kbd>：生存模式是空桶、水桶，创造模式是火把、水；<kbd>=</kbd> 麦种</li>
                 <li>选麦种对着草地或泥土右键种地（生存模式要有石锄），附近有水长得快</li>
                 <li>拿着麦种，绒耳兔会跟着你；对着它右键喂麦种，两只喂过的靠在一起会生小兔</li>
-                <li><kbd>E</kbd> 打开背包和合成，<kbd>R</kbd> 吃东西（生存模式）</li>
+                <li><kbd>E</kbd> 打开背包和合成（创造模式是方块选择器），<kbd>R</kbd> 吃东西</li>
+                <li>对着床右键睡觉（晚上睡到天亮，也是重生点），对着箱子右键存东西</li>
+                <li>快捷栏最后一格（<kbd>=</kbd>）可以在背包里换成别的东西</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
                 <li>水里按 <kbd>空格</kbd> 往上游、<kbd>C</kbd> 往下潜，贴着岸按 <kbd>空格</kbd> 上岸</li>
                 <li>火把要立在方块上，晚上能照亮周围；水会往低处和四周流</li>

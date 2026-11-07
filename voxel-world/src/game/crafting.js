@@ -1,4 +1,4 @@
-import { BRICK, DIRT, GLASS, IRON_ORE, LOG, PLANKS, SAND, STONE, TORCH } from './blocks.js';
+import { BED, BRICK, CHEST, DIRT, GLASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, STONE, TORCH } from './blocks.js';
 import {
   APPLE, BERRIES, BREAD, BUCKET, COAL, IRON_INGOT, IRON_PICKAXE, PIE, STICK, STONE_AXE, STONE_HOE, STONE_PICKAXE, STONE_SHOVEL, WHEAT,
   RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, addItem, countOf, takeItem,
@@ -11,6 +11,8 @@ export const RECIPES = [
   { id: 'torch', inputs: [[STICK, 1], [COAL, 1]], output: [TORCH, 4], hint: '煤炭在地下的石头里找' },
   { id: 'glass', inputs: [[SAND, 2], [COAL, 1]], output: [GLASS, 2], hint: '用煤炭把沙子烧成玻璃' },
   { id: 'brick', inputs: [[DIRT, 2], [SAND, 1], [COAL, 1]], output: [BRICK, 2], hint: '泥和沙子烧成砖' },
+  { id: 'bed', inputs: [[PLANKS, 3], [LEAVES, 4]], output: [BED, 1], hint: '晚上睡一觉就天亮；睡过的床就是重生点' },
+  { id: 'chest', inputs: [[PLANKS, 8]], output: [CHEST, 1], hint: '右键打开，能存东西' },
   { id: 'stonePickaxe', inputs: [[STONE, 3], [STICK, 2]], output: [STONE_PICKAXE, 1], hint: '挖石头、矿石快 4 倍，挖铁矿石必须有镐' },
   { id: 'stoneShovel', inputs: [[STONE, 1], [STICK, 2]], output: [STONE_SHOVEL, 1], hint: '挖泥土、沙子快 4 倍' },
   { id: 'stoneAxe', inputs: [[STONE, 3], [STICK, 2]], output: [STONE_AXE, 1], hint: '砍木头、树叶快 4 倍' },

@@ -1236,3 +1236,98 @@ test('蛋饼：鸭蛋 ×2 + 小麦 + 煤炭 → 蛋饼 ×2', () => {
   assert.equal(countOf(inv, EGG_PANCAKE), 2);
   assert.equal(foodValue(EGG_PANCAKE), 6);
 });
+
+// ---------- 床和箱子 ----------
+import { BED, CHEST } from '../src/game/blocks.js';
+import {
+  sleepCheck, respawnPoint, canUseCustomSlot, creativePalette, transfer, emptyChestInto,
+  serializeChests, deserializeChests, chestKey, describeChest,
+} from '../src/game/home.js';
+import { BED_HEIGHT } from '../src/game/mesher.js';
+
+test('睡觉：只能在晚上，附近 8 格有夜影睡不着', () => {
+  assert.equal(sleepCheck(0.9, [], [5, 2, 5]).ok, false);
+  assert.ok(sleepCheck(0.9, [], [5, 2, 5]).reason.includes('白天'));
+  assert.equal(sleepCheck(0.1, [], [5, 2, 5]).ok, true);
+  const near = createMonster([9.5, 2, 5.5]);
+  assert.equal(sleepCheck(0.1, [near], [5, 2, 5]).ok, false);
+  const far = createMonster([20.5, 2, 5.5]);
+  assert.equal(sleepCheck(0.1, [far], [5, 2, 5]).ok, true);
+  near.dissolve = 0.5;
+  assert.equal(sleepCheck(0.1, [near], [5, 2, 5]).ok, true, '正在消散的不算');
+});
+
+test('重生点：床还在就在床上，床没了回出生点', () => {
+  const w = farmWorld();
+  w.set(5, 2, 5, BED);
+  assert.deepEqual(respawnPoint(w, [5, 2, 5]), { pos: [5.5, 3, 5.5], lostBed: false });
+  w.set(5, 2, 5, AIR);
+  const r = respawnPoint(w, [5, 2, 5]);
+  assert.equal(r.lostBed, true);
+  assert.deepEqual(r.pos, w.spawnPoint());
+  assert.equal(respawnPoint(w, null).lostBed, false);
+});
+
+test('床和箱子的配方；床是矮的一格，箱子是实心方块', () => {
+  const inv = {};
+  addItem(inv, PLANKS, 11);
+  addItem(inv, LEAVES, 4);
+  assert.equal(craft(inv, recipe('bed')), 1);
+  assert.equal(craft(inv, recipe('chest')), 1);
+  assert.equal(countOf(inv, BED), 1);
+  assert.equal(countOf(inv, CHEST), 1);
+  assert.equal(countOf(inv, PLANKS), 0);
+  const w = farmWorld();
+  w.set(5, 2, 5, BED);
+  w.set(7, 2, 5, CHEST);
+  const g = buildChunkGeometry(w, 0, 0);
+  let bedTop = 0;
+  for (let i = 1; i < g.positions.length; i += 3) if (Math.abs(g.positions[i] - (2 + BED_HEIGHT)) < 1e-6 && g.normals[i] === 1) bedTop++;
+  assert.equal(bedTop, 4, '床的顶面在 0.56 高');
+  assert.equal(w.isSolid(7, 2, 5), true);
+  assert.equal(dropFor(BED), BED);
+  assert.equal(dropFor(CHEST), CHEST);
+});
+
+test('快捷栏最后一格：能放麦种和一般方块，不能放水、基岩、庄稼、工具', () => {
+  assert.equal(canUseCustomSlot(SEEDS), true);
+  assert.equal(canUseCustomSlot(BED), true);
+  assert.equal(canUseCustomSlot(CHEST), true);
+  assert.equal(canUseCustomSlot(IRON_ORE), true);
+  assert.equal(canUseCustomSlot(WATER), false);
+  assert.equal(canUseCustomSlot(flowId(3)), false);
+  assert.equal(canUseCustomSlot(BEDROCK_ID), false);
+  assert.equal(canUseCustomSlot(WHEAT_BASE), false);
+  assert.equal(canUseCustomSlot(STONE_PICKAXE), false);
+  const palette = creativePalette();
+  assert.ok(palette.includes(BED) && palette.includes(CHEST) && palette.includes(SEEDS));
+  assert.ok(!palette.includes(WATER) && !palette.includes(WHEAT_BASE + 3));
+});
+
+test('箱子：存取东西、挖掉后东西倒进背包、存档只留还在的箱子', () => {
+  const bag = {};
+  const box = {};
+  addItem(bag, STONE_B, 10);
+  assert.equal(transfer(bag, box, STONE_B, 4), 4);
+  assert.equal(transfer(bag, box, STONE_B, 99), 6, '最多搬现有的');
+  assert.equal(transfer(bag, box, STONE_B, 1), 0);
+  assert.deepEqual(bag, {});
+  assert.equal(describeChest(box), '石头 ×10');
+  assert.equal(describeChest({}), '空的');
+
+  const w = farmWorld();
+  w.set(3, 2, 3, CHEST);
+  w.set(4, 2, 3, CHEST);
+  const chests = new Map([[chestKey(3, 2, 3), box], [chestKey(4, 2, 3), {}], [chestKey(9, 2, 9), { 5: 1 }]]);
+  const saved = JSON.parse(JSON.stringify(serializeChests(chests)));
+  assert.deepEqual(Object.keys(saved).sort(), ['3,2,3', '9,2,9'], '空箱子不存');
+  const back = deserializeChests({ ...saved, 'bad': { 1: 1 }, '1,2': {} }, w);
+  assert.deepEqual([...back.keys()], ['3,2,3'], '9,2,9 那里已经不是箱子了');
+  assert.equal(countOf(back.get('3,2,3'), STONE_B), 10);
+
+  const inv = {};
+  assert.equal(emptyChestInto(back, '3,2,3', inv), 10);
+  assert.equal(countOf(inv, STONE_B), 10);
+  assert.equal(back.size, 0);
+  assert.equal(emptyChestInto(back, '7,7,7', inv), 0);
+});

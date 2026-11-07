@@ -102,7 +102,7 @@ export default function Hud({ slots, counts, selected, onSelect, atlasUrl, stats
           const n = counts ? counts[id] ?? 0 : null;
           return (
             <button
-              key={id}
+              key={i} // 同一样东西可能在快捷栏里出现两次（最后一格是自选的）
               type="button"
               className={'slot' + (i === selected ? ' active' : '') + (n === 0 ? ' empty' : '')}
               onClick={() => onSelect(i)}

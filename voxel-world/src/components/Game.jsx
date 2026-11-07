@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { ChunkRenderer } from '../game/renderer.js';
 import { raycast } from '../game/raycast.js';
 import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer } from '../game/player.js';
-import { AIR, BLOCKS, EGG, FARMLAND, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
+import { AIR, BLOCKS, CHEST, EGG, FARMLAND, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
+import { chestKey, emptyChestInto } from '../game/home.js';
 import { GROW_STEP, cropDrops, plantTarget } from '../game/farming.js';
 import {
   BUCKET, SURVIVAL_HOTBAR, WATER_BUCKET, addItem, countOf, dropFor, itemName, takeItem,
@@ -219,7 +220,7 @@ function Highlight({ targetRef, digRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, animals, peacefulRef }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, animals, peacefulRef, chests, onOpenChest, onSleep }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
@@ -251,6 +252,14 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     const dirty = sim.edit(x, y, z, AIR);
     if (!dirty) return;
     renderer.rebuildKeys(dirty);
+    // 挖掉箱子：里面的东西倒进背包
+    if (t.block === CHEST) {
+      const n = emptyChestInto(chests, chestKey(x, y, z), inventory);
+      if (n) {
+        onMessage(`箱子里的 ${n} 件东西放进了背包`);
+        onInventory();
+      }
+    }
     if (survival) {
       if (isCrop(t.block)) {
         for (const [id, n] of cropDrops(t.block)) for (let i = 0; i < n; i++) pickUp(id); // 收割
@@ -328,6 +337,10 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     const selected = selectedRef.current;
     const target = entityInSight();
     if (target && isAnimal(target)) return feed(target);
+    // 对着床 / 箱子右键是用它，不是放方块
+    const use = t && BLOCKS[t.block]?.interact;
+    if (use === 'chest') return onOpenChest(chestKey(...t.hit));
+    if (use === 'sleep') return onSleep([...t.hit]);
     if (survival && countOf(inventory, selected) <= 0) {
       if (selected === SEEDS) return onMessage('没有麦种了：挖草方块有时能挖到，收割小麦也会给');
       return onMessage(`没有${itemName(selected)}了，${selected < 100 ? '去背包里合成或者挖一些' : '可以在背包里合成'}`);

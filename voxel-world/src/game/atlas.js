@@ -461,6 +461,45 @@ painters[TILE.eggPancake] = (put, rand) => {
   }
 };
 
+// 床：顶面一半是白枕头、一半是红格子被子；侧面是木框
+painters[TILE.bedTop] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+    const k = 1 + (rand() - 0.5) * 0.08;
+    const frame = x === 0 || x === 15 || y === 0 || y === 15;
+    if (frame) put(x, y, 150 * k, 106 * k, 62 * k);
+    else if (y < 5) put(x, y, 238 * k, 236 * k, 228 * k);
+    else {
+      const check = (Math.floor(x / 3) + Math.floor(y / 3)) % 2 === 0;
+      put(x, y, (check ? 196 : 168) * k, (check ? 56 : 40) * k, (check ? 60 : 46) * k);
+    }
+  }
+};
+painters[TILE.bedSide] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+    const k = 1 + (rand() - 0.5) * 0.1;
+    // 贴图下面 9 行会露出来：上面 4 行是被子，下面是木框
+    if (y >= 7 && y < 11) put(x, y, 186 * k, 50 * k, 54 * k);
+    else put(x, y, 150 * k, 106 * k, 62 * k);
+  }
+};
+// 箱子：木板拼的，侧面中间有一道铁边和锁扣
+painters[TILE.chestTop] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+    const k = (x === 0 || y === 0 || x === 15 || y === 15 ? 0.7 : 1) * (1 + (rand() - 0.5) * 0.12);
+    put(x, y, 168 * k, 116 * k, 62 * k);
+  }
+};
+painters[TILE.chestSide] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+    const k = (x === 0 || y === 0 || x === 15 || y === 15 ? 0.7 : 1) * (1 + (rand() - 0.5) * 0.12);
+    const band = y === 6;
+    const latch = x >= 7 && x <= 8 && y >= 5 && y <= 8;
+    if (latch) put(x, y, 210, 210, 216);
+    else if (band) put(x, y, 70 * k, 48 * k, 28 * k);
+    else put(x, y, 168 * k, 116 * k, 62 * k);
+  }
+};
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

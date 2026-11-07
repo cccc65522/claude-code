@@ -435,6 +435,31 @@ kbd {
 .dig-ring.on { opacity: 0.9; }
 .bag-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 
+/* 背包里能放到快捷栏的东西 */
+.bag-item.pick {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: 2px solid rgba(63, 143, 58, 0.45);
+}
+.bag-item.pick.current { border-color: var(--accent); background: rgba(63, 143, 58, 0.18); }
+.panel .food button + button { margin-left: 4px; }
+.panel .food button:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
+
+/* 睡觉：画面慢慢变黑再亮起来 */
+.sleep-fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+  animation: sleep-fade 1.6s ease-in-out forwards;
+}
+@keyframes sleep-fade {
+  0% { opacity: 0; }
+  40%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* 水下：画面蒙一层蓝色 */
 .underwater {
   position: fixed;

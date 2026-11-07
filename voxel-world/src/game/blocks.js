@@ -17,6 +17,8 @@ export const COAL_ORE = 14;
 export const IRON_ORE = 15;
 export const FARMLAND = 16;
 export const EGG = 17; // 圆圆鸭下的蛋，放在地上
+export const BED = 18;
+export const CHEST = 31;
 // 小麦：27–30，四个生长阶段（30 成熟）
 export const WHEAT_BASE = 27;
 export const WHEAT_STAGES = 4;
@@ -70,6 +72,10 @@ export const TILE = {
   duckEgg: 41,
   eggPancake: 42,
   eggBlock: 43,
+  bedTop: 44,
+  bedSide: 45,
+  chestTop: 46,
+  chestSide: 47,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });
@@ -88,6 +94,10 @@ export const BLOCKS = {
   [BEDROCK]: { name: '基岩', tiles: all(TILE.bedrock), unbreakable: true },
   [COAL_ORE]: { name: '煤矿石', tiles: all(TILE.coalOre) },
   [IRON_ORE]: { name: '铁矿石', tiles: all(TILE.ironOre) },
+  // 床：矮矮的一格，右键睡觉、设重生点
+  [BED]: { name: '床', tiles: { top: TILE.bedTop, side: TILE.bedSide, bottom: TILE.planks }, transparent: true, shape: 'bed', interact: 'sleep' },
+  // 箱子：右键打开存东西
+  [CHEST]: { name: '箱子', tiles: { top: TILE.chestTop, side: TILE.chestSide, bottom: TILE.chestTop }, interact: 'chest' },
   [EGG]: { name: '鸭蛋', tiles: all(TILE.eggBlock), transparent: true, passable: true, shape: 'egg' },
   [FARMLAND]: { name: '耕地', tiles: { top: TILE.farmland, side: TILE.dirt, bottom: TILE.dirt } },
   // 水源：半透明、能穿过、能游泳；会往低处和四周流

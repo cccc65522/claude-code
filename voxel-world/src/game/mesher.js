@@ -74,6 +74,24 @@ function addCross(b, tile, x, y, z, light) {
   }
 }
 
+export const BED_HEIGHT = 0.56;
+function addBedBox(b, tiles, x, y, z, light) {
+  for (const face of FACES) {
+    const [dx, dy, dz] = face.dir;
+    const tile = tiles[face.side];
+    const start = b.positions.length / 3;
+    for (const [px, py, pz, u, v] of face.corners) {
+      b.positions.push(x + px, y + (py ? BED_HEIGHT : 0), z + pz);
+      b.normals.push(dx, dy, dz);
+      // 侧面只取贴图下面一截，免得被压扁
+      pushUv(b, tile, u, dy === 0 && v ? BED_HEIGHT : v);
+      b.colors.push(1, 1, 1);
+      b.light.push(light);
+    }
+    b.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
+  }
+}
+
 // 一个小盒子（鸭蛋）：整张贴图贴在每个面上
 function addBox(b, tile, x, y, z, min, max, light) {
   for (const face of FACES) {
@@ -125,11 +143,14 @@ function finish(b) {
   };
 }
 
+// u、v 是这一格贴图里的位置（0–1，v=1 是贴图上边），稍微往里收一点免得采到隔壁的贴图
 function pushUv(b, tile, u, v) {
   const eps = 0.001;
   const col = tile % ATLAS_COLS;
   const row = Math.floor(tile / ATLAS_COLS);
-  b.uvs.push((col + (u ? 1 - eps : eps)) / ATLAS_COLS, 1 - (row + (v ? eps : 1 - eps)) / ATLAS_ROWS);
+  const cu = Math.min(1 - eps, Math.max(eps, Number(u)));
+  const cv = Math.min(1 - eps, Math.max(eps, Number(v)));
+  b.uvs.push((col + cu) / ATLAS_COLS, 1 - (row + 1 - cv) / ATLAS_ROWS);
 }
 
 /**
@@ -188,6 +209,12 @@ export function buildChunkGeometry(world, cx, cz) {
 
         if (def.shape === 'crop') {
           addCross(solid, def.tiles.side, x, y, z, lightBrightness(world.lightAt(x, y, z)));
+          continue;
+        }
+
+        if (def.shape === 'bed') {
+          // 矮矮的一格：顶面是被子，侧面是木框
+          addBedBox(solid, def.tiles, x, y, z, lightBrightness(world.lightAt(x, y + 1, z)));
           continue;
         }
 
