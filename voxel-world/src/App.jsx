@@ -7,6 +7,7 @@ import Inventory from './components/Inventory.jsx';
 import Chest from './components/Chest.jsx';
 import MapView from './components/MapView.jsx';
 import { MapData, packExplored, unpackExplored } from './game/map.js';
+import { sanitizeWeather, setWeather } from './game/weather.js';
 import { World } from './game/world.js';
 import { createPlayer } from './game/player.js';
 import { createAtlasCanvas } from './game/atlas.js';
@@ -121,7 +122,8 @@ function buildSession(save) {
   const custom = canUseCustomSlot(save?.custom) ? save.custom : SEEDS; // 快捷栏最后一格
   const map = new MapData(world, unpackExplored(save?.explored, world.sizeX * world.sizeZ)); // 地图和探索记录
   map.explore(player.pos[0], player.pos[2]);
-  return { world, sim, player, time, mode, inventory, monsters, animals, chests, custom, map, id: Math.random().toString(36).slice(2) };
+  const weather = sanitizeWeather(save?.weather); // 天气
+  return { world, sim, player, time, mode, inventory, monsters, animals, chests, custom, map, weather, id: Math.random().toString(36).slice(2) };
 }
 
 export default function App() {
@@ -170,6 +172,8 @@ export default function App() {
   const digUiRef = useRef(null);
   const hurtUiRef = useRef(null);
   const timeRef = useRef(session.time);
+  const weatherRef = useRef(session.weather);
+  weatherRef.current = session.weather;
   const canvasRef = useRef(null);
   const saveTimer = useRef(null);
 
@@ -235,6 +239,7 @@ export default function App() {
       animals: serializeAnimals(session.animals),
       chests: serializeChests(session.chests),
       explored: packExplored(session.map.explored),
+      weather: session.weather,
       custom: session.custom,
     });
   }, [session]);
@@ -599,6 +604,7 @@ export default function App() {
         onOpenChest={openChest}
         onSleep={onSleep}
         map={session.map}
+        weatherRef={weatherRef}
         monsters={session.monsters}
         animals={session.animals}
         onEdit={onEdit}
@@ -786,6 +792,33 @@ export default function App() {
               <span className="clock">游戏时间 {clockText(timeRef.current)}</span>
               <button type="button" onClick={() => setTime(MORNING, '天亮了')}>白天</button>
               <button type="button" onClick={() => setTime(NIGHT, '天黑了')}>夜晚</button>
+            </div>
+            <div className="row time-row" role="group" aria-label="天气">
+              <span className="clock">天气</span>
+              <button
+                type="button"
+                className={session.weather.state === 'clear' ? 'on' : ''}
+                aria-pressed={session.weather.state === 'clear'}
+                onClick={() => {
+                  setWeather(session.weather, 'clear');
+                  setTimeTick((n) => n + 1);
+                  showToast('雨会慢慢停');
+                }}
+              >
+                晴
+              </button>
+              <button
+                type="button"
+                className={session.weather.state === 'rain' ? 'on' : ''}
+                aria-pressed={session.weather.state === 'rain'}
+                onClick={() => {
+                  setWeather(session.weather, 'rain');
+                  setTimeTick((n) => n + 1);
+                  showToast('要下雨了（雪原下雪，沙漠不下）');
+                }}
+              >
+                下雨
+              </button>
             </div>
             <p className="meta">
               种子 {session.world.seed} · 已改动 {editCount} 个方块 · 自动保存在这个浏览器里

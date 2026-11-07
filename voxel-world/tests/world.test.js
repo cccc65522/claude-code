@@ -1816,3 +1816,69 @@ test('砂岩的配方；兔子在雪原也会出现，夜影不会生在仙人�
   computeLight(w);
   assert.equal(canSpawnAt(w, 8, 3, 8), false);
 });
+
+// ---------- 天气 ----------
+import { createWeather, stepWeather, setWeather, precipitationAt, sheltered, sanitizeWeather } from '../src/game/weather.js';
+
+test('天气：晴天和下雨轮流来，强度慢慢变化', () => {
+  const w = createWeather(() => 0);
+  assert.equal(w.state, 'clear');
+  assert.equal(w.intensity, 0);
+  let switched = 0;
+  for (let t = 0; t < 301; t++) if (stepWeather(w, 1, () => 0)) switched++;
+  assert.equal(w.state, 'rain', '晴了 300 秒以后开始下雨');
+  assert.equal(switched, 1);
+  assert.ok(w.intensity > 0 && w.intensity < 0.3, '刚开始下，还很小');
+  for (let t = 0; t < 10; t++) stepWeather(w, 1, () => 0);
+  assert.equal(w.intensity, 1, '十秒内下大');
+  for (let t = 0; t < 85; t++) stepWeather(w, 1, () => 0);
+  assert.equal(w.state, 'clear', '下 90 秒雨停了');
+  setWeather(w, 'rain');
+  assert.equal(w.state, 'rain');
+  assert.equal(sanitizeWeather({ state: 'rain', timer: 50 }).intensity, 1);
+  assert.equal(sanitizeWeather({ state: 'storm', timer: 50 }).state, 'clear', '不认识的天气当成晴天');
+  assert.equal(sanitizeWeather(null).state, 'clear');
+});
+
+test('天气：沙漠不下、雪原下雪、其它地方下雨；屋顶下面淋不到', () => {
+  const big = new World({ seed: 1 });
+  const kinds = new Set();
+  for (let z = 0; z < 256; z += 8) for (let x = 0; x < 256; x += 8) {
+    const p = precipitationAt(big, x, z);
+    const b = big.biomeAt(x, z);
+    if (b === 'desert') assert.equal(p, null);
+    if (b === 'snow') assert.equal(p, 'snow');
+    if (b === 'plains' || b === 'forest') assert.equal(p, 'rain');
+    kinds.add(p);
+  }
+  assert.deepEqual([...kinds].sort(), [null, 'rain', 'snow'].sort());
+  const w = floorWorld();
+  assert.equal(sheltered(w, 5.5, 1, 5.5), false);
+  w.rawSet(5, 4, 5, STONE);
+  assert.equal(sheltered(w, 5.5, 1, 5.5), true);
+});
+
+test('下雨时露天的庄稼长得和有水的一样快，屋里的不受影响', () => {
+  const grow = (raining, roofed) => {
+    const w = farmWorld();
+    const crops = new Set();
+    for (let z = 4; z < 28; z++) {
+      w.set(16, 1, z, FARMLAND);
+      w.set(16, 2, z, WHEAT_BASE);
+      if (roofed) w.rawSet(16, 4, z, STONE);
+      crops.add(w.index(16, 2, z));
+    }
+    computeSkyLight(w);
+    let s = 9;
+    const rand = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
+    for (let t = 0; t < 30; t++) growCrops(w, crops, rand, raining);
+    let total = 0;
+    for (let z = 4; z < 28; z++) total += cropStage(w.get(16, 2, z));
+    return total;
+  };
+  const dry = grow(false, false);
+  const rain = grow(true, false);
+  const roof = grow(true, true);
+  assert.ok(rain > dry * 1.6, `淋雨 ${rain}，不下雨 ${dry}`);
+  assert.ok(roof < rain * 0.8, `屋顶下 ${roof}`);
+});

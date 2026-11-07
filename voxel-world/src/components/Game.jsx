@@ -8,6 +8,7 @@ import { raycast } from '../game/raycast.js';
 import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer, touchesBlock } from '../game/player.js';
 import { AIR, BLOCKS, CACTUS, CHEST, EGG, FARMLAND, ICE, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
 import { BIOMES } from '../game/biomes.js';
+import { WEATHER, precipitationAt, sheltered, stepWeather } from '../game/weather.js';
 import { chestKey, emptyChestInto } from '../game/home.js';
 import { doorPlacement, ladderPlacement, toggleDoor } from '../game/building.js';
 import { GROW_STEP, cropDrops, plantTarget } from '../game/farming.js';
@@ -54,7 +55,7 @@ function withBlockLight(material) {
 }
 
 // ---------- 天空：颜色、光照、太阳、月亮、星星、雾、水下 ----------
-function Environment({ world, playerRef, timeRef, activeRef, cloudMaterial }) {
+function Environment({ world, playerRef, timeRef, activeRef, cloudMaterial, weatherRef }) {
   const { scene, camera } = useThree();
   const sun = useRef();
   const hemi = useRef();
@@ -92,12 +93,22 @@ function Environment({ world, playerRef, timeRef, activeRef, cloudMaterial }) {
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.1);
-    if (activeRef.current) timeRef.current = wrapTime(timeRef.current + dt / DAY_SECONDS);
+    const weather = weatherRef.current;
+    if (activeRef.current) {
+      timeRef.current = wrapTime(timeRef.current + dt / DAY_SECONDS);
+      stepWeather(weather, dt);
+    }
     const s = skyAt(timeRef.current);
     const p = playerRef.current;
+    const wet = weather.intensity; // 0 晴 … 1 下得正大：天变灰、光变弱、雾变近
 
     // 天空和雾同色，远处的地形会融进天空
     background.setRGB(s.sky[0], s.sky[1], s.sky[2], THREE.SRGBColorSpace);
+    if (wet > 0) {
+      const g = 0.18 + 0.32 * s.day;
+      tmp.c.setRGB(g, g * 1.04, g * 1.1, THREE.SRGBColorSpace);
+      background.lerp(tmp.c, 0.75 * wet);
+    }
     const underwater = eyeInWater(world, p);
     if (underwater) {
       tmp.c.copy(tmp.deep).lerp(tmp.shallow, s.day);
@@ -107,8 +118,8 @@ function Environment({ world, playerRef, timeRef, activeRef, cloudMaterial }) {
       fog.far = 9;
     } else {
       fog.color.copy(background);
-      fog.near = 28;
-      fog.far = 92;
+      fog.near = 28 - 14 * wet;
+      fog.far = 92 - 36 * wet;
     }
 
     // 白天用太阳当主光源，晚上换成蓝白色的月光
@@ -116,12 +127,12 @@ function Environment({ world, playerRef, timeRef, activeRef, cloudMaterial }) {
     const dir = isDay ? s.sunDir : s.sunDir.map((v) => -v);
     if (sun.current) {
       sun.current.position.set(dir[0] * 100, dir[1] * 100, dir[2] * 100);
-      sun.current.intensity = isDay ? s.sunIntensity : s.moonIntensity;
+      sun.current.intensity = (isDay ? s.sunIntensity : s.moonIntensity) * (1 - 0.65 * wet);
       if (isDay) sun.current.color.copy(tmp.white).lerp(tmp.warm, s.dusk);
       else sun.current.color.copy(tmp.moon);
     }
     if (hemi.current) {
-      hemi.current.intensity = s.ambient;
+      hemi.current.intensity = s.ambient * (1 - 0.3 * wet);
       hemi.current.color.copy(tmp.white).lerp(tmp.night, 1 - s.day);
     }
 
@@ -130,20 +141,21 @@ function Environment({ world, playerRef, timeRef, activeRef, cloudMaterial }) {
     if (sunMesh.current) {
       sunMesh.current.position.set(cam.x + s.sunDir[0] * SKY_DISTANCE, cam.y + s.sunDir[1] * SKY_DISTANCE, cam.z + s.sunDir[2] * SKY_DISTANCE);
       sunMesh.current.lookAt(cam);
-      sunMesh.current.visible = s.sunDir[1] > -0.15 && !underwater;
+      sunMesh.current.visible = s.sunDir[1] > -0.15 && !underwater && wet < 0.5;
     }
     if (moonMesh.current) {
       moonMesh.current.position.set(cam.x - s.sunDir[0] * SKY_DISTANCE, cam.y - s.sunDir[1] * SKY_DISTANCE, cam.z - s.sunDir[2] * SKY_DISTANCE);
       moonMesh.current.lookAt(cam);
-      moonMesh.current.visible = s.sunDir[1] < 0.15 && !underwater;
+      moonMesh.current.visible = s.sunDir[1] < 0.15 && !underwater && wet < 0.5;
     }
     if (stars.current) {
       stars.current.position.copy(cam);
-      stars.current.material.opacity = underwater ? 0 : s.stars;
+      stars.current.material.opacity = underwater ? 0 : s.stars * (1 - wet);
       stars.current.visible = s.stars > 0.01 && !underwater;
     }
     cloudMaterial.color.setRGB(0.07 + 0.93 * s.day, 0.08 + 0.92 * s.day, 0.13 + 0.87 * s.day);
     cloudMaterial.color.lerp(tmp.warm, s.dusk * 0.35);
+    cloudMaterial.color.multiplyScalar(1 - 0.45 * wet); // 雨天的云是灰的
   });
 
   return (
@@ -160,6 +172,95 @@ function Environment({ world, playerRef, timeRef, activeRef, cloudMaterial }) {
       </mesh>
       <points ref={stars} geometry={starGeometry} renderOrder={-2}>
         <pointsMaterial color="#ffffff" size={2} sizeAttenuation={false} transparent opacity={0} fog={false} depthWrite={false} />
+      </points>
+    </>
+  );
+}
+
+// 雨和雪：在镜头周围一圈落下的粒子。雨是一道道浅蓝的短线，雪是慢慢飘的白点。
+// 每一滴落到它那一列最高的方块就重新从上面开始，所以屋顶下面淋不到。
+const DROPS = 900;
+const DROP_RADIUS = 18;
+function Precipitation({ world, weatherRef }) {
+  const { camera } = useThree();
+  const state = useMemo(() => {
+    const rainPos = new Float32Array(DROPS * 6).fill(-1000);
+    const snowPos = new Float32Array(DROPS * 3).fill(-1000);
+    const rain = new THREE.BufferGeometry();
+    rain.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+    const snow = new THREE.BufferGeometry();
+    snow.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+    return {
+      rain, snow, rainPos, snowPos,
+      x: new Float32Array(DROPS), y: new Float32Array(DROPS), z: new Float32Array(DROPS),
+      ground: new Float32Array(DROPS), kind: new Uint8Array(DROPS), // 0 不下 1 雨 2 雪
+      fresh: true,
+    };
+  }, []);
+  useEffect(() => () => {
+    state.rain.dispose();
+    state.snow.dispose();
+  }, [state]);
+
+  const respawn = (i, cam, anywhere) => {
+    const x = cam.x + (Math.random() * 2 - 1) * DROP_RADIUS;
+    const z = cam.z + (Math.random() * 2 - 1) * DROP_RADIUS;
+    const fx = Math.floor(x);
+    const fz = Math.floor(z);
+    const kind = world.inBounds(fx, 0, fz) ? precipitationAt(world, fx, fz) : null;
+    state.kind[i] = kind === 'rain' ? 1 : kind === 'snow' ? 2 : 0;
+    state.x[i] = x;
+    state.z[i] = z;
+    state.ground[i] = world.inBounds(fx, 0, fz) ? world.topY(fx, fz) + 1 : 0;
+    state.y[i] = cam.y + (anywhere ? Math.random() * 24 - 8 : 10 + Math.random() * 6);
+  };
+
+  useFrame((clock, rawDt) => {
+    const dt = Math.min(rawDt, 0.1);
+    const cam = camera.position;
+    const active = Math.floor(DROPS * weatherRef.current.intensity);
+    const { x, y, z, ground, kind, rainPos, snowPos } = state;
+    if (state.fresh) {
+      for (let i = 0; i < DROPS; i++) respawn(i, cam, true);
+      state.fresh = false;
+    }
+    const t = clock.clock.elapsedTime;
+    for (let i = 0; i < DROPS; i++) {
+      let show = i < active && kind[i] !== 0;
+      if (i < active) {
+        y[i] -= (kind[i] === 2 ? 2.2 : 20) * dt;
+        if (kind[i] === 2) x[i] += Math.sin(t * 1.3 + i) * 0.4 * dt; // 雪花左右飘
+        const far = Math.abs(x[i] - cam.x) > DROP_RADIUS + 2 || Math.abs(z[i] - cam.z) > DROP_RADIUS + 2;
+        if (y[i] < ground[i] || y[i] < cam.y - 12 || far) {
+          respawn(i, cam, far);
+          show = false;
+        }
+      }
+      const r = i * 6;
+      const p = i * 3;
+      if (show && kind[i] === 1) {
+        rainPos[r] = x[i]; rainPos[r + 1] = y[i]; rainPos[r + 2] = z[i];
+        rainPos[r + 3] = x[i] + 0.04; rainPos[r + 4] = y[i] + 0.7; rainPos[r + 5] = z[i];
+        snowPos[p + 1] = -1000;
+      } else if (show && kind[i] === 2) {
+        snowPos[p] = x[i]; snowPos[p + 1] = y[i]; snowPos[p + 2] = z[i];
+        rainPos[r + 1] = -1000; rainPos[r + 4] = -1000;
+      } else {
+        rainPos[r + 1] = -1000; rainPos[r + 4] = -1000;
+        snowPos[p + 1] = -1000;
+      }
+    }
+    state.rain.attributes.position.needsUpdate = true;
+    state.snow.attributes.position.needsUpdate = true;
+  });
+
+  return (
+    <>
+      <lineSegments geometry={state.rain} frustumCulled={false}>
+        <lineBasicMaterial color="#b4cce8" transparent opacity={0.55} depthWrite={false} />
+      </lineSegments>
+      <points geometry={state.snow} frustumCulled={false}>
+        <pointsMaterial color="#ffffff" size={0.13} transparent opacity={0.9} depthWrite={false} />
       </points>
     </>
   );
@@ -225,7 +326,7 @@ function Highlight({ targetRef, digRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, animals, peacefulRef, chests, onOpenChest, onSleep, map }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, animals, peacefulRef, chests, onOpenChest, onSleep, map, weatherRef }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
@@ -666,6 +767,17 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     camera.position.set(p.pos[0], p.pos[1] + EYE_HEIGHT, p.pos[2]);
     // 远处还没建好的区块每帧建一点；离太远的区块不画
     renderer.update(p.pos[0], p.pos[2], 6);
+    // 雨声：脚下这一列在下雨才有，在屋里小一点
+    sfx.current.rainTick = (sfx.current.rainTick ?? 0) - dt;
+    if (sfx.current.rainTick <= 0) {
+      sfx.current.rainTick = 0.25;
+      const fx = Math.floor(p.pos[0]);
+      const fz = Math.floor(p.pos[2]);
+      const kind = world.inBounds(fx, 0, fz) ? precipitationAt(world, fx, fz) : null;
+      const loud = kind === 'rain' ? 1 : kind === 'snow' ? 0.12 : 0;
+      sound.setRain(weatherRef.current.intensity * loud * (sheltered(world, p.pos[0], p.pos[1] + 1.6, p.pos[2]) ? 0.4 : 1));
+    }
+
     // 地图：每半秒点亮走过的地方、更新改过的区块
     mapTimer.current += dt;
     if (map && mapTimer.current > 0.5) {
@@ -758,7 +870,8 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       growTimer.current += dt;
       if (growTimer.current >= GROW_STEP) {
         growTimer.current = 0;
-        const dirty = sim.grow();
+        const weather = weatherRef.current;
+        const dirty = sim.grow(Math.random, weather.state === 'rain' && weather.intensity > 0.5);
         if (dirty) {
           renderer.rebuildKeys(dirty);
           onEdit();
@@ -795,6 +908,9 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       const t = targetRef.current;
       statsRef.current.textContent =
         `${clockText(timeRef.current)}  ${BIOMES[world.biomeAt(Math.floor(p.pos[0]), Math.floor(p.pos[2]))]?.name ?? ''}  X ${p.pos[0].toFixed(1)}  Y ${p.pos[1].toFixed(1)}  Z ${p.pos[2].toFixed(1)}` +
+        (weatherRef.current.intensity > 0.3
+          ? `  · ${precipitationAt(world, Math.floor(p.pos[0]), Math.floor(p.pos[2])) === 'snow' ? '下雪' : precipitationAt(world, Math.floor(p.pos[0]), Math.floor(p.pos[2])) === 'rain' ? WEATHER.rain.name : '阴天'}`
+          : '') +
         (p.flying ? '  · 飞行中' : p.inWater ? '  · 游泳中' : '') +
         ((e) => (e ? `  · 对准：${isAnimal(e) ? animalName(e) : '夜影'}` : t ? `  · 对准：${BLOCKS[t.block]?.name ?? '?'}` : ''))(entityInSight());
     }
@@ -1063,6 +1179,7 @@ function WorldScene(props) {
       <Environment {...props} cloudMaterial={materials.cloud} />
       <primitive object={renderer.group} />
       <Clouds world={world} material={materials.cloud} />
+      <Precipitation world={world} weatherRef={props.weatherRef} />
       <Monsters monsters={props.monsters} world={world} />
       <Animals animals={props.animals} world={world} />
       <Controller {...props} renderer={renderer} materials={materials} />

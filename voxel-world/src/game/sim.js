@@ -86,9 +86,9 @@ export class Sim {
   }
 
   // 庄稼生长：返回要重建的区块，没长就是 null
-  grow(rand) {
+  grow(rand, raining = false) {
     if (!this.crops.size) return null;
-    const grown = growCrops(this.world, this.crops, rand);
+    const grown = growCrops(this.world, this.crops, rand, raining);
     return grown.length ? this.chunkKeysFor(grown) : null;
   }
 

@@ -41,7 +41,8 @@ export function isWet(world, x, y, z) {
  * 让一批庄稼按概率长一阶。crops 是庄稼所在格子的下标集合（会顺手去掉已经不是庄稼的）。
  * 返回长了的格子下标。
  */
-export function growCrops(world, crops, rand = Math.random) {
+// raining：正在下雨（露天的庄稼淋到雨，和旁边有水一样长得快）
+export function growCrops(world, crops, rand = Math.random, raining = false) {
   const grown = [];
   for (const i of crops) {
     const id = world.data[i];
@@ -52,7 +53,9 @@ export function growCrops(world, crops, rand = Math.random) {
     const stage = cropStage(id);
     if (stage >= WHEAT_STAGES - 1) continue;
     const [x, y, z] = world.coords(i);
-    const chance = isWet(world, x, y - 1, z) ? GROW_CHANCE_WET : GROW_CHANCE_DRY;
+    // 淋得到雨：头顶上什么都没有（庄稼自己就是这一列最高的方块），而且不在沙漠
+    const rained = raining && world.topY(x, z) <= y && world.biomeAt?.(x, z) !== 'desert';
+    const chance = rained || isWet(world, x, y - 1, z) ? GROW_CHANCE_WET : GROW_CHANCE_DRY;
     if (rand() >= chance) continue;
     world.set(x, y, z, WHEAT_BASE + stage + 1);
     grown.push(i);

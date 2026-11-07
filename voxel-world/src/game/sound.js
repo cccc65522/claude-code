@@ -273,6 +273,30 @@ class SoundEngine {
     this.tone(d, { type: 'sine', from: fill ? 300 : 500, to: fill ? 500 : 300, gain: 0.12, decay: 0.2 });
   }
 
+  // 雨声：一直循环的滤过的噪声，level 0–1 控制大小（在屋里小一点）
+  setRain(level) {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    if (!this.rain) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const band = this.ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 1400;
+      band.Q.value = 0.5;
+      const low = this.ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 5000;
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(band).connect(low).connect(gain).connect(this.master);
+      src.start();
+      this.rain = { gain, low };
+    }
+    const t = this.ctx.currentTime;
+    this.rain.gain.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.35, t, 0.5);
+  }
+
   // 开门：吱呀一声；关门：咚一下
   door(open, at) {
     const d = this.out(at, 0.9);
