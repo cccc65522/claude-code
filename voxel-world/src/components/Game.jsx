@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { ChunkRenderer } from '../game/renderer.js';
 import { lightBrightness } from '../game/light.js';
+import { sound, soundMaterial, stepFootsteps } from '../game/sound.js';
 import { raycast } from '../game/raycast.js';
 import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer } from '../game/player.js';
 import { AIR, BLOCKS, CHEST, EGG, FARMLAND, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
@@ -229,6 +230,8 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const fluidTimer = useRef(0);
   const growTimer = useRef(0);
   const animalTimer = useRef(0);
+  // 音效用到的状态：脚步走了多远、上一帧在不在水里、挖方块的敲击、游泳划水
+  const sfx = useRef({ walked: 0, wasInWater: false, digTick: 0, swim: 0, lastPos: null });
   const flicker = useMemo(() => ({ base: new THREE.Color('#ffc27a'), t: 0 }), []);
   const lastAir = useRef(null);
   const lastHunger = useRef(null);
@@ -254,6 +257,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     const dirty = sim.edit(x, y, z, AIR);
     if (!dirty) return;
     renderer.rebuildKeys(dirty);
+    sound.block(soundMaterial(t.block), [x + 0.5, y + 0.5, z + 0.5], 'break');
     // 挖掉箱子：里面的东西倒进背包
     if (t.block === CHEST) {
       const n = emptyChestInto(chests, chestKey(x, y, z), inventory);
@@ -288,6 +292,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     const dirty = sim.edit(w.hit[0], w.hit[1], w.hit[2], AIR);
     if (!dirty) return;
     renderer.rebuildKeys(dirty);
+    sound.bucket(true);
     takeItem(inventory, BUCKET);
     addItem(inventory, WATER_BUCKET);
     onInventory();
@@ -309,6 +314,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     add(sim.edit(...target.above, WHEAT_BASE));
     if (!dirty.size) return;
     renderer.rebuildKeys(dirty);
+    sound.block('leaves', [target.above[0] + 0.5, target.above[1] + 0.5, target.above[2] + 0.5], 'place');
     if (survival) {
       takeItem(inventory, SEEDS);
       addExhaustion(playerRef.current, EXHAUSTION.dig);
@@ -331,6 +337,8 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       takeItem(inventory, food);
       onInventory();
     }
+    sound.eat();
+    sound.animal(e.species, e.pos, 'idle');
     onMessage(`喂了${sp.name}${itemName(food)}：再喂一只靠近它的${sp.name}，就会生${sp.babyName}`);
   };
 
@@ -367,6 +375,8 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     const dirty = sim.edit(x, y, z, id);
     if (!dirty) return;
     renderer.rebuildKeys(dirty);
+    if (id === WATER) sound.bucket(false);
+    else sound.block(soundMaterial(id), [x + 0.5, y + 0.5, z + 0.5], 'place');
     if (survival) {
       takeItem(inventory, selected);
       if (selected === WATER_BUCKET) addItem(inventory, BUCKET);
@@ -402,6 +412,12 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       return;
     }
     d.progress += info.time > 0 ? dt / info.time : 1;
+    // 挖的过程中一下下地敲
+    sfx.current.digTick -= dt;
+    if (sfx.current.digTick <= 0 && d.progress < 1) {
+      sfx.current.digTick = 0.24;
+      sound.block(soundMaterial(t.block), [t.hit[0] + 0.5, t.hit[1] + 0.5, t.hit[2] + 0.5], 'hit');
+    }
     if (d.progress >= 1) {
       dig(t);
       d.key = null;
@@ -428,6 +444,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     if (survival) addExhaustion(playerRef.current, EXHAUSTION.attack);
     const from = playerRef.current.pos;
     if (isAnimal(e)) {
+      sound.animal(e.species, e.pos, 'hit');
       if (!damageAnimal(e, attackDamage(inventory), from, { hostile: survival && !peacefulRef.current })) return;
       e.dissolve = 0.01;
       if (survival) {
@@ -436,7 +453,9 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       }
       return;
     }
+    sound.monster(e.pos, 'hit');
     if (damageMonster(e, attackDamage(inventory), from)) {
+      sound.monster(e.pos, 'die');
       e.dissolve = 0.01; // 被打死：消散掉
       if (Math.random() < 0.5) {
         pickUp(COAL);
@@ -477,8 +496,30 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       down: k('KeyC') || k('ControlLeft') || (active && input.touchDown),
       sprint: k('ShiftLeft') || k('ShiftRight') || Math.hypot(move.x, move.y) > 0.95,
     };
+    const prev = sfx.current.lastPos ?? p.pos;
     const landed = stepPlayer(world, p, control, dt);
     const moving = Math.hypot(control.forward, control.right) > 0.1;
+    // 脚步、落地、落水、划水
+    {
+      const st = sfx.current;
+      const moved = Math.hypot(p.pos[0] - prev[0], p.pos[2] - prev[2]);
+      st.lastPos = [...p.pos];
+      const feet = [p.pos[0], p.pos[1], p.pos[2]];
+      const below = world.get(Math.floor(p.pos[0]), Math.floor(p.pos[1] - 0.05), Math.floor(p.pos[2]));
+      if (active && !p.flying && !p.inWater && stepFootsteps(st, moved, { onGround: p.onGround, sprinting: control.sprint })) {
+        sound.block(soundMaterial(below), feet, 'step');
+      }
+      if (landed > 1.2) sound.land(feet, landed);
+      if (p.inWater && !st.wasInWater && Math.abs(p.vel[1]) > 2) sound.splash(feet, true);
+      st.wasInWater = p.inWater;
+      if (p.inWater && moving) {
+        st.swim -= dt;
+        if (st.swim <= 0) {
+          st.swim = 0.9;
+          sound.splash(feet, false);
+        }
+      }
+    }
     const jumps = p.jumps;
     p.jumps = 0;
 
@@ -486,6 +527,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     attackTimer.current = Math.max(0, attackTimer.current - dt);
     const takeDamage = (amount, cause) => {
       if (modeRef.current !== 'survival' || p.health <= 0 || hurt(p, amount) <= 0) return;
+      sound.hurt();
         const el = hurtUiRef.current;
         if (el) {
           el.classList.remove('hit');
@@ -533,6 +575,12 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
           // 只有晒得到太阳的才会消散（洞里的不会）
           const sunlit = day && world.skyAt(Math.floor(m.pos[0]), Math.floor(m.pos[1] + 0.4), Math.floor(m.pos[2])) >= SUNLIT;
           const bite = stepMonster(world, m, p, dt, { day: sunlit });
+          // 离得近时偶尔咕噜一声
+          m.growl = (m.growl ?? 2 + Math.random() * 4) - dt;
+          if (m.growl <= 0 && m.dissolve === 0) {
+            m.growl = 3 + Math.random() * 5;
+            sound.monster(m.pos, 'growl');
+          }
           if (bite) {
             // 被咬到往后弹一下
             const dx = p.pos[0] - m.pos[0];
@@ -560,6 +608,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     }
 
     camera.position.set(p.pos[0], p.pos[1] + EYE_HEIGHT, p.pos[2]);
+    sound.setListener([p.pos[0], p.pos[1] + EYE_HEIGHT, p.pos[2]], p.yaw);
     camera.rotation.set(p.pitch, p.yaw, 0, 'YXZ');
 
     // 准星对着的方块
@@ -602,6 +651,14 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       for (const a of animals) {
         const ev = stepAnimal(world, a, p, dt, { lure, hostile });
         if (a.dissolve > 0) a.dissolve += dt * 2;
+        // 野猪和鸭子时不时叫一声（兔子很安静）
+        if (a.species !== 'rabbit' && a.dissolve === 0) {
+          a.call = (a.call ?? 3 + Math.random() * 8) - dt;
+          if (a.call <= 0) {
+            a.call = 6 + Math.random() * 10;
+            sound.animal(a.species, a.pos, 'idle');
+          }
+        }
         if (ev.damage) {
           const dx = p.pos[0] - a.pos[0];
           const dz = p.pos[2] - a.pos[2];
@@ -617,6 +674,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
           if (world.get(ex, ey, ez) === AIR && world.isSolidBlock(ex, ey - 1, ez)) {
             const dirty = sim.edit(ex, ey, ez, EGG);
             if (dirty) {
+              sound.block('egg', [ex + 0.5, ey + 0.2, ez + 0.5], 'place');
               renderer.rebuildKeys(dirty);
               onEdit();
             }

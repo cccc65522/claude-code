@@ -1442,3 +1442,47 @@ test('洞里的夜影：白天在黑暗的洞里也会出现，露天的白天�
   for (let i = 0; i < 80; i++) trySpawn(w, high, createPlayer([32.5, 30, 32.5]), Math.random, { night: false });
   assert.equal(high.length, 0);
 });
+
+// ---------- 音效（纯计算部分） ----------
+import { soundMaterial, spatial, stepFootsteps, clampVolume, HEAR_DISTANCE } from '../src/game/sound.js';
+
+test('音效：方块按材质分类', () => {
+  assert.equal(soundMaterial(STONE), 'stone');
+  assert.equal(soundMaterial(IRON_ORE), 'stone');
+  assert.equal(soundMaterial(LOG), 'wood');
+  assert.equal(soundMaterial(CHEST), 'wood');
+  assert.equal(soundMaterial(GRASS_ID), 'dirt');
+  assert.equal(soundMaterial(SAND_B), 'sand');
+  assert.equal(soundMaterial(LEAVES), 'leaves');
+  assert.equal(soundMaterial(WHEAT_BASE + 2), 'leaves');
+  assert.equal(soundMaterial(GLASS_ID), 'glass');
+  assert.equal(soundMaterial(WATER), 'water');
+});
+
+test('音效：越远越小，太远听不见；右边的声音在右声道', () => {
+  const me = [0, 0, 0];
+  const near = spatial(me, 0, [1, 0, 0]);
+  const far = spatial(me, 0, [12, 0, 0]);
+  assert.ok(near.gain > far.gain && far.gain > 0);
+  assert.equal(spatial(me, 0, [HEAR_DISTANCE + 1, 0, 0]).gain, 0);
+  assert.ok(near.pan > 0.5, '面朝 -z 时 +x 在右边');
+  assert.ok(spatial(me, 0, [-5, 0, 0]).pan < -0.5, '-x 在左边');
+  assert.ok(Math.abs(spatial(me, 0, [0, 0, -5]).pan) < 0.01, '正前方居中');
+  assert.ok(spatial(me, Math.PI, [5, 0, 0]).pan < -0.5, '转过身来左右就反了');
+  assert.deepEqual(spatial(me, 0, null), { gain: 1, pan: 0 }, '没有位置的（受伤、吃东西）不衰减');
+});
+
+test('音效：走路每 1.7 格响一下脚步，跑步步子大一点，在空中不响', () => {
+  const st = {};
+  let steps = 0;
+  for (let i = 0; i < 100; i++) if (stepFootsteps(st, 0.1, { onGround: true })) steps++;
+  assert.equal(steps, 5, '走 10 格');
+  let running = 0;
+  const runSt = {};
+  for (let i = 0; i < 100; i++) if (stepFootsteps(runSt, 0.1, { onGround: true, sprinting: true })) running++;
+  assert.ok(running < steps);
+  assert.equal(stepFootsteps(st, 5, { onGround: false }), false);
+  assert.equal(clampVolume('x'), 0.7);
+  assert.equal(clampVolume(2), 1);
+  assert.equal(clampVolume(-1), 0);
+});

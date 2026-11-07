@@ -18,6 +18,7 @@ import {
 import { MAX_AIR, MAX_HEALTH, MAX_HUNGER, sanitizeHealth, sanitizeHunger } from './game/health.js';
 import { Sim } from './game/sim.js';
 import { MORNING, NIGHT, clockText, skyAt, wrapTime } from './game/daynight.js';
+import { clampVolume, sound } from './game/sound.js';
 
 const SAVE_KEY = 'voxel-world:v1';
 // 和平开关是玩家的设置，不跟着世界走：换新世界、重置世界都保留
@@ -54,6 +55,24 @@ function writeSave(data) {
     return true;
   } catch {
     return false; // 隐私模式或存储满了：照样能玩，只是不保存
+  }
+}
+
+// 音量设置也是玩家设置，不跟着世界走
+const VOLUME_KEY = 'voxel-world:volume';
+function loadVolume() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(VOLUME_KEY) || 'null');
+    return { volume: clampVolume(raw?.volume ?? 0.7), muted: Boolean(raw?.muted) };
+  } catch {
+    return { volume: 0.7, muted: false };
+  }
+}
+function writeVolume(v) {
+  try {
+    localStorage.setItem(VOLUME_KEY, JSON.stringify(v));
+  } catch {
+    // 存不了也没关系
   }
 }
 
@@ -108,6 +127,7 @@ export default function App() {
   const [chestOpen, setChestOpen] = useState(null); // 打开的箱子的坐标 "x,y,z"
   const [custom, setCustom] = useState(session.custom);
   const [sleeping, setSleeping] = useState(false);
+  const [audio, setAudio] = useState(loadVolume);
   const [, setTimeTick] = useState(0);
   const panelOpen = bagOpen || chestOpen !== null;
   const [health, setHealth] = useState(session.player.health);
@@ -341,6 +361,7 @@ export default function App() {
       setHunger(p.hunger);
       onInventory();
       onEdit();
+      sound.eat();
       showToast(`吃了${itemName(food)}，饱食度 +${r.gained / 2}`);
     },
     [session, showToast, onInventory, onEdit],
@@ -358,6 +379,7 @@ export default function App() {
         return;
       }
       setSleeping(true);
+      sound.sleep();
       setTimeout(() => {
         timeRef.current = MORNING;
         setTimeTick((n) => n + 1);
@@ -384,6 +406,7 @@ export default function App() {
     if (!n) return;
     onInventory();
     onEdit();
+    sound.craft();
     showToast(`合成了 ${itemName(recipe.output[0])} ×${recipe.output[1] * n}`);
   };
 
@@ -466,7 +489,14 @@ export default function App() {
     };
   }, [input, selectSlot, toggleFly, openBag, closeBag, eatFood]);
 
+  useEffect(() => {
+    sound.setVolume(audio.volume);
+    sound.setMuted(audio.muted);
+    writeVolume(audio);
+  }, [audio]);
+
   const play = () => {
+    sound.unlock(); // 浏览器要在点击之后才允许出声
     setStarted(true);
     lockPointer();
   };
@@ -687,6 +717,20 @@ export default function App() {
                 </p>
               </>
             )}
+            <div className="row mode-row volume-row">
+              <span className="clock">音量</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={Math.round(audio.volume * 100)}
+                aria-label="音量"
+                onChange={(e) => setAudio((a) => ({ ...a, volume: Number(e.target.value) / 100 }))}
+              />
+              <button type="button" className={audio.muted ? 'on' : ''} aria-pressed={audio.muted} onClick={() => setAudio((a) => ({ ...a, muted: !a.muted }))}>
+                {audio.muted ? '已静音' : '静音'}
+              </button>
+            </div>
             <div className="row time-row">
               <span className="clock">游戏时间 {clockText(timeRef.current)}</span>
               <button type="button" onClick={() => setTime(MORNING, '天亮了')}>白天</button>
