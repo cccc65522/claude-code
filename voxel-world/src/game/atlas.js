@@ -407,6 +407,28 @@ painters[TILE.stoneHoe] = (put, rand) => {
   }
 };
 
+// 肉
+function meat(cooked) {
+  return (put, rand) => {
+    transparent(put);
+    for (let y = 3; y < 14; y++) for (let x = 2; x < 14; x++) {
+      const d = Math.hypot((x - 7) / 5.5, (y - 8) / 4.5);
+      if (d > 1) continue;
+      const k = 1 + (rand() - 0.5) * 0.15;
+      const fat = d > 0.78;
+      if (cooked) {
+        if (fat) put(x, y, 150 * k, 90 * k, 40 * k);
+        else put(x, y, 168 * k, 96 * k, 52 * k);
+      } else if (fat) put(x, y, 246 * k, 222 * k, 210 * k);
+      else put(x, y, 222 * k, 92 * k, 96 * k);
+    }
+    // 一小截骨头
+    for (const [x, y] of [[12, 11], [13, 12], [14, 13], [14, 12], [13, 13]]) put(x, y, 238, 232, 214);
+  };
+}
+painters[TILE.rawMeat] = meat(false);
+painters[TILE.cookedMeat] = meat(true);
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

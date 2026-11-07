@@ -79,8 +79,9 @@ function buildSession(save) {
   // 新世界默认生存模式；加合成之前的老存档没有 mode，保持原来的创造模式
   const mode = save ? (save.mode === 'survival' ? 'survival' : 'creative') : 'survival';
   const inventory = sanitizeInventory(save?.inventory);
-  const monsters = []; // 怪物不存档
-  return { world, sim, player, time, mode, inventory, monsters, id: Math.random().toString(36).slice(2) };
+  const monsters = []; // 怪物和动物都不存档，会重新出现
+  const animals = [];
+  return { world, sim, player, time, mode, inventory, monsters, animals, id: Math.random().toString(36).slice(2) };
 }
 
 export default function App() {
@@ -459,6 +460,7 @@ export default function App() {
         onAir={setAir}
         onHunger={setHunger}
         monsters={session.monsters}
+        animals={session.animals}
         onEdit={onEdit}
         onFlyingChange={setFlying}
         onCanvas={(c) => (canvasRef.current = c)}
@@ -542,6 +544,7 @@ export default function App() {
                 <li>鼠标转视角，左键挖，右键放，按住可以连续</li>
                 <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块；<kbd>0</kbd>、<kbd>-</kbd>：生存模式是空桶、水桶，创造模式是火把、水；<kbd>=</kbd> 麦种</li>
                 <li>选麦种对着草地或泥土右键种地（生存模式要有石锄），附近有水长得快</li>
+                <li>拿着麦种，绒耳兔会跟着你；对着它右键喂麦种，两只喂过的靠在一起会生小兔</li>
                 <li><kbd>E</kbd> 打开背包和合成，<kbd>R</kbd> 吃东西（生存模式）</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
                 <li>水里按 <kbd>空格</kbd> 往上游、<kbd>C</kbd> 往下潜，贴着岸按 <kbd>空格</kbd> 上岸</li>

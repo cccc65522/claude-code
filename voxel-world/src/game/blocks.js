@@ -64,6 +64,8 @@ export const TILE = {
   wheatItem: 36,
   bread: 37,
   stoneHoe: 38,
+  rawMeat: 39,
+  cookedMeat: 40,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });

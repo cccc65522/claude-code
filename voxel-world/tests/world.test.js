@@ -916,3 +916,102 @@ test('锄头和面包的配方', () => {
   assert.ok(foodValue(BREAD) > foodValue(APPLE));
   assert.ok(isCrop(WHEAT_BASE) && !isCrop(FARMLAND));
 });
+
+// ---------- 动物 ----------
+import {
+  createAnimal, canAnimalSpawnAt, trySpawnAnimal, stepAnimal, feedAnimal, breed, damageAnimal, animalDrops,
+  shouldRemoveAnimal, MAX_ANIMALS, ANIMAL_HEALTH, LOVE_SECONDS, GROW_UP_SECONDS, BREED_COOLDOWN,
+} from '../src/game/animals.js';
+import { RAW_MEAT, COOKED_MEAT } from '../src/game/items.js';
+
+test('绒耳兔只在草地上出现，最多 10 只', () => {
+  const w = farmWorld();
+  assert.equal(canAnimalSpawnAt(w, 5, 2, 5), true);
+  w.set(5, 1, 5, SAND_B);
+  assert.equal(canAnimalSpawnAt(w, 5, 2, 5), false, '沙子上不出现');
+  w.set(5, 1, 5, GRASS_ID);
+  w.set(5, 3, 5, LEAVES);
+  assert.equal(canAnimalSpawnAt(w, 5, 2, 5), false, '头顶要空');
+  const big = new World({ seed: 1, chunks: 4, generate: false });
+  for (let x = 0; x < big.sizeX; x++) for (let z = 0; z < big.sizeZ; z++) {
+    big.rawSet(x, 0, z, STONE);
+    big.rawSet(x, 1, z, GRASS_ID);
+  }
+  const animals = [];
+  const player = createPlayer([32.5, 2, 32.5]);
+  for (let i = 0; i < 60; i++) trySpawnAnimal(big, animals, player);
+  assert.equal(animals.length, MAX_ANIMALS);
+  assert.ok(animals.every((a) => a.pos[1] === 2));
+});
+
+test('绒耳兔会到处跳；拿着麦种会跟过来；被打了会逃跑', () => {
+  const w = farmWorld();
+  const player = createPlayer([16.5, 2, 16.5]);
+  const a = createAnimal([12.5, 2, 16.5]);
+  let s = 3;
+  const rand = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let i = 0; i < 300; i++) stepAnimal(w, a, player, 1 / 30, { rand });
+  const wandered = Math.hypot(a.pos[0] - 12.5, a.pos[2] - 16.5);
+  assert.ok(wandered > 0.5, `跳动了 ${wandered}`);
+
+  const b = createAnimal([10.5, 2, 16.5]);
+  for (let i = 0; i < 300; i++) stepAnimal(w, b, player, 1 / 30, { rand, lure: true });
+  assert.ok(Math.hypot(b.pos[0] - 16.5, b.pos[2] - 16.5) < 2.5, '跟到身边');
+
+  const c = createAnimal([14.5, 2, 16.5]);
+  assert.equal(damageAnimal(c, 2, player.pos), false);
+  for (let i = 0; i < 90; i++) stepAnimal(w, c, player, 1 / 30, { rand });
+  assert.ok(c.pos[0] < 11, `逃开了：x=${c.pos[0]}`);
+});
+
+test('喂麦种后两只靠近会生小兔，小兔一分钟后长大；有冷却', () => {
+  const w = farmWorld();
+  const a = createAnimal([5.5, 2, 5.5]);
+  const b = createAnimal([7.5, 2, 5.5]);
+  const animals = [a, b];
+  assert.equal(breed(animals), null, '没喂不生');
+  assert.equal(feedAnimal(a), true);
+  assert.equal(feedAnimal(a), false, '已经喂过');
+  assert.equal(breed(animals), null, '只喂了一只');
+  feedAnimal(b);
+  const baby = breed(animals);
+  assert.ok(baby && baby.baby);
+  assert.equal(animals.length, 3);
+  assert.ok(baby.height < a.height);
+  assert.equal(feedAnimal(baby), false, '小兔不吃');
+  assert.equal(feedAnimal(a), false, '刚生完在冷却');
+  assert.ok(a.loveCooldown === BREED_COOLDOWN && a.love === 0);
+  const player = createPlayer([30.5, 2, 30.5]);
+  for (let t = 0; t < GROW_UP_SECONDS + 1; t++) {
+    stepAnimal(w, baby, player, 1);
+    stepAnimal(w, a, player, 1);
+  }
+  assert.equal(baby.baby, false, '长大了');
+  assert.equal(feedAnimal(a), true, '冷却过了又能喂');
+  assert.ok(LOVE_SECONDS > 0);
+});
+
+test('打绒耳兔：6 点血，成年掉生肉，小兔不掉；远了会被移走', () => {
+  const a = createAnimal([5.5, 2, 5.5]);
+  assert.equal(a.health, ANIMAL_HEALTH);
+  assert.equal(damageAnimal(a, 2, [3, 2, 5.5]), false);
+  assert.equal(damageAnimal(a, 2, [3, 2, 5.5]), false);
+  assert.equal(damageAnimal(a, 2, [3, 2, 5.5]), true);
+  assert.deepEqual(animalDrops(a, () => 0.2), [[RAW_MEAT, 1]]);
+  assert.deepEqual(animalDrops(a, () => 0.8), [[RAW_MEAT, 2]]);
+  assert.deepEqual(animalDrops(createAnimal([0, 0, 0], { baby: true })), []);
+  assert.equal(shouldRemoveAnimal(createAnimal([200, 2, 200]), createPlayer([0, 2, 0])), true);
+  assert.equal(shouldRemoveAnimal(createAnimal([5, 2, 5]), createPlayer([0, 2, 0])), false);
+  // 准星也能选中动物（和怪物同一个求交函数）
+  assert.ok(rayHitMonster([2.5, 2.3, 5.5], [1, 0, 0], 4, [createAnimal([5.5, 2, 5.5])]));
+});
+
+test('烤肉：生肉 ×2 + 煤炭 → 烤肉 ×2，烤过的顶饱得多', () => {
+  const inv = {};
+  addItem(inv, RAW_MEAT, 5);
+  addItem(inv, COAL, 1);
+  assert.equal(craft(inv, recipe('cookedMeat'), 9), 1);
+  assert.equal(countOf(inv, COOKED_MEAT), 2);
+  assert.equal(countOf(inv, RAW_MEAT), 3);
+  assert.ok(foodValue(COOKED_MEAT) >= foodValue(RAW_MEAT) * 4);
+});

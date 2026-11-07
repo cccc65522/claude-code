@@ -16,6 +16,9 @@ import { COAL, SEEDS, STONE_HOE, bonusDrop } from '../game/items.js';
 import {
   damageMonster, rayHitMonster, shouldRemove, stepMonster, trySpawn, DISSOLVE_SECONDS,
 } from '../game/monsters.js';
+import {
+  BABY_SCALE, animalDrops, breed, damageAnimal, feedAnimal, shouldRemoveAnimal, stepAnimal, trySpawnAnimal,
+} from '../game/animals.js';
 import { DAY_SECONDS, clockText, skyAt, wrapTime } from '../game/daynight.js';
 
 const REACH = 6;
@@ -215,12 +218,13 @@ function Highlight({ targetRef, digRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, peacefulRef }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, animals, peacefulRef }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
   const fluidTimer = useRef(0);
   const growTimer = useRef(0);
+  const animalTimer = useRef(0);
   const flicker = useMemo(() => ({ base: new THREE.Color('#ffc27a'), t: 0 }), []);
   const lastAir = useRef(null);
   const lastHunger = useRef(null);
@@ -309,7 +313,20 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       return onMessage(`没有${itemName(selected)}了，${selected < 100 ? '去背包里合成或者挖一些' : '可以在背包里合成'}`);
     }
     if (selected === BUCKET) return fillBucket();
-    if (selected === SEEDS) return plant(t);
+    if (selected === SEEDS) {
+      // 对着绒耳兔就是喂它
+      const e = entityInSight();
+      if (e && isAnimal(e)) {
+        if (e.baby) return onMessage('小兔还太小，不吃麦种');
+        if (!feedAnimal(e)) return onMessage(e.love > 0 ? '它已经吃过了，找另一只也喂一下' : '它刚生过小兔，过一会儿再喂');
+        if (survival) {
+          takeItem(inventory, SEEDS);
+          onInventory();
+        }
+        return onMessage('喂了绒耳兔：再喂一只靠近它的，就会生小兔');
+      }
+      return plant(t);
+    }
     if (!t) return;
     const x = t.hit[0] + t.normal[0];
     const y = t.hit[1] + t.normal[1];
@@ -340,15 +357,10 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const updateDigging = (dt, active) => {
     const d = digRef.current;
     const t = targetRef.current;
-    if (!active || !input.held.dig || !t) {
-      d.key = null;
-      d.progress = 0;
-      return;
-    }
-    // 按住时对着怪物就连续打它，不挖后面的方块
-    const m = monsterInSight();
-    if (m) {
-      attack(m);
+    // 按住时对着怪物 / 动物就连续打它，不挖后面的方块
+    const m = active && input.held.dig ? entityInSight() : null;
+    if (!active || !input.held.dig || !t || m) {
+      if (m) attack(m);
       d.key = null;
       d.progress = 0;
       return;
@@ -376,20 +388,34 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   };
 
   // 准星对着的怪物（比方块近才算）
-  const monsterInSight = () => {
-    if (modeRef.current !== 'survival' || !monsters.length) return null;
-    const hit = rayHitMonster(camera.position.toArray(), lookDir().toArray(), 3.5, monsters);
+  // 准星对着的怪物或动物（比方块近才算）。怪物只在生存模式里有。
+  const entityInSight = () => {
+    const list = modeRef.current === 'survival' ? [...monsters, ...animals] : animals;
+    if (!list.length) return null;
+    const hit = rayHitMonster(camera.position.toArray(), lookDir().toArray(), 3.5, list);
     const t = targetRef.current;
     if (!hit || (t && t.distance < hit.distance)) return null;
     return hit.monster;
   };
+  const isAnimal = (e) => e.kind === 'rabbit';
 
-  const attack = (m) => {
+  const attack = (e) => {
     if (attackTimer.current > 0) return;
     attackTimer.current = 0.35;
-    addExhaustion(playerRef.current, EXHAUSTION.attack);
-    if (damageMonster(m, attackDamage(inventory), playerRef.current.pos)) {
-      m.dissolve = 0.01; // 被打死：消散掉
+    const survival = modeRef.current === 'survival';
+    if (survival) addExhaustion(playerRef.current, EXHAUSTION.attack);
+    const from = playerRef.current.pos;
+    if (isAnimal(e)) {
+      if (!damageAnimal(e, attackDamage(inventory), from)) return;
+      e.dissolve = 0.01;
+      if (survival) {
+        for (const [id, n] of animalDrops(e)) for (let i = 0; i < n; i++) pickUp(id);
+        onInventory();
+      }
+      return;
+    }
+    if (damageMonster(e, attackDamage(inventory), from)) {
+      e.dissolve = 0.01; // 被打死：消散掉
       if (Math.random() < 0.5) {
         pickUp(COAL);
         onInventory();
@@ -400,7 +426,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const doAction = (kind) => {
     const t = targetRef.current;
     if (kind === 'place') return place(t);
-    const m = monsterInSight();
+    const m = entityInSight();
     if (m) return attack(m);
     if (!t || BLOCKS[t.block]?.unbreakable) return;
     // 生存模式靠按住慢慢挖（见 updateDigging），只有火把这种一碰就掉的直接挖
@@ -535,6 +561,26 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       }
     }
 
+    // 绒耳兔：白天在草地上出现（两种模式都有）
+    if (active) {
+      const daylight = skyAt(timeRef.current).day > 0.5;
+      animalTimer.current += dt;
+      const every = animals.length < 4 ? 1 : 5;
+      if (daylight && animalTimer.current > every) {
+        animalTimer.current = 0;
+        trySpawnAnimal(world, animals, p);
+      }
+      const lure = selectedRef.current === SEEDS;
+      for (const a of animals) {
+        stepAnimal(world, a, p, dt, { lure });
+        if (a.dissolve > 0) a.dissolve += dt * 2;
+      }
+      if (breed(animals)) onMessage('生了一只小绒耳兔！');
+      for (let i = animals.length - 1; i >= 0; i--) {
+        if (shouldRemoveAnimal(animals[i], p)) animals.splice(i, 1);
+      }
+    }
+
     // 庄稼生长
     if (active) {
       growTimer.current += dt;
@@ -578,7 +624,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       statsRef.current.textContent =
         `${clockText(timeRef.current)}  X ${p.pos[0].toFixed(1)}  Y ${p.pos[1].toFixed(1)}  Z ${p.pos[2].toFixed(1)}` +
         (p.flying ? '  · 飞行中' : p.inWater ? '  · 游泳中' : '') +
-        (monsterInSight() ? '  · 对准：夜影' : t ? `  · 对准：${BLOCKS[t.block]?.name ?? '?'}` : '');
+        ((e) => (e ? `  · 对准：${isAnimal(e) ? (e.baby ? '小绒耳兔' : '绒耳兔') : '夜影'}` : t ? `  · 对准：${BLOCKS[t.block]?.name ?? '?'}` : ''))(entityInSight());
     }
   });
 
@@ -651,6 +697,98 @@ function Monsters({ monsters }) {
   return <group ref={group} />;
 }
 
+// 绒耳兔：奶油色的方块身体和头，两只长耳朵，白色小尾巴；喂过麦种头上会冒出一颗红心
+function Animals({ animals }) {
+  const group = useRef();
+  const shared = useMemo(
+    () => ({
+      body: new THREE.BoxGeometry(0.5, 0.4, 0.66),
+      head: new THREE.BoxGeometry(0.36, 0.34, 0.32),
+      ear: new THREE.BoxGeometry(0.08, 0.34, 0.06),
+      tail: new THREE.BoxGeometry(0.16, 0.16, 0.12),
+      eye: new THREE.BoxGeometry(0.06, 0.06, 0.02),
+      heart: new THREE.BoxGeometry(0.16, 0.16, 0.04),
+      earMat: new THREE.MeshLambertMaterial({ color: '#e7b9a6' }),
+      tailMat: new THREE.MeshLambertMaterial({ color: '#f6f2ea' }),
+      eyeMat: new THREE.MeshBasicMaterial({ color: '#2a1f1a' }),
+      heartMat: new THREE.MeshBasicMaterial({ color: '#ff4d6a', fog: false }),
+      base: new THREE.Color('#d8bf98'),
+      red: new THREE.Color('#ff3b3b'),
+    }),
+    [],
+  );
+  const meshes = useRef(new Map());
+
+  useEffect(
+    () => () => {
+      for (const obj of meshes.current.values()) obj.userData.mat.dispose();
+      meshes.current.clear();
+      Object.values(shared).forEach((v) => v.dispose?.());
+    },
+    [shared],
+  );
+
+  useFrame((state) => {
+    const g = group.current;
+    if (!g) return;
+    const alive = new Set();
+    for (const a of animals) {
+      alive.add(a.id);
+      let obj = meshes.current.get(a.id);
+      if (!obj) {
+        obj = new THREE.Group();
+        const mat = new THREE.MeshLambertMaterial({ color: shared.base, transparent: true });
+        const body = new THREE.Mesh(shared.body, mat);
+        body.position.set(0, 0.22, -0.04);
+        const head = new THREE.Mesh(shared.head, mat);
+        head.position.set(0, 0.42, 0.34);
+        const earL = new THREE.Mesh(shared.ear, shared.earMat);
+        const earR = new THREE.Mesh(shared.ear, shared.earMat);
+        earL.position.set(-0.1, 0.74, 0.3);
+        earR.position.set(0.1, 0.74, 0.3);
+        earL.rotation.z = 0.15;
+        earR.rotation.z = -0.15;
+        const tail = new THREE.Mesh(shared.tail, shared.tailMat);
+        tail.position.set(0, 0.3, -0.4);
+        const eyeL = new THREE.Mesh(shared.eye, shared.eyeMat);
+        const eyeR = new THREE.Mesh(shared.eye, shared.eyeMat);
+        eyeL.position.set(-0.1, 0.46, 0.505);
+        eyeR.position.set(0.1, 0.46, 0.505);
+        const heart = new THREE.Mesh(shared.heart, shared.heartMat);
+        heart.position.set(0, 1.05, 0.3);
+        heart.rotation.z = Math.PI / 4;
+        obj.add(body, head, earL, earR, tail, eyeL, eyeR, heart);
+        obj.userData = { mat, heart, earL, earR };
+        meshes.current.set(a.id, obj);
+        g.add(obj);
+      }
+      obj.position.set(a.pos[0], a.pos[1], a.pos[2]);
+      obj.rotation.y = a.yaw;
+      const size = a.baby ? BABY_SCALE : 1;
+      const stretch = Math.max(-0.15, Math.min(0.2, a.vel[1] * 0.03));
+      const fade = 1 - Math.min(1, a.dissolve / 0.8);
+      obj.scale.set(size * fade, size * (1 + stretch) * fade, size * fade);
+      const { mat, heart, earL, earR } = obj.userData;
+      mat.color.copy(shared.base).lerp(shared.red, a.hurtFlash > 0 ? 0.7 : 0);
+      mat.opacity = fade;
+      heart.visible = a.love > 0;
+      heart.position.y = 1.05 + Math.sin(state.clock.elapsedTime * 4) * 0.05;
+      // 跳起来时耳朵往后甩
+      const flop = a.onGround ? 0 : -0.35;
+      earL.rotation.x = flop;
+      earR.rotation.x = flop;
+    }
+    for (const [id, obj] of meshes.current) {
+      if (alive.has(id)) continue;
+      g.remove(obj);
+      obj.userData.mat.dispose();
+      meshes.current.delete(id);
+    }
+  });
+
+  return <group ref={group} />;
+}
+
 function WorldScene(props) {
   const { world, texture } = props;
   const materials = useMemo(
@@ -683,6 +821,7 @@ function WorldScene(props) {
       <primitive object={renderer.group} />
       <Clouds world={world} material={materials.cloud} />
       <Monsters monsters={props.monsters} />
+      <Animals animals={props.animals} />
       <Controller {...props} renderer={renderer} materials={materials} />
     </>
   );

@@ -19,6 +19,8 @@ export const SEEDS = 112;
 export const WHEAT = 113;
 export const BREAD = 114;
 export const STONE_HOE = 115;
+export const RAW_MEAT = 116;
+export const COOKED_MEAT = 117;
 
 export const ITEMS = {
   [STICK]: { name: '木棍', icon: TILE.stick },
@@ -37,6 +39,8 @@ export const ITEMS = {
   [WHEAT]: { name: '小麦', icon: TILE.wheatItem },
   [BREAD]: { name: '面包', icon: TILE.bread, food: 6 },
   [STONE_HOE]: { name: '石锄', icon: TILE.stoneHoe },
+  [RAW_MEAT]: { name: '生肉', icon: TILE.rawMeat, food: 2 },
+  [COOKED_MEAT]: { name: '烤肉', icon: TILE.cookedMeat, food: 8 },
 };
 
 export function itemName(id) {
@@ -68,11 +72,11 @@ export const SURVIVAL_HOTBAR = [DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, B
 export const ITEM_ORDER = [
   DIRT, STONE, SAND, LOG, PLANKS, STICK, COAL, IRON_ORE, IRON_INGOT, LEAVES, GLASS, BRICK, TORCH,
   STONE_PICKAXE, IRON_PICKAXE, STONE_SHOVEL, STONE_AXE, STONE_HOE, BUCKET, WATER_BUCKET,
-  SEEDS, WHEAT, APPLE, BERRIES, BREAD, PIE,
+  SEEDS, WHEAT, APPLE, BERRIES, BREAD, PIE, RAW_MEAT, COOKED_MEAT,
 ];
 
 // ---------- 食物 ----------
-export const FOODS = [APPLE, BERRIES, BREAD, PIE];
+export const FOODS = [APPLE, BERRIES, RAW_MEAT, BREAD, COOKED_MEAT, PIE];
 
 export function foodValue(id) {
   return ITEMS[id]?.food ?? 0;
