@@ -1,7 +1,7 @@
 import { ATLAS_COLS, ATLAS_ROWS } from '../game/mesher.js';
 import { HOTBAR_KEYS } from '../game/blocks.js';
 import { itemIcon, itemName } from '../game/items.js';
-import { MAX_HEALTH } from '../game/health.js';
+import { MAX_AIR, MAX_HEALTH } from '../game/health.js';
 
 // 用图集里的贴图显示物品图标
 export function ItemIcon({ id, atlasUrl }) {
@@ -43,14 +43,26 @@ function Hearts({ health }) {
   );
 }
 
+// 氧气：在水下才显示
+function Bubbles({ air }) {
+  return (
+    <div className="bubbles" role="img" aria-label={`氧气 ${air} / ${MAX_AIR}`}>
+      {Array.from({ length: MAX_AIR }, (_, i) => (
+        <span key={i} className={'bubble' + (i < air ? '' : ' popped')} />
+      ))}
+    </div>
+  );
+}
+
 // counts 为 null 时是创造模式（方块无限，不显示数量），health 为 null 时不显示生命值
-export default function Hud({ slots, counts, selected, onSelect, atlasUrl, statsRef, toast, hideHotbar, health }) {
+export default function Hud({ slots, counts, selected, onSelect, atlasUrl, statsRef, toast, hideHotbar, health, air }) {
   return (
     <div className={'hud' + (hideHotbar ? ' bag-open' : '')}>
       <div className="stats" ref={statsRef} />
       <div className="crosshair" />
       {toast && <div className="toast" key={toast.key}>{toast.text}</div>}
       {health !== null && !hideHotbar && <Hearts health={health} />}
+      {health !== null && !hideHotbar && air < MAX_AIR && <Bubbles air={air} />}
       <div className="hotbar" role="toolbar" aria-label="快捷栏">
         {slots.map((id, i) => {
           const n = counts ? counts[id] ?? 0 : null;

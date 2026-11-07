@@ -9,7 +9,12 @@ import {
   BUCKET, SURVIVAL_HOTBAR, WATER_BUCKET, addItem, countOf, dropFor, itemName, takeItem,
 } from '../game/items.js';
 import { digInfo, toolKindName } from '../game/tools.js';
-import { fallDamage, hurt, regenerate } from '../game/health.js';
+import { fallDamage, hurt, regenerate, updateAir } from '../game/health.js';
+import { attackDamage } from '../game/tools.js';
+import { COAL } from '../game/items.js';
+import {
+  damageMonster, rayHitMonster, shouldRemove, stepMonster, trySpawn, DISSOLVE_SECONDS,
+} from '../game/monsters.js';
 import { DAY_SECONDS, clockText, skyAt, wrapTime } from '../game/daynight.js';
 
 const REACH = 6;
@@ -209,12 +214,15 @@ function Highlight({ targetRef, digRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, monsters }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
   const fluidTimer = useRef(0);
   const flicker = useMemo(() => ({ base: new THREE.Color('#ffc27a'), t: 0 }), []);
+  const lastAir = useRef(null);
+  const spawnTimer = useRef(0);
+  const attackTimer = useRef(0);
   const lastFlying = useRef(playerRef.current.flying);
   // 生存模式挖方块的进度：key 是正在挖的方块坐标
   const digRef = useRef({ key: null, progress: 0, warned: null });
@@ -299,6 +307,14 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       d.progress = 0;
       return;
     }
+    // 按住时对着怪物就连续打它，不挖后面的方块
+    const m = monsterInSight();
+    if (m) {
+      attack(m);
+      d.key = null;
+      d.progress = 0;
+      return;
+    }
     const key = t.hit.join(',');
     if (d.key !== key) {
       d.key = key;
@@ -321,9 +337,32 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     }
   };
 
+  // 准星对着的怪物（比方块近才算）
+  const monsterInSight = () => {
+    if (modeRef.current !== 'survival' || !monsters.length) return null;
+    const hit = rayHitMonster(camera.position.toArray(), lookDir().toArray(), 3.5, monsters);
+    const t = targetRef.current;
+    if (!hit || (t && t.distance < hit.distance)) return null;
+    return hit.monster;
+  };
+
+  const attack = (m) => {
+    if (attackTimer.current > 0) return;
+    attackTimer.current = 0.35;
+    if (damageMonster(m, attackDamage(inventory), playerRef.current.pos)) {
+      m.dissolve = 0.01; // 被打死：消散掉
+      if (Math.random() < 0.5) {
+        pickUp(COAL);
+        onInventory();
+      }
+    }
+  };
+
   const doAction = (kind) => {
     const t = targetRef.current;
     if (kind === 'place') return place(t);
+    const m = monsterInSight();
+    if (m) return attack(m);
     if (!t || BLOCKS[t.block]?.unbreakable) return;
     // 生存模式靠按住慢慢挖（见 updateDigging），只有火把这种一碰就掉的直接挖
     if (modeRef.current === 'survival' && digInfo(t.block, inventory).time > 0) return;
@@ -352,10 +391,11 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       sprint: k('ShiftLeft') || k('ShiftRight') || Math.hypot(move.x, move.y) > 0.95,
     }, dt);
 
-    // 生存模式：摔落伤害和慢慢回血
+    // 生存模式：摔落、溺水、怪物，以及慢慢回血
+    attackTimer.current = Math.max(0, attackTimer.current - dt);
     if (modeRef.current === 'survival' && p.health > 0) {
-      const lost = hurt(p, fallDamage(landed));
-      if (lost > 0) {
+      const takeDamage = (amount, cause) => {
+        if (p.health <= 0 || hurt(p, amount) <= 0) return;
         const el = hurtUiRef.current;
         if (el) {
           el.classList.remove('hit');
@@ -363,10 +403,46 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
           el.classList.add('hit');
         }
         onHealth(p.health);
-        if (p.health <= 0) onDeath(`从 ${Math.round(landed)} 格高的地方摔了下来`);
-      } else if (active && regenerate(p, dt)) {
-        onHealth(p.health);
+        if (p.health <= 0) onDeath(cause);
+      };
+      const health0 = p.health;
+      takeDamage(fallDamage(landed), `从 ${Math.round(landed)} 格高的地方摔了下来`);
+      if (active) {
+        takeDamage(updateAir(p, eyeInWater(world, p), dt), '淹死了');
+        const air = Math.ceil(p.air);
+        if (air !== lastAir.current) {
+          lastAir.current = air;
+          onAir(air);
+        }
+
+        // 怪物：夜里在黑暗处出现，天亮后消散
+        const day = skyAt(timeRef.current).day > 0.5;
+        spawnTimer.current += dt;
+        if (!day && spawnTimer.current > 2) {
+          spawnTimer.current = 0;
+          trySpawn(world, monsters, p);
+        }
+        for (const m of monsters) {
+          const bite = stepMonster(world, m, p, dt, { day });
+          if (bite) {
+            // 被咬到往后弹一下
+            const dx = p.pos[0] - m.pos[0];
+            const dz = p.pos[2] - m.pos[2];
+            const len = Math.hypot(dx, dz) || 1;
+            p.vel[0] += (dx / len) * 7;
+            p.vel[2] += (dz / len) * 7;
+            p.vel[1] = Math.max(p.vel[1], 5);
+            takeDamage(bite, '被夜影咬倒了');
+          }
+          if (m.dissolve > 0) m.dissolve += dt * (m.health <= 0 ? 2 : 0); // 被打死的消散得更快
+        }
+        for (let i = monsters.length - 1; i >= 0; i--) {
+          if (shouldRemove(monsters[i], p)) monsters.splice(i, 1);
+        }
       }
+      if (active && p.health === health0 && regenerate(p, dt)) onHealth(p.health);
+    } else if (monsters.length) {
+      monsters.length = 0; // 创造模式没有怪物
     }
 
     if (p.flying !== lastFlying.current) {
@@ -430,11 +506,77 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       statsRef.current.textContent =
         `${clockText(timeRef.current)}  X ${p.pos[0].toFixed(1)}  Y ${p.pos[1].toFixed(1)}  Z ${p.pos[2].toFixed(1)}` +
         (p.flying ? '  · 飞行中' : p.inWater ? '  · 游泳中' : '') +
-        (t ? `  · 对准：${BLOCKS[t.block]?.name ?? '?'}` : '');
+        (monsterInSight() ? '  · 对准：夜影' : t ? `  · 对准：${BLOCKS[t.block]?.name ?? '?'}` : '');
     }
   });
 
   return <Highlight targetRef={targetRef} digRef={digRef} />;
+}
+
+// 夜影的样子：深紫色的方块身体，两只发黄光的眼睛，跳的时候会被拉长、压扁
+function Monsters({ monsters }) {
+  const group = useRef();
+  const shared = useMemo(
+    () => ({
+      body: new THREE.BoxGeometry(0.8, 0.8, 0.8),
+      eye: new THREE.BoxGeometry(0.14, 0.12, 0.04),
+      eyeMat: new THREE.MeshBasicMaterial({ color: '#ffe14d', fog: false }),
+      red: new THREE.Color('#ff3030'),
+      base: new THREE.Color('#3b2a55'),
+    }),
+    [],
+  );
+  const meshes = useRef(new Map());
+
+  useEffect(
+    () => () => {
+      for (const obj of meshes.current.values()) obj.userData.mat.dispose();
+      meshes.current.clear();
+      Object.values(shared).forEach((v) => v.dispose?.());
+    },
+    [shared],
+  );
+
+  useFrame(() => {
+    const g = group.current;
+    if (!g) return;
+    const alive = new Set();
+    for (const m of monsters) {
+      alive.add(m.id);
+      let obj = meshes.current.get(m.id);
+      if (!obj) {
+        obj = new THREE.Group();
+        const mat = new THREE.MeshLambertMaterial({ color: shared.base, emissive: '#160c26', transparent: true });
+        const body = new THREE.Mesh(shared.body, mat);
+        body.position.y = 0.4;
+        const left = new THREE.Mesh(shared.eye, shared.eyeMat);
+        const right = new THREE.Mesh(shared.eye, shared.eyeMat);
+        left.position.set(-0.17, 0.52, 0.41);
+        right.position.set(0.17, 0.52, 0.41);
+        obj.add(body, left, right);
+        obj.userData.mat = mat;
+        meshes.current.set(m.id, obj);
+        g.add(obj);
+      }
+      obj.position.set(m.pos[0], m.pos[1], m.pos[2]);
+      obj.rotation.y = m.yaw;
+      const stretch = Math.max(-0.2, Math.min(0.25, m.vel[1] * 0.035));
+      const sy = 1 + stretch;
+      const fade = 1 - Math.min(1, m.dissolve / DISSOLVE_SECONDS);
+      obj.scale.set(fade / Math.sqrt(sy), sy * fade, fade / Math.sqrt(sy));
+      const mat = obj.userData.mat;
+      mat.color.copy(shared.base).lerp(shared.red, m.hurtFlash > 0 ? 0.8 : 0);
+      mat.opacity = fade;
+    }
+    for (const [id, obj] of meshes.current) {
+      if (alive.has(id)) continue;
+      g.remove(obj);
+      obj.userData.mat.dispose();
+      meshes.current.delete(id);
+    }
+  });
+
+  return <group ref={group} />;
 }
 
 function WorldScene(props) {
@@ -466,6 +608,7 @@ function WorldScene(props) {
       <Environment {...props} cloudMaterial={materials.cloud} />
       <primitive object={renderer.group} />
       <Clouds world={world} material={materials.cloud} />
+      <Monsters monsters={props.monsters} />
       <Controller {...props} renderer={renderer} materials={materials} />
     </>
   );

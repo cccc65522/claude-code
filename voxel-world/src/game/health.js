@@ -37,3 +37,29 @@ export function regenerate(p, dt) {
 export function sanitizeHealth(value) {
   return Number.isInteger(value) && value > 0 && value <= MAX_HEALTH ? value : MAX_HEALTH;
 }
+
+// ---------- 溺水 ----------
+export const MAX_AIR = 10; // 10 个气泡
+const AIR_SECONDS = 1.5; // 每个气泡能撑多久
+const AIR_REFILL = 6; // 出水后每秒恢复几个气泡
+const DROWN_EVERY = 1; // 没气以后每隔几秒掉一次血
+export const DROWN_DAMAGE = 2;
+
+/**
+ * 更新氧气。返回这一步溺水造成的伤害（0 或 DROWN_DAMAGE）。
+ */
+export function updateAir(p, underwater, dt) {
+  if (p.air === undefined) p.air = MAX_AIR;
+  if (!underwater) {
+    p.air = Math.min(MAX_AIR, p.air + dt * AIR_REFILL);
+    p.drown = 0;
+    return 0;
+  }
+  p.air = p.air - dt / AIR_SECONDS;
+  if (p.air < 1e-6) p.air = 0; // 浮点误差
+  if (p.air > 0) return 0;
+  p.drown = (p.drown ?? 0) + dt;
+  if (p.drown < DROWN_EVERY) return 0;
+  p.drown -= DROWN_EVERY;
+  return DROWN_DAMAGE;
+}

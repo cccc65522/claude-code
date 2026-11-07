@@ -57,3 +57,11 @@ export function digInfo(blockId, inv) {
   return { time: tool ? base / TOOLS[tool].speed : base, tool };
 }
 
+
+// 打怪的伤害：空手 2，有石镐 3，有石斧 4，有铁镐 5（自动用最好的）
+export function attackDamage(inv) {
+  if (countOf(inv, IRON_PICKAXE) > 0) return 5;
+  if (countOf(inv, STONE_AXE) > 0) return 4;
+  if (countOf(inv, STONE_PICKAXE) > 0) return 3;
+  return 2;
+}

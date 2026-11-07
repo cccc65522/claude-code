@@ -76,7 +76,7 @@ canvas { display: block; }
 .toast {
   position: absolute;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 104px);
+  bottom: calc(env(safe-area-inset-bottom) + 124px);
   transform: translateX(-50%);
   padding: 4px 12px;
   border-radius: 999px;
@@ -358,6 +358,25 @@ kbd {
   50% { transform: translateY(-1.5px); }
 }
 
+/* 氧气泡（在生命值上面） */
+.bubbles {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 96px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+}
+.bubble {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0 20%, #8fd3ff 30%, #2f86d6 100%);
+  box-shadow: 0 0 0 1px rgba(0, 40, 80, 0.6);
+  transition: transform 0.2s, opacity 0.2s;
+}
+.bubble.popped { opacity: 0; transform: scale(0.3); }
+
 /* 受伤时屏幕边缘闪红 */
 .hurt {
   position: fixed;
@@ -377,6 +396,8 @@ kbd {
 
 @media (max-width: 480px) {
   .hearts { bottom: calc(env(safe-area-inset-bottom) + 58px); }
+  .bubbles { bottom: calc(env(safe-area-inset-bottom) + 76px); }
+  .bubble { width: 11px; height: 11px; }
   .heart { width: 14px; height: 14px; }
 }
 

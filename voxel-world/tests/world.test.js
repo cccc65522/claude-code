@@ -600,3 +600,113 @@ test('受伤和回血：受伤后一段时间才开始慢慢回血', () => {
   assert.equal(sanitizeHealth(0), MAX_HEALTH);
   assert.equal(sanitizeHealth('x'), MAX_HEALTH);
 });
+
+// ---------- 溺水 ----------
+import { updateAir, MAX_AIR, DROWN_DAMAGE } from '../src/game/health.js';
+
+test('溺水：气泡大约 15 秒用完，之后每秒掉 1 颗心；出水后很快恢复', () => {
+  const p = createPlayer([0, 0, 0]);
+  let dmg = 0;
+  for (let i = 0; i < 140; i++) dmg += updateAir(p, true, 0.1); // 14 秒
+  assert.equal(dmg, 0);
+  assert.ok(p.air > 0 && p.air < 1);
+  for (let i = 0; i < 10; i++) dmg += updateAir(p, true, 0.1); // 15 秒，没气了
+  assert.equal(p.air, 0);
+  for (let i = 0; i < 31; i++) dmg += updateAir(p, true, 0.1); // 又过 3 秒
+  assert.equal(dmg, DROWN_DAMAGE * 3);
+  for (let i = 0; i < 20; i++) updateAir(p, false, 0.1);
+  assert.equal(p.air, MAX_AIR, '2 秒内回满');
+});
+
+// ---------- 怪物 ----------
+import {
+  createMonster, canSpawnAt, trySpawn, stepMonster, damageMonster, rayHitMonster, shouldRemove, touching,
+  MAX_MONSTERS, MONSTER_DAMAGE, MONSTER_HEALTH, SPAWN_MIN, SPAWN_MAX,
+} from '../src/game/monsters.js';
+import { attackDamage } from '../src/game/tools.js';
+
+const seq = (...vals) => { let i = 0; return () => vals[i++ % vals.length]; };
+
+test('怪物只在黑暗、脚下有实心方块的空地上出现；火把附近不会出现', () => {
+  const w = floorWorld();
+  computeLight(w);
+  assert.equal(canSpawnAt(w, 10, 1, 10), true);
+  assert.equal(canSpawnAt(w, 10, 2, 10), false, '悬空');
+  w.rawSet(10, 0, 10, WATER);
+  assert.equal(canSpawnAt(w, 10, 1, 10), false, '脚下是水');
+  w.rawSet(10, 0, 10, STONE);
+  w.rawSet(10, 2, 10, STONE);
+  assert.equal(canSpawnAt(w, 10, 1, 10), false, '头顶没空间');
+  w.rawSet(10, 2, 10, AIR);
+  w.set(12, 1, 10, TORCH);
+  computeLight(w);
+  assert.equal(canSpawnAt(w, 10, 1, 10), false, '火把照着');
+  assert.equal(canSpawnAt(w, 25, 1, 10), true, '离火把够远');
+});
+
+test('怪物在玩家周围 16–30 格出现，最多 8 只', () => {
+  const w = floorWorld(4);
+  computeLight(w);
+  const player = createPlayer([32.5, 1, 32.5]);
+  const monsters = [];
+  for (let i = 0; i < 50; i++) trySpawn(w, monsters, player);
+  assert.equal(monsters.length, MAX_MONSTERS);
+  for (const m of monsters) {
+    const d = Math.hypot(m.pos[0] - player.pos[0], m.pos[2] - player.pos[2]);
+    assert.ok(d > SPAWN_MIN - 1.5 && d < SPAWN_MAX + 1.5, `距离 ${d}`);
+    assert.equal(m.pos[1], 1);
+  }
+});
+
+test('怪物跳着追玩家，挨到了就咬，咬一口要等 1 秒', () => {
+  const w = floorWorld();
+  const player = createPlayer([20.5, 1, 10.5]);
+  const m = createMonster([10.5, 1, 10.5]);
+  let total = 0;
+  let firstBite = -1;
+  for (let i = 0; i < 300; i++) {
+    const d = stepMonster(w, m, player, 1 / 30, { rand: seq(0.3, 0.7) });
+    if (d && firstBite < 0) firstBite = i;
+    total += d;
+  }
+  assert.ok(firstBite > 0, '追上并咬到了');
+  assert.ok(total >= MONSTER_DAMAGE * 3 && total <= MONSTER_DAMAGE * 8, `10 秒内咬了 ${total / MONSTER_DAMAGE} 口`);
+  assert.ok(touching(m, player) || Math.hypot(m.pos[0] - 20.5, m.pos[2] - 10.5) < 2);
+});
+
+test('怪物能跳上一格高的台阶', () => {
+  const w = floorWorld();
+  for (let x = 14; x < 32; x++) for (let z = 0; z < 32; z++) w.rawSet(x, 1, z, STONE);
+  const player = createPlayer([24.5, 2, 10.5]);
+  const m = createMonster([8.5, 1, 10.5]);
+  for (let i = 0; i < 240; i++) stepMonster(w, m, player, 1 / 30, { rand: seq(0.5) });
+  assert.ok(m.pos[0] > 14 && m.pos[1] >= 2 - 0.01, `pos=${m.pos}`);
+});
+
+test('打怪：会被打退、打 5 下（空手）才死；工具伤害更高', () => {
+  const m = createMonster([10.5, 1, 10.5]);
+  assert.equal(attackDamage({}), 2);
+  assert.equal(attackDamage({ [STONE_PICKAXE]: 1 }), 3);
+  assert.equal(attackDamage({ [IRON_PICKAXE]: 1, [STONE_PICKAXE]: 1 }), 5);
+  let hits = 0;
+  while (!damageMonster(m, attackDamage({}), [8.5, 1, 10.5])) hits++;
+  assert.equal(hits + 1, MONSTER_HEALTH / 2);
+  assert.ok(m.vel[0] > 0 && m.vel[1] > 0, '往后、往上弹');
+});
+
+test('准星能打到怪物；天亮后怪物消散，离太远的会被移走', () => {
+  const a = createMonster([10.5, 1, 10.5]);
+  const b = createMonster([12.5, 1, 10.5]);
+  const hit = rayHitMonster([7.5, 1.5, 10.5], [1, 0, 0], 4, [b, a]);
+  assert.equal(hit.monster, a, '打到近的那只');
+  assert.ok(Math.abs(hit.distance - 2.6) < 1e-6);
+  assert.equal(rayHitMonster([7.5, 5, 10.5], [1, 0, 0], 4, [a]), null, '从头顶上方经过');
+  assert.equal(rayHitMonster([0.5, 1.5, 10.5], [1, 0, 0], 4, [a]), null, '太远');
+
+  const w = floorWorld();
+  const player = createPlayer([10.5, 1, 20.5]);
+  for (let i = 0; i < 60; i++) stepMonster(w, a, player, 1 / 30, { day: true });
+  assert.equal(shouldRemove(a, player), true);
+  assert.equal(stepMonster(w, createMonster([10.5, 1, 20.8]), player, 1 / 30, { day: true }) > 0, false, '消散中的不咬人');
+  assert.equal(shouldRemove(createMonster([100, 1, 100]), player), true);
+});

@@ -51,13 +51,17 @@ export function overlapsBlock(player, bx, by, bz) {
   );
 }
 
-function collides(world, pos) {
-  const minX = Math.floor(pos[0] - HALF);
-  const maxX = Math.floor(pos[0] + HALF - 1e-6);
+// 身体尺寸：玩家用默认值，怪物等别的身体自己带 half / height
+const halfOf = (b) => b.half ?? HALF;
+const heightOf = (b) => b.height ?? PLAYER_HEIGHT;
+
+function collides(world, pos, half, height) {
+  const minX = Math.floor(pos[0] - half);
+  const maxX = Math.floor(pos[0] + half - 1e-6);
   const minY = Math.floor(pos[1]);
-  const maxY = Math.floor(pos[1] + PLAYER_HEIGHT - 1e-6);
-  const minZ = Math.floor(pos[2] - HALF);
-  const maxZ = Math.floor(pos[2] + HALF - 1e-6);
+  const maxY = Math.floor(pos[1] + height - 1e-6);
+  const minZ = Math.floor(pos[2] - half);
+  const maxZ = Math.floor(pos[2] + half - 1e-6);
   for (let y = minY; y <= maxY; y++) {
     for (let z = minZ; z <= maxZ; z++) {
       for (let x = minX; x <= maxX; x++) {
@@ -71,20 +75,43 @@ function collides(world, pos) {
 // 沿一个轴移动，撞到方块就贴着方块停下
 function moveAxis(world, p, axis, amount) {
   if (amount === 0) return false;
+  const half = halfOf(p);
+  const height = heightOf(p);
   p.pos[axis] += amount;
-  if (!collides(world, p.pos)) return false;
-  const size = axis === 1 ? PLAYER_HEIGHT : HALF;
+  if (!collides(world, p.pos, half, height)) return false;
+  const size = axis === 1 ? height : half;
   if (amount > 0) {
     const edge = p.pos[axis] + size;
     p.pos[axis] = Math.floor(edge) - size - 1e-4;
   } else {
-    const edge = axis === 1 ? p.pos[axis] : p.pos[axis] - HALF;
-    p.pos[axis] = Math.floor(edge) + 1 + (axis === 1 ? 0 : HALF) + 1e-4;
+    const edge = axis === 1 ? p.pos[axis] : p.pos[axis] - half;
+    p.pos[axis] = Math.floor(edge) + 1 + (axis === 1 ? 0 : half) + 1e-4;
   }
   // 推出去以后还卡着（例如出生在方块里），就退回原位
-  if (collides(world, p.pos)) p.pos[axis] -= amount;
+  if (collides(world, p.pos, half, height)) p.pos[axis] -= amount;
   p.vel[axis] = 0;
   return true;
+}
+
+/**
+ * 不受玩家操作的身体（怪物）：重力、在水里往上浮、和方块碰撞。
+ * 水平速度由调用的人设置。返回有没有撞到墙。
+ */
+export function moveBody(world, b, dt) {
+  const steps = Math.ceil(dt / 0.02);
+  const h = dt / steps;
+  let hitWall = false;
+  for (let i = 0; i < steps; i++) {
+    const mid = Math.floor(b.pos[1] + heightOf(b) * 0.5);
+    b.inWater = isLiquid(world.get(Math.floor(b.pos[0]), mid, Math.floor(b.pos[2])));
+    if (b.inWater) b.vel[1] = Math.min(b.vel[1] + 14 * h, 2.5);
+    else b.vel[1] = Math.max(b.vel[1] - GRAVITY * h, -50);
+    if (moveAxis(world, b, 0, b.vel[0] * h)) hitWall = true;
+    if (moveAxis(world, b, 2, b.vel[2] * h)) hitWall = true;
+    const falling = b.vel[1] < 0;
+    b.onGround = moveAxis(world, b, 1, b.vel[1] * h) && falling;
+  }
+  return hitWall;
 }
 
 /**

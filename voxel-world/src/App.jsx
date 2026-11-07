@@ -10,7 +10,7 @@ import { createAtlasCanvas } from './game/atlas.js';
 import { HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
 import { SURVIVAL_HOTBAR, itemName, sanitizeInventory } from './game/items.js';
 import { craft } from './game/crafting.js';
-import { MAX_HEALTH, sanitizeHealth } from './game/health.js';
+import { MAX_AIR, MAX_HEALTH, sanitizeHealth } from './game/health.js';
 import { Sim } from './game/sim.js';
 import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
 
@@ -60,7 +60,8 @@ function buildSession(save) {
   // 新世界默认生存模式；加合成之前的老存档没有 mode，保持原来的创造模式
   const mode = save ? (save.mode === 'survival' ? 'survival' : 'creative') : 'survival';
   const inventory = sanitizeInventory(save?.inventory);
-  return { world, sim, player, time, mode, inventory, id: Math.random().toString(36).slice(2) };
+  const monsters = []; // 怪物不存档
+  return { world, sim, player, time, mode, inventory, monsters, id: Math.random().toString(36).slice(2) };
 }
 
 export default function App() {
@@ -74,6 +75,7 @@ export default function App() {
   const [bagOpen, setBagOpen] = useState(false);
   const [health, setHealth] = useState(session.player.health);
   const [dead, setDead] = useState(null); // 死了的话是死因
+  const [air, setAir] = useState(MAX_AIR);
   const [, setInvVersion] = useState(0); // 背包变化时刷新界面
 
   const hotbar = mode === 'creative' ? HOTBAR : SURVIVAL_HOTBAR;
@@ -111,9 +113,13 @@ export default function App() {
   const playerRef = useRef(session.player);
   playerRef.current = session.player;
 
+  // 只在开发服务器里暴露，方便调试和浏览器测试；打包后的版本里没有
+  if (import.meta.env.DEV) window.__voxel = { session };
+
   useEffect(() => {
     setFlying(session.player.flying);
     setHealth(session.player.health);
+    setAir(MAX_AIR);
     setDead(null);
     setMode(session.mode);
     timeRef.current = session.time;
@@ -230,6 +236,9 @@ export default function App() {
     p.fallStartY = null;
     p.health = MAX_HEALTH;
     p.sinceHurt = 99;
+    p.air = MAX_AIR;
+    setAir(MAX_AIR);
+    session.monsters.length = 0;
     setHealth(p.health);
     setFlying(false);
     setDead(null);
@@ -386,6 +395,8 @@ export default function App() {
         hurtUiRef={hurtUiRef}
         onHealth={setHealth}
         onDeath={onDeath}
+        onAir={setAir}
+        monsters={session.monsters}
         onEdit={onEdit}
         onFlyingChange={setFlying}
         onCanvas={(c) => (canvasRef.current = c)}
@@ -405,6 +416,7 @@ export default function App() {
         toast={toast}
         hideHotbar={bagOpen}
         health={mode === 'survival' ? health : null}
+        air={air}
       />
 
       {isTouch && started && !paused && !bagOpen && !dead && (
@@ -480,7 +492,7 @@ export default function App() {
             </div>
             <p className="mode-note">
               {mode === 'survival'
-                ? '有 10 颗心，从 4 格以上摔下来会掉血，掉进水里不会；不受伤一会儿会慢慢回血。按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
+                ? '有 10 颗心，从 4 格以上摔下来会掉血，掉进水里不会；在水下待太久会溺水；夜里黑暗处会出现夜影，火把照着的地方不会有，左键打它们；不受伤一会儿会慢慢回血。按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
                 : '方块无限，随便放。'}
             </p>
             <div className="row time-row">
