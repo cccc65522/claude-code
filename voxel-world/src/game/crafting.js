@@ -1,7 +1,7 @@
 import { BRICK, DIRT, GLASS, IRON_ORE, LOG, PLANKS, SAND, STONE, TORCH } from './blocks.js';
 import {
   APPLE, BERRIES, BREAD, BUCKET, COAL, IRON_INGOT, IRON_PICKAXE, PIE, STICK, STONE_AXE, STONE_HOE, STONE_PICKAXE, STONE_SHOVEL, WHEAT,
-  RAW_MEAT, COOKED_MEAT, addItem, countOf, takeItem,
+  RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, addItem, countOf, takeItem,
 } from './items.js';
 
 // 合成配方：不用摆位置，材料够就能合成
@@ -19,7 +19,8 @@ export const RECIPES = [
   { id: 'ironPickaxe', inputs: [[IRON_INGOT, 3], [STICK, 2]], output: [IRON_PICKAXE, 1], hint: '挖石头、矿石快 8 倍' },
   { id: 'bucket', inputs: [[IRON_INGOT, 3]], output: [BUCKET, 1], hint: '空桶对着水能装水，水桶能把水倒到别处' },
   { id: 'bread', inputs: [[WHEAT, 3]], output: [BREAD, 1], hint: '小麦要自己种：草方块里挖麦种，种在耕地上' },
-  { id: 'cookedMeat', inputs: [[RAW_MEAT, 2], [COAL, 1]], output: [COOKED_MEAT, 2], hint: '生肉从绒耳兔身上来（草地上白天出没）' },
+  { id: 'cookedMeat', inputs: [[RAW_MEAT, 2], [COAL, 1]], output: [COOKED_MEAT, 2], hint: '生肉从动物身上来：绒耳兔、鬃毛野猪、圆圆鸭' },
+  { id: 'eggPancake', inputs: [[DUCK_EGG, 2], [WHEAT, 1], [COAL, 1]], output: [EGG_PANCAKE, 2], hint: '鸭蛋是圆圆鸭下在地上的，捡起来就行' },
   { id: 'pie', inputs: [[APPLE, 2], [BERRIES, 3], [COAL, 1]], output: [PIE, 1], hint: '苹果从树叶里来，野莓从草方块里挖；一个果派顶 5 个鸡腿' },
 ];
 

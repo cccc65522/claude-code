@@ -1,5 +1,5 @@
 import {
-  AIR, BLOCKS, BRICK, COAL_ORE, DIRT, FARMLAND, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SNOW, STONE, TILE, TORCH, isCrop,
+  AIR, BLOCKS, BRICK, COAL_ORE, DIRT, EGG, FARMLAND, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SNOW, STONE, TILE, TORCH, isCrop,
 } from './blocks.js';
 
 // 物品 = 方块（id < 100）+ 不能放的材料（id >= 100）
@@ -21,6 +21,8 @@ export const BREAD = 114;
 export const STONE_HOE = 115;
 export const RAW_MEAT = 116;
 export const COOKED_MEAT = 117;
+export const DUCK_EGG = 118;
+export const EGG_PANCAKE = 119;
 
 export const ITEMS = {
   [STICK]: { name: '木棍', icon: TILE.stick },
@@ -41,6 +43,8 @@ export const ITEMS = {
   [STONE_HOE]: { name: '石锄', icon: TILE.stoneHoe },
   [RAW_MEAT]: { name: '生肉', icon: TILE.rawMeat, food: 2 },
   [COOKED_MEAT]: { name: '烤肉', icon: TILE.cookedMeat, food: 8 },
+  [DUCK_EGG]: { name: '鸭蛋', icon: TILE.duckEgg },
+  [EGG_PANCAKE]: { name: '蛋饼', icon: TILE.eggPancake, food: 6 },
 };
 
 export function itemName(id) {
@@ -59,6 +63,7 @@ export function isPlaceable(id) {
 export function dropFor(blockId) {
   if (blockId === GRASS || blockId === SNOW || blockId === FARMLAND) return DIRT;
   if (isCrop(blockId)) return null; // 庄稼的收获见 farming.js 的 cropDrops
+  if (blockId === EGG) return DUCK_EGG;
   if (blockId === COAL_ORE) return COAL;
   const def = BLOCKS[blockId];
   if (!def || def.unbreakable || def.liquid) return null;
@@ -72,11 +77,11 @@ export const SURVIVAL_HOTBAR = [DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, B
 export const ITEM_ORDER = [
   DIRT, STONE, SAND, LOG, PLANKS, STICK, COAL, IRON_ORE, IRON_INGOT, LEAVES, GLASS, BRICK, TORCH,
   STONE_PICKAXE, IRON_PICKAXE, STONE_SHOVEL, STONE_AXE, STONE_HOE, BUCKET, WATER_BUCKET,
-  SEEDS, WHEAT, APPLE, BERRIES, BREAD, PIE, RAW_MEAT, COOKED_MEAT,
+  SEEDS, WHEAT, APPLE, BERRIES, BREAD, PIE, RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE,
 ];
 
 // ---------- 食物 ----------
-export const FOODS = [APPLE, BERRIES, RAW_MEAT, BREAD, COOKED_MEAT, PIE];
+export const FOODS = [APPLE, BERRIES, RAW_MEAT, BREAD, EGG_PANCAKE, COOKED_MEAT, PIE];
 
 export function foodValue(id) {
   return ITEMS[id]?.food ?? 0;

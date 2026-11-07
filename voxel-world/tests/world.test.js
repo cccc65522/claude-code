@@ -1078,3 +1078,161 @@ test('野生的只在附近不够 10 只时出现，整个世界最多 40 只', 
   assert.equal(breed(animals), null);
   assert.ok(NEARBY > 0);
 });
+
+// ---------- 更多动物 ----------
+import { SPECIES, habitatAt, animalName, foodFor, EGG_MIN, EGG_RANGE, ANGER_SECONDS } from '../src/game/animals.js';
+import { EGG, LOG as LOG_B, SAND as SAND_BLOCK } from '../src/game/blocks.js';
+import { DUCK_EGG, EGG_PANCAKE } from '../src/game/items.js';
+
+test('每种动物住的地方：野猪在树林边，圆圆鸭在水边的沙地或草地', () => {
+  const w = farmWorld();
+  assert.deepEqual(habitatAt(w, 16, 2, 16), ['rabbit']);
+  w.set(19, 2, 16, LOG_B);
+  assert.deepEqual(habitatAt(w, 16, 2, 16), ['rabbit', 'boar']);
+  w.set(16, 1, 20, WATER);
+  assert.deepEqual(habitatAt(w, 16, 2, 16), ['rabbit', 'boar', 'duck']);
+  w.set(16, 1, 16, SAND_BLOCK);
+  assert.deepEqual(habitatAt(w, 16, 2, 16), ['duck'], '沙地上只有鸭子');
+  assert.equal(canAnimalSpawnAt(w, 16, 2, 16, 'duck'), true);
+  assert.equal(canAnimalSpawnAt(w, 16, 2, 16, 'rabbit'), false);
+});
+
+test('生成时按住的地方挑种类，三种都会出现', () => {
+  const big = new World({ seed: 1, chunks: 4, generate: false });
+  for (let x = 0; x < big.sizeX; x++) for (let z = 0; z < big.sizeZ; z++) {
+    big.rawSet(x, 0, z, STONE);
+    big.rawSet(x, 1, z, GRASS_ID);
+  }
+  // 到处都有树和水，三种都合适
+  for (let x = 2; x < big.sizeX; x += 8) for (let z = 2; z < big.sizeZ; z += 8) {
+    big.rawSet(x, 2, z, LOG_B);
+    big.rawSet(x + 3, 1, z + 3, WATER);
+  }
+  const seen = new Set();
+  for (let round = 0; round < 20; round++) {
+    const animals = [];
+    const player = createPlayer([32.5, 2, 32.5]);
+    for (let i = 0; i < 30; i++) trySpawnAnimal(big, animals, player);
+    animals.forEach((a) => seen.add(a.species));
+  }
+  assert.deepEqual([...seen].sort(), ['boar', 'duck', 'rabbit']);
+});
+
+test('鬃毛野猪：被打后（生存模式）会冲过来撞人；和平或创造模式下会逃跑', () => {
+  const w = farmWorld();
+  const player = createPlayer([16.5, 2, 16.5]);
+  const boar = createAnimal([12.5, 2, 16.5], { species: 'boar' });
+  assert.equal(boar.health, 12);
+  damageAnimal(boar, 2, player.pos, { hostile: true });
+  assert.equal(boar.anger, ANGER_SECONDS);
+  let damage = 0;
+  for (let i = 0; i < 150; i++) damage += stepAnimal(w, boar, player, 1 / 30, { hostile: true }).damage;
+  assert.ok(damage >= SPECIES.boar.damage, `撞了 ${damage}`);
+
+  const calm = createAnimal([12.5, 2, 16.5], { species: 'boar' });
+  damageAnimal(calm, 2, player.pos, { hostile: false });
+  assert.equal(calm.anger, 0);
+  let hits = 0;
+  for (let i = 0; i < 90; i++) hits += stepAnimal(w, calm, player, 1 / 30).damage;
+  assert.equal(hits, 0);
+  assert.ok(calm.pos[0] < 11, `逃开了：${calm.pos[0]}`);
+});
+
+test('走路的动物会跳上一格高的台阶', () => {
+  const w = farmWorld();
+  for (let x = 14; x < 32; x++) for (let z = 0; z < 32; z++) w.rawSet(x, 2, z, GRASS_ID);
+  const player = createPlayer([24.5, 3, 10.5]);
+  const boar = createAnimal([8.5, 2, 10.5], { species: 'boar' });
+  boar.anger = 99; // 生气的野猪会一直追过来
+  for (let i = 0; i < 300; i++) stepAnimal(w, boar, player, 1 / 30, { hostile: true });
+  assert.ok(boar.pos[0] > 14 && boar.pos[1] >= 3 - 0.01, `pos=${boar.pos}`);
+});
+
+test('圆圆鸭会游泳（浮在水上）、长大后会下蛋；小鸭不下蛋', () => {
+  const w = farmWorld();
+  for (let x = 4; x < 12; x++) for (let z = 4; z < 12; z++) {
+    w.rawSet(x, 1, z, STONE);
+    w.rawSet(x, 2, z, WATER);
+    w.rawSet(x, 3, z, WATER);
+  }
+  const swimmer = createAnimal([8.5, 2, 8.5], { species: 'duck' });
+  const player = createPlayer([30.5, 2, 30.5]);
+  let top = 0;
+  for (let i = 0; i < 120; i++) {
+    stepAnimal(w, swimmer, player, 1 / 30, { rand: seq(0.3, 0.8, 0.5) });
+    if (i > 60) top = Math.max(top, swimmer.pos[1]);
+  }
+  assert.ok(top > 3.4 && swimmer.pos[1] > 2.5, `浮在水面附近：最高 y=${top}`);
+
+  const duck = createAnimal([20.5, 2, 20.5], { species: 'duck', rand: () => 0 });
+  assert.equal(duck.eggTimer, EGG_MIN);
+  let egg = null;
+  for (let t = 0; t < EGG_MIN + EGG_RANGE + 2 && !egg; t += 0.5) egg = stepAnimal(w, duck, player, 0.5, { rand: () => 0 }).egg;
+  assert.deepEqual(egg, [Math.floor(duck.pos[0]), 2, Math.floor(duck.pos[2])]);
+  const duckling = createAnimal([20.5, 2, 20.5], { species: 'duck', baby: true, rand: () => 0 });
+  let babyEgg = null;
+  for (let t = 0; t < 50; t += 0.5) babyEgg = babyEgg || stepAnimal(w, duckling, player, 0.5, { rand: () => 0 }).egg;
+  assert.equal(babyEgg, null);
+});
+
+test('鸭蛋放在地上：一碰就捡起来；下面的方块没了蛋也没了', () => {
+  const w = farmWorld();
+  const sim = new Sim(w);
+  sim.edit(5, 2, 5, EGG);
+  assert.equal(w.isSolid(5, 2, 5), false);
+  assert.equal(dropFor(EGG), DUCK_EGG);
+  assert.equal(digInfo(EGG, {}).time, 0);
+  sim.edit(5, 1, 5, AIR);
+  assert.equal(w.get(5, 2, 5), AIR);
+  w.set(6, 2, 6, EGG);
+  const g = buildChunkGeometry(w, 0, 0);
+  const ys = [];
+  for (let i = 1; i < g.positions.length; i += 3) if (g.positions[i - 1] > 6 && g.positions[i - 1] < 7 && g.positions[i + 1] > 6 && g.positions[i + 1] < 7) ys.push(g.positions[i]);
+  assert.ok(ys.length >= 20 && Math.max(...ys) < 2.5, '小小的一个');
+});
+
+test('喂食：每种动物爱吃的不一样，不同种不会生小动物', () => {
+  const r = createAnimal([5.5, 2, 5.5]);
+  const b = createAnimal([6.5, 2, 5.5], { species: 'boar' });
+  const d = createAnimal([7.5, 2, 5.5], { species: 'duck' });
+  assert.equal(foodFor(r), SEEDS);
+  assert.equal(foodFor(b), APPLE);
+  assert.equal(foodFor(d), BERRIES);
+  assert.equal(animalName(b), '鬃毛野猪');
+  assert.equal(animalName(createAnimal([0, 0, 0], { species: 'duck', baby: true })), '小圆圆鸭');
+  feedAnimal(r);
+  feedAnimal(b);
+  assert.equal(breed([r, b]), null, '兔子和野猪不会生小动物');
+  const b2 = createAnimal([7, 2, 6], { species: 'boar' });
+  feedAnimal(b2);
+  const piglet = breed([r, b, b2]);
+  assert.equal(piglet.species, 'boar');
+  assert.equal(piglet.baby, true);
+  b.anger = 5;
+  assert.equal(feedAnimal(createAnimal([0, 0, 0], { species: 'boar' })), true);
+});
+
+test('掉落：野猪 2–3 块肉，鸭子 1 块；存档记住种类，老存档当成绒耳兔', () => {
+  const b = createAnimal([5.5, 2, 5.5], { species: 'boar' });
+  assert.deepEqual(animalDrops(b, () => 0), [[RAW_MEAT, 2]]);
+  assert.deepEqual(animalDrops(b, () => 0.99), [[RAW_MEAT, 3]]);
+  assert.deepEqual(animalDrops(createAnimal([0, 0, 0], { species: 'duck' }), () => 0.99), [[RAW_MEAT, 1]]);
+
+  const w = farmWorld();
+  const saved = JSON.parse(JSON.stringify(serializeAnimals([b, createAnimal([7.5, 2, 7.5], { species: 'duck', baby: true })])));
+  assert.equal(saved[0].length, 8);
+  const back = deserializeAnimals([...saved, [3.5, 2, 3.5, 0, 0, 0, 6], [3.5, 2, 3.5, 0, 0, 0, 6, 9], [3.5, 2, 3.5, 0, 0, 0, 12]], w);
+  assert.deepEqual(back.map((a) => a.species), ['boar', 'duck', 'rabbit'], '老存档是兔子；未知种类和超出血量的丢掉');
+  assert.equal(back[0].health, 12);
+  assert.equal(back[1].baby, true);
+});
+
+test('蛋饼：鸭蛋 ×2 + 小麦 + 煤炭 → 蛋饼 ×2', () => {
+  const inv = {};
+  addItem(inv, DUCK_EGG, 4);
+  addItem(inv, WHEAT, 1);
+  addItem(inv, COAL, 3);
+  assert.equal(craft(inv, recipe('eggPancake'), 9), 1);
+  assert.equal(countOf(inv, EGG_PANCAKE), 2);
+  assert.equal(foodValue(EGG_PANCAKE), 6);
+});

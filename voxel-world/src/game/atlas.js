@@ -429,6 +429,38 @@ function meat(cooked) {
 painters[TILE.rawMeat] = meat(false);
 painters[TILE.cookedMeat] = meat(true);
 
+// 鸭蛋：图标是一个椭圆的蛋，方块贴图是满格的蛋壳花纹
+painters[TILE.duckEgg] = (put, rand) => {
+  transparent(put);
+  for (let y = 2; y < 15; y++) for (let x = 3; x < 13; x++) {
+    const d = Math.hypot((x - 7.5) / 4.6, (y - 8.8) / (y < 9 ? 6.6 : 5.6));
+    if (d > 1) continue;
+    const k = 1 + (rand() - 0.5) * 0.06;
+    const speck = rand() < 0.08;
+    if (speck) put(x, y, 150, 170, 150);
+    else put(x, y, (x < 6 && y < 8 ? 250 : 222) * k, (x < 6 && y < 8 ? 250 : 232) * k, (x < 6 && y < 8 ? 240 : 214) * k);
+  }
+};
+painters[TILE.eggBlock] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+    const k = 1 + (rand() - 0.5) * 0.06;
+    if (rand() < 0.07) put(x, y, 150, 172, 150);
+    else put(x, y, 226 * k, 236 * k, 218 * k);
+  }
+};
+painters[TILE.eggPancake] = (put, rand) => {
+  transparent(put);
+  for (let y = 4; y < 13; y++) for (let x = 1; x < 15; x++) {
+    const d = Math.hypot((x - 7.5) / 6.6, (y - 8.5) / 4.2);
+    if (d > 1) continue;
+    const k = 1 + (rand() - 0.5) * 0.1;
+    const yolk = Math.hypot(x - 8, y - 8) < 2.2;
+    if (yolk) put(x, y, 250 * k, 196 * k, 50 * k);
+    else if (d > 0.82) put(x, y, 196 * k, 140 * k, 60 * k);
+    else put(x, y, 242 * k, 222 * k, 160 * k);
+  }
+};
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

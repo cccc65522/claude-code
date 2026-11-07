@@ -1,4 +1,4 @@
-import { AIR, TORCH, isCrop } from './blocks.js';
+import { AIR, EGG, TORCH, isCrop } from './blocks.js';
 import { growCrops, supportedBy } from './farming.js';
 import { Fluids } from './fluid.js';
 import { computeLight, relight } from './light.js';
@@ -41,7 +41,7 @@ export class Sim {
 
     // 脚下的方块没了，上面的火把掉下来；耕地没了，上面的庄稼也没了
     const above = world.get(x, y + 1, z);
-    const loseTorch = above === TORCH && !world.isSolidBlock(x, y, z);
+    const loseTorch = (above === TORCH || above === EGG) && !world.isSolidBlock(x, y, z); // 火把和蛋要放在实心方块上
     const loseCrop = isCrop(above) && !supportedBy(above, world.get(x, y, z));
     if (loseTorch || loseCrop) {
       world.set(x, y + 1, z, AIR);

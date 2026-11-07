@@ -74,6 +74,22 @@ function addCross(b, tile, x, y, z, light) {
   }
 }
 
+// 一个小盒子（鸭蛋）：整张贴图贴在每个面上
+function addBox(b, tile, x, y, z, min, max, light) {
+  for (const face of FACES) {
+    const [dx, dy, dz] = face.dir;
+    const start = b.positions.length / 3;
+    for (const [px, py, pz, u, v] of face.corners) {
+      b.positions.push(x + (px ? max[0] : min[0]), y + (py ? max[1] : min[1]), z + (pz ? max[2] : min[2]));
+      b.normals.push(dx, dy, dz);
+      pushUv(b, tile, u, v);
+      b.colors.push(1, 1, 1);
+      b.light.push(light);
+    }
+    b.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
+  }
+}
+
 function addTorch(b, tile, x, y, z) {
   for (const face of FACES) {
     const [dx, dy, dz] = face.dir;
@@ -172,6 +188,14 @@ export function buildChunkGeometry(world, cx, cz) {
 
         if (def.shape === 'crop') {
           addCross(solid, def.tiles.side, x, y, z, lightBrightness(world.lightAt(x, y, z)));
+          continue;
+        }
+
+        if (def.shape === 'egg') {
+          // 下面宽、上面窄的两块，看起来像个蛋
+          const eggLight = lightBrightness(world.lightAt(x, y, z));
+          addBox(solid, def.tiles.side, x, y, z, [0.35, 0, 0.35], [0.65, 0.24, 0.65], eggLight);
+          addBox(solid, def.tiles.side, x, y, z, [0.39, 0.24, 0.39], [0.61, 0.4, 0.61], eggLight);
           continue;
         }
 
