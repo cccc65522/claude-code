@@ -15,6 +15,24 @@ import { Sim } from './game/sim.js';
 import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
 
 const SAVE_KEY = 'voxel-world:v1';
+// 和平开关是玩家的设置，不跟着世界走：换新世界、重置世界都保留
+const PEACEFUL_KEY = 'voxel-world:peaceful';
+
+function loadPeaceful() {
+  try {
+    return localStorage.getItem(PEACEFUL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writePeaceful(on) {
+  try {
+    localStorage.setItem(PEACEFUL_KEY, on ? '1' : '0');
+  } catch {
+    // 存不了也没关系，这次打开期间照样有效
+  }
+}
 
 function loadSave() {
   try {
@@ -72,6 +90,9 @@ export default function App() {
   const [flying, setFlying] = useState(session.player.flying);
   const [toast, setToast] = useState(null);
   const [mode, setMode] = useState(session.mode);
+  const [peaceful, setPeaceful] = useState(loadPeaceful);
+  const peacefulRef = useRef(peaceful);
+  peacefulRef.current = peaceful;
   const [bagOpen, setBagOpen] = useState(false);
   const [health, setHealth] = useState(session.player.health);
   const [dead, setDead] = useState(null); // 死了的话是死因
@@ -345,6 +366,15 @@ export default function App() {
     showToast(next === 'survival' ? '生存模式：挖到的方块进背包，放方块要消耗' : '创造模式：方块无限');
   };
 
+  const togglePeaceful = (on) => {
+    if (on === peaceful) return;
+    setPeaceful(on);
+    peacefulRef.current = on;
+    writePeaceful(on);
+    if (on) session.monsters.length = 0;
+    showToast(on ? '和平：不会再出现夜影' : '夜里又会出现夜影了');
+  };
+
   const newWorld = () => {
     if (!window.confirm('换一个新世界？当前世界的改动会被清除。')) return;
     const next = buildSession(null);
@@ -385,6 +415,7 @@ export default function App() {
         playerRef={playerRef}
         selectedRef={selectedRef}
         modeRef={modeRef}
+        peacefulRef={peacefulRef}
         inventory={session.inventory}
         onInventory={onInventory}
         activeRef={activeRef}
@@ -492,9 +523,27 @@ export default function App() {
             </div>
             <p className="mode-note">
               {mode === 'survival'
-                ? '有 10 颗心，从 4 格以上摔下来会掉血，掉进水里不会；在水下待太久会溺水；夜里黑暗处会出现夜影，火把照着的地方不会有，左键打它们；不受伤一会儿会慢慢回血。按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
+                ? '有 10 颗心，从 4 格以上摔下来会掉血，掉进水里不会；在水下待太久会溺水；夜里黑暗处会出现夜影（可以在下面切换成和平），左键打它们；不受伤一会儿会慢慢回血。按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
                 : '方块无限，随便放。'}
             </p>
+            {mode === 'survival' && (
+              <>
+                <div className="row mode-row" role="group" aria-label="怪物">
+                  <span className="clock">怪物</span>
+                  <button type="button" className={!peaceful ? 'on' : ''} aria-pressed={!peaceful} onClick={() => togglePeaceful(false)}>
+                    有夜影
+                  </button>
+                  <button type="button" className={peaceful ? 'on' : ''} aria-pressed={peaceful} onClick={() => togglePeaceful(true)}>
+                    和平
+                  </button>
+                </div>
+                <p className="mode-note">
+                  {peaceful
+                    ? '和平：不会出现夜影，已经出现的也会消失。摔落和溺水照样会受伤。'
+                    : '夜里黑暗处会出现夜影，火把照着的地方不会有。'}
+                </p>
+              </>
+            )}
             <div className="row time-row">
               <span className="clock">游戏时间 {clockText(timeRef.current)}</span>
               <button type="button" onClick={() => setTime(MORNING, '天亮了')}>白天</button>

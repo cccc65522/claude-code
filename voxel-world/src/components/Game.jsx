@@ -214,7 +214,7 @@ function Highlight({ targetRef, digRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, monsters }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, monsters, peacefulRef }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
@@ -415,10 +415,11 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
           onAir(air);
         }
 
-        // 怪物：夜里在黑暗处出现，天亮后消散
+        // 怪物：夜里在黑暗处出现，天亮后消散；和平模式下没有怪物
+        if (peacefulRef.current) monsters.length = 0;
         const day = skyAt(timeRef.current).day > 0.5;
         spawnTimer.current += dt;
-        if (!day && spawnTimer.current > 2) {
+        if (!day && !peacefulRef.current && spawnTimer.current > 2) {
           spawnTimer.current = 0;
           trySpawn(world, monsters, p);
         }
