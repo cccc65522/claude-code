@@ -11,6 +11,7 @@ export const GLASS = 8;
 export const BRICK = 9;
 export const SNOW = 10;
 export const BEDROCK = 11;
+export const WATER = 12;
 
 // 图集格子编号
 export const TILE = {
@@ -28,6 +29,7 @@ export const TILE = {
   snowTop: 11,
   snowSide: 12,
   bedrock: 13,
+  water: 14,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });
@@ -44,10 +46,16 @@ export const BLOCKS = {
   [BRICK]: { name: '砖块', tiles: all(TILE.brick) },
   [SNOW]: { name: '雪地', tiles: { top: TILE.snowTop, side: TILE.snowSide, bottom: TILE.dirt } },
   [BEDROCK]: { name: '基岩', tiles: all(TILE.bedrock), unbreakable: true },
+  // 水：半透明、能穿过、能游泳；不会流动
+  [WATER]: { name: '水', tiles: all(TILE.water), transparent: true, liquid: true },
 };
 
-// 快捷栏里能放的方块（按 1-9 选择）
-export const HOTBAR = [GRASS, DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, BRICK];
+// 快捷栏里能放的方块（按 1-9、0 选择）
+export const HOTBAR = [GRASS, DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, BRICK, WATER];
+
+export function isLiquid(id) {
+  return BLOCKS[id]?.liquid === true;
+}
 
 export function isTransparent(id) {
   return id === AIR || BLOCKS[id]?.transparent === true;

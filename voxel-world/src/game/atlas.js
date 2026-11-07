@@ -142,6 +142,18 @@ const painters = {
   },
 };
 
+// 水：蓝色带一些亮一点的波纹（透明度由材质控制）
+painters[TILE.water] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) {
+    for (let x = 0; x < TILE_PX; x++) {
+      const wave = (x + Math.floor(y / 2) * 3) % 8 < 2 && y % 4 === 1;
+      const k = 1 + (rand() - 0.5) * 0.12;
+      if (wave) put(x, y, 120 * k, 180 * k, 236 * k);
+      else put(x, y, 44 * k, 108 * k, 196 * k);
+    }
+  }
+};
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

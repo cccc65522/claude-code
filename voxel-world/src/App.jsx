@@ -7,6 +7,7 @@ import { World } from './game/world.js';
 import { createPlayer } from './game/player.js';
 import { createAtlasCanvas } from './game/atlas.js';
 import { BLOCKS, HOTBAR } from './game/blocks.js';
+import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
 
 const SAVE_KEY = 'voxel-world:v1';
 
@@ -48,7 +49,8 @@ function buildSession(save) {
   } else {
     player = createPlayer(world.spawnPoint(), Math.PI / 4, -0.2);
   }
-  return { world, player, id: Math.random().toString(36).slice(2) };
+  const time = Number.isFinite(save?.time) ? wrapTime(save.time) : MORNING;
+  return { world, player, time, id: Math.random().toString(36).slice(2) };
 }
 
 export default function App() {
@@ -63,6 +65,8 @@ export default function App() {
   const selectedRef = useRef(HOTBAR[0]);
   const activeRef = useRef(false);
   const statsRef = useRef(null);
+  const underwaterRef = useRef(null);
+  const timeRef = useRef(session.time);
   const canvasRef = useRef(null);
   const saveTimer = useRef(null);
 
@@ -84,6 +88,7 @@ export default function App() {
 
   useEffect(() => {
     setFlying(session.player.flying);
+    timeRef.current = session.time;
   }, [session]);
 
   useEffect(() => {
@@ -111,6 +116,7 @@ export default function App() {
       seed: session.world.seed,
       edits: session.world.exportEdits(),
       player: { pos: p.pos, yaw: p.yaw, pitch: p.pitch, flying: p.flying },
+      time: timeRef.current,
     });
   }, [session]);
 
@@ -154,7 +160,8 @@ export default function App() {
     const onKeyDown = (e) => {
       if (!activeRef.current) return;
       if (e.code.startsWith('Digit')) {
-        const n = Number(e.code.slice(5));
+        const d = Number(e.code.slice(5));
+        const n = d === 0 ? 10 : d; // 0 键是第 10 格
         if (n >= 1 && n <= HOTBAR.length) selectSlot(n - 1);
       }
       if (e.code === 'KeyF' && !e.repeat) toggleFly();
@@ -234,16 +241,25 @@ export default function App() {
     if (!window.confirm('换一个新世界？当前世界的改动会被清除。')) return;
     const next = buildSession(null);
     setSession(next);
-    writeSave({ seed: next.world.seed, edits: [], player: null });
+    writeSave({ seed: next.world.seed, edits: [], player: null, time: next.time });
     showToast('新世界已生成');
   };
 
   const resetWorld = () => {
     if (!window.confirm('把当前世界恢复成刚生成时的样子？')) return;
-    const next = buildSession({ seed: session.world.seed, edits: [] });
+    const next = buildSession({ seed: session.world.seed, edits: [], time: timeRef.current });
     setSession(next);
-    writeSave({ seed: next.world.seed, edits: [], player: null });
+    writeSave({ seed: next.world.seed, edits: [], player: null, time: next.time });
     showToast('世界已重置');
+  };
+
+  // 跳到白天 / 夜晚，用 timeTick 让面板上的时间刷新
+  const [, setTimeTick] = useState(0);
+  const setTime = (t, text) => {
+    timeRef.current = t;
+    setTimeTick((n) => n + 1);
+    save();
+    showToast(text);
   };
 
   const editCount = session.world.edits.size;
@@ -259,10 +275,14 @@ export default function App() {
         selectedRef={selectedRef}
         activeRef={activeRef}
         statsRef={statsRef}
+        timeRef={timeRef}
+        underwaterRef={underwaterRef}
         onEdit={onEdit}
         onFlyingChange={setFlying}
         onCanvas={(c) => (canvasRef.current = c)}
       />
+
+      <div className="underwater" ref={underwaterRef} />
 
       <Hud selected={selected} onSelect={selectSlot} atlasUrl={atlas.url} statsRef={statsRef} toast={toast} />
 
@@ -283,17 +303,24 @@ export default function App() {
                 <li>左下角摇杆：移动（推到底会跑）</li>
                 <li>在屏幕上拖动：转视角</li>
                 <li>右下角：挖 / 放 / 跳，按住可以连续</li>
+                <li>水里按“跳”往上游，贴着岸按“跳”上岸</li>
                 <li>底部快捷栏：选方块</li>
               </ul>
             ) : (
               <ul className="help">
                 <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动，<kbd>Shift</kbd> 跑，<kbd>空格</kbd> 跳</li>
                 <li>鼠标转视角，左键挖，右键放，按住可以连续</li>
-                <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块</li>
+                <li><kbd>1</kbd>–<kbd>9</kbd>、<kbd>0</kbd> 或滚轮选方块</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
+                <li>水里按 <kbd>空格</kbd> 往上游、<kbd>C</kbd> 往下潜，贴着岸按 <kbd>空格</kbd> 上岸</li>
                 <li><kbd>Esc</kbd> 暂停</li>
               </ul>
             )}
+            <div className="row time-row">
+              <span className="clock">游戏时间 {clockText(timeRef.current)}</span>
+              <button type="button" onClick={() => setTime(MORNING, '天亮了')}>白天</button>
+              <button type="button" onClick={() => setTime(NIGHT, '天黑了')}>夜晚</button>
+            </div>
             <p className="meta">
               种子 {session.world.seed} · 已改动 {editCount} 个方块 · 自动保存在这个浏览器里
             </p>

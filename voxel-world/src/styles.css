@@ -274,7 +274,21 @@ kbd {
   font: 14px var(--font);
 }
 
+/* 水下：画面蒙一层蓝色 */
+.underwater {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(16, 70, 160, 0.38);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.underwater.on { opacity: 1; }
+
+.time-row { align-items: center; margin-top: 16px; }
+.clock { font-size: 14px; color: var(--muted); margin-right: 4px; }
+
 @media (max-width: 480px) {
-  .slot { width: 36px; height: 36px; padding: 4px; }
+  .slot { width: 33px; height: 33px; padding: 3px; }
   .hotbar { gap: 2px; padding: 3px; }
 }

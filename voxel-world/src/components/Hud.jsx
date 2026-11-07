@@ -32,11 +32,11 @@ export default function Hud({ selected, onSelect, atlasUrl, statsRef, toast }) {
             className={'slot' + (i === selected ? ' active' : '')}
             onClick={() => onSelect(i)}
             onTouchStart={(e) => e.stopPropagation()}
-            aria-label={`${i + 1} ${BLOCKS[id].name}`}
+            aria-label={`${(i + 1) % 10} ${BLOCKS[id].name}`}
             aria-pressed={i === selected}
           >
             <BlockIcon id={id} atlasUrl={atlasUrl} />
-            <span className="slot-key">{i + 1}</span>
+            <span className="slot-key">{(i + 1) % 10}</span>
           </button>
         ))}
       </div>

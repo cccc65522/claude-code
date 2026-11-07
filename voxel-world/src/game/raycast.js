@@ -1,7 +1,8 @@
-import { AIR } from './blocks.js';
+import { AIR, WATER } from './blocks.js';
 
 /**
  * 体素射线检测（逐格步进）。
+ * 水会被穿过（能隔着水挖水底的方块）。
  * 返回第一个碰到的方块坐标 hit、碰到的那个面的法线 normal（放方块的位置 = hit + normal）。
  */
 export function raycast(world, origin, dir, maxDist = 6) {
@@ -29,7 +30,7 @@ export function raycast(world, origin, dir, maxDist = 6) {
   let t = 0;
   while (t <= maxDist) {
     const id = world.get(pos[0], pos[1], pos[2]);
-    if (id !== AIR) {
+    if (id !== AIR && id !== WATER) {
       return { hit: [...pos], normal: [...normal], block: id, distance: t };
     }
     let axis = 0;

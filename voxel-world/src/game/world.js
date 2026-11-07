@@ -1,4 +1,4 @@
-import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK } from './blocks.js';
+import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER } from './blocks.js';
 import { fbm2, hash2, mulberry32 } from './noise.js';
 
 export const CHUNK = 16;
@@ -53,18 +53,20 @@ export class World {
     return true;
   }
 
-  // 物理碰撞用：世界边界外面当作墙，脚下当作地板
+  // 物理碰撞用：世界边界外面当作墙，脚下当作地板；水可以穿过
   isSolid(x, y, z) {
     if (y < 0) return true;
     if (y >= this.sizeY) return false;
     if (x < 0 || z < 0 || x >= this.sizeX || z >= this.sizeZ) return true;
-    return this.data[this.index(x, y, z)] !== AIR;
+    const id = this.data[this.index(x, y, z)];
+    return id !== AIR && id !== WATER;
   }
 
   heightAt(x, z) {
-    const n = fbm2(x / 48, z / 48, this.seed, 4);
-    const hills = fbm2(x / 18, z / 18, this.seed + 77, 2);
-    return Math.floor(6 + n * 26 + hills * 6);
+    // 分形噪声的值大多挤在 0.5 附近，拉开一些，才会有低于海平面的湖和高出来的雪山
+    const n = (fbm2(x / 48, z / 48, this.seed, 4) - 0.5) * 2.4;
+    const hills = fbm2(x / 18, z / 18, this.seed + 77, 2) - 0.5;
+    return Math.floor(17 + n * 16 + hills * 6);
   }
 
   // 某一列最高的非空气方块的 y，没有就返回 -1
@@ -86,10 +88,12 @@ export class World {
           else if (y < h - 3) id = STONE;
           else if (y < h) id = h <= SEA_LEVEL + 1 ? SAND : DIRT;
           else if (h <= SEA_LEVEL + 1) id = SAND;
-          else if (h >= 29) id = SNOW;
+          else if (h >= 26) id = SNOW;
           else id = GRASS;
           this.rawSet(x, y, z, id);
         }
+        // 低于海平面的地方灌满水，形成湖和小海湾
+        for (let y = h + 1; y <= SEA_LEVEL; y++) this.rawSet(x, y, z, WATER);
       }
     }
     this.plantTrees();
@@ -128,11 +132,24 @@ export class World {
     for (let i = 0; i < trunk; i++) this.rawSet(x, y + i, z, LOG);
   }
 
-  // 出生点：地图中间最高方块上方
+  // 出生点：离地图中间最近的、不在水里的地面
   spawnPoint() {
-    const x = Math.floor(this.sizeX / 2);
-    const z = Math.floor(this.sizeZ / 2);
-    return [x + 0.5, this.topY(x, z) + 1, z + 0.5];
+    const cx = Math.floor(this.sizeX / 2);
+    const cz = Math.floor(this.sizeZ / 2);
+    const maxR = Math.max(this.sizeX, this.sizeZ);
+    for (let r = 0; r < maxR; r++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const x = cx + dx;
+          const z = cz + dz;
+          if (!this.inBounds(x, 0, z)) continue;
+          const y = this.topY(x, z);
+          if (y >= 0 && this.get(x, y, z) !== WATER) return [x + 0.5, y + 1, z + 0.5];
+        }
+      }
+    }
+    return [cx + 0.5, this.topY(cx, cz) + 1, cz + 0.5];
   }
 
   // 修改 (x,z) 处方块后需要重建网格的区块（在区块边上时连邻居一起）

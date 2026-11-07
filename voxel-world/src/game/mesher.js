@@ -1,4 +1,4 @@
-import { AIR, BLOCKS, isOpaque, isTransparent } from './blocks.js';
+import { AIR, BLOCKS, isLiquid, isOpaque, isTransparent } from './blocks.js';
 import { CHUNK } from './world.js';
 
 export const ATLAS_COLS = 4;
@@ -18,26 +18,52 @@ const FACES = [
 // 环境光遮蔽亮度：0 = 最暗（墙角），3 = 不被遮挡
 const AO_LEVELS = [0.45, 0.62, 0.8, 1];
 
-// 两个块之间的面要不要画
+// 两个块之间的面要不要画（实心方块、玻璃、树叶）
 export function faceVisible(block, neighbor) {
   if (neighbor === AIR) return true;
   if (!isTransparent(neighbor)) return false;
   return neighbor !== block; // 玻璃挨着玻璃、树叶挨着树叶时不画中间那层
 }
 
+// 水面：只在挨着空气、玻璃、树叶这类非水的透明方块时画
+export function waterFaceVisible(neighbor) {
+  return !isLiquid(neighbor) && !isOpaque(neighbor);
+}
+
+// 水面比方块顶低一点，看起来更像水
+export const WATER_SURFACE = 0.88;
+
+function makeBuffers() {
+  return { positions: [], normals: [], uvs: [], colors: [], indices: [] };
+}
+
+function finish(b) {
+  return {
+    positions: new Float32Array(b.positions),
+    normals: new Float32Array(b.normals),
+    uvs: new Float32Array(b.uvs),
+    colors: new Float32Array(b.colors),
+    indices: new Uint32Array(b.indices),
+  };
+}
+
+function pushUv(b, tile, u, v) {
+  const eps = 0.001;
+  const col = tile % ATLAS_COLS;
+  const row = Math.floor(tile / ATLAS_COLS);
+  b.uvs.push((col + (u ? 1 - eps : eps)) / ATLAS_COLS, 1 - (row + (v ? eps : 1 - eps)) / ATLAS_ROWS);
+}
+
 /**
  * 给一个区块生成几何数据（只用类型化数组，不依赖 three.js）。
- * 返回的顶点坐标是世界坐标。
+ * 顶层字段是实心方块的网格，water 是单独的半透明水面网格。
+ * 顶点坐标是世界坐标。
  */
 export function buildChunkGeometry(world, cx, cz) {
-  const positions = [];
-  const normals = [];
-  const uvs = [];
-  const colors = [];
-  const indices = [];
+  const solid = makeBuffers();
+  const water = makeBuffers();
   const x0 = cx * CHUNK;
   const z0 = cz * CHUNK;
-  const eps = 0.001;
   const ao = [0, 0, 0, 0];
 
   for (let y = 0; y < world.sizeY; y++) {
@@ -48,15 +74,31 @@ export function buildChunkGeometry(world, cx, cz) {
         const def = BLOCKS[block];
         if (!def) continue;
 
+        if (def.liquid) {
+          const lowered = !isLiquid(world.get(x, y + 1, z));
+          for (const face of FACES) {
+            const [dx, dy, dz] = face.dir;
+            if (!waterFaceVisible(world.get(x + dx, y + dy, z + dz))) continue;
+            const start = water.positions.length / 3;
+            for (const [px, py, pz, u, v] of face.corners) {
+              const top = py === 1 && lowered ? WATER_SURFACE : py;
+              water.positions.push(x + px, y + top, z + pz);
+              water.normals.push(dx, dy, dz);
+              pushUv(water, def.tiles[face.side], u, v);
+              water.colors.push(1, 1, 1);
+            }
+            water.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
+          }
+          continue;
+        }
+
         for (const face of FACES) {
           const [dx, dy, dz] = face.dir;
           const neighbor = world.get(x + dx, y + dy, z + dz);
           if (!faceVisible(block, neighbor)) continue;
 
           const tile = def.tiles[face.side];
-          const col = tile % ATLAS_COLS;
-          const row = Math.floor(tile / ATLAS_COLS);
-          const start = positions.length / 3;
+          const start = solid.positions.length / 3;
 
           // 面的法线方向之外的两个轴
           const axes = [0, 1, 2].filter((a) => face.dir[a] === 0);
@@ -66,12 +108,9 @@ export function buildChunkGeometry(world, cx, cz) {
 
           for (let i = 0; i < 4; i++) {
             const [px, py, pz, u, v] = face.corners[i];
-            positions.push(x + px, y + py, z + pz);
-            normals.push(dx, dy, dz);
-            uvs.push(
-              (col + (u ? 1 - eps : eps)) / ATLAS_COLS,
-              1 - (row + (v ? eps : 1 - eps)) / ATLAS_ROWS,
-            );
+            solid.positions.push(x + px, y + py, z + pz);
+            solid.normals.push(dx, dy, dz);
+            pushUv(solid, tile, u, v);
 
             // 角落的两个侧面方块和对角方块
             const p = [px, py, pz];
@@ -84,25 +123,19 @@ export function buildChunkGeometry(world, cx, cz) {
             const c = isOpaque(world.get(nx + o1[0] + o2[0], ny + o1[1] + o2[1], nz + o1[2] + o2[2])) ? 1 : 0;
             ao[i] = s1 && s2 ? 0 : 3 - (s1 + s2 + c);
             const b = AO_LEVELS[ao[i]];
-            colors.push(b, b, b);
+            solid.colors.push(b, b, b);
           }
 
           // 沿亮度差更小的对角线切开，避免奇怪的明暗条纹
           if (ao[0] + ao[3] > ao[1] + ao[2]) {
-            indices.push(start, start + 1, start + 3, start, start + 3, start + 2);
+            solid.indices.push(start, start + 1, start + 3, start, start + 3, start + 2);
           } else {
-            indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
+            solid.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
           }
         }
       }
     }
   }
 
-  return {
-    positions: new Float32Array(positions),
-    normals: new Float32Array(normals),
-    uvs: new Float32Array(uvs),
-    colors: new Float32Array(colors),
-    indices: new Uint32Array(indices),
-  };
+  return { ...finish(solid), water: finish(water) };
 }

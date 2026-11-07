@@ -143,3 +143,95 @@ test('放方块不能放在自己身上', () => {
   assert.equal(overlapsBlock(p, 4, 4, 4), false);
   assert.equal(overlapsBlock(p, 5, 5, 4), false);
 });
+
+// ---------- 水 ----------
+import { WATER, SAND as SAND_ID } from '../src/game/blocks.js';
+import { SEA_LEVEL } from '../src/game/world.js';
+import { WATER_SURFACE } from '../src/game/mesher.js';
+import { bodyInWater } from '../src/game/player.js';
+import { skyAt, clockText, wrapTime } from '../src/game/daynight.js';
+
+test('地形里低洼的地方灌满水，水不会超过海平面，出生点不在水里', () => {
+  let found = null;
+  for (let seed = 1; seed < 30 && !found; seed++) {
+    const w = new World({ seed, chunks: 4 });
+    if (w.data.includes(WATER)) found = w;
+  }
+  assert.ok(found, '应该能找到有湖的世界');
+  const w = found;
+  for (let i = 0; i < w.data.length; i++) {
+    if (w.data[i] !== WATER) continue;
+    const y = Math.floor(i / (w.sizeX * w.sizeZ));
+    assert.ok(y <= SEA_LEVEL);
+  }
+  const [x, y, z] = w.spawnPoint();
+  assert.notEqual(w.get(Math.floor(x), y - 1, Math.floor(z)), WATER);
+  assert.notEqual(w.get(Math.floor(x), y, Math.floor(z)), WATER);
+});
+
+test('水可以穿过、射线会穿过水打到水底', () => {
+  const w = empty();
+  w.set(5, 3, 5, SAND_ID);
+  w.set(5, 4, 5, WATER);
+  w.set(5, 5, 5, WATER);
+  assert.equal(w.isSolid(5, 4, 5), false);
+  const r = raycast(w, [5.5, 8, 5.5], [0, -1, 0], 6);
+  assert.deepEqual(r.hit, [5, 3, 5]);
+  assert.deepEqual(r.normal, [0, 1, 0], '可以把方块放进水里');
+});
+
+test('水单独成网格：只画露在外面的面，水面比方块顶低一点；水底的沙子照样画', () => {
+  const w = empty();
+  w.set(4, 3, 4, SAND_ID);
+  w.set(4, 4, 4, WATER);
+  w.set(4, 5, 4, WATER);
+  const g = buildChunkGeometry(w, 0, 0);
+  assert.equal(g.water.positions.length / 12, 9, '两格水叠起来：中间和贴着沙子的面不画');
+  const maxY = Math.max(...g.water.positions.filter((_, i) => i % 3 === 1));
+  assert.ok(Math.abs(maxY - (5 + WATER_SURFACE)) < 1e-6);
+  assert.equal(g.positions.length / 12, 6, '沙子的顶面挨着水，也要画');
+});
+
+test('玩家在水里慢慢下沉，按跳会往上游', () => {
+  const w = empty();
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) {
+    w.set(x, 0, z, STONE);
+    for (let y = 1; y <= 8; y++) w.set(x, y, z, WATER);
+  }
+  const p = createPlayer([8.5, 5, 8.5]);
+  stepPlayer(w, p, {}, 0.5);
+  assert.equal(p.inWater, true);
+  assert.ok(p.pos[1] < 5 && p.pos[1] > 3.5, `慢慢下沉，y=${p.pos[1]}`);
+  const before = p.pos[1];
+  for (let i = 0; i < 20; i++) stepPlayer(w, p, { jump: true }, 1 / 30);
+  assert.ok(p.pos[1] > before + 0.5, '往上游');
+  assert.equal(bodyInWater(w, createPlayer([8.5, 20, 8.5])), false);
+});
+
+test('在水里贴着岸按跳能爬上一格高的岸', () => {
+  const w = empty();
+  for (let x = 0; x < 32; x++) for (let z = 0; z < 32; z++) {
+    w.set(x, 0, z, STONE);
+    if (x < 12) w.set(x, 1, z, WATER);
+    else w.set(x, 1, z, STONE);
+  }
+  const p = createPlayer([10.5, 1, 8.5], -Math.PI / 2); // 面朝 +x，岸在 x=12
+  for (let i = 0; i < 90; i++) stepPlayer(w, p, { forward: 1, jump: true }, 1 / 30);
+  assert.ok(p.pos[0] > 12.3 && p.pos[1] >= 2 - 0.01, `上岸了，pos=${p.pos}`);
+});
+
+test('昼夜：正午最亮，午夜有星星，时间显示正确', () => {
+  const noon = skyAt(0.5);
+  const midnight = skyAt(0);
+  assert.ok(noon.day > 0.99 && noon.sunDir[1] > 0.9);
+  assert.ok(midnight.day < 0.01 && midnight.stars > 0.99);
+  assert.ok(noon.sunIntensity > midnight.sunIntensity);
+  assert.ok(midnight.moonIntensity > noon.moonIntensity);
+  assert.ok(noon.sky[2] > midnight.sky[2]);
+  assert.ok(skyAt(0.25).dusk > 0.9, '日出时天边发红');
+  assert.equal(clockText(0), '00:00');
+  assert.equal(clockText(0.5), '12:00');
+  assert.equal(clockText(0.75 + 1 / 1440), '18:01');
+  assert.equal(wrapTime(1.25), 0.25);
+  assert.equal(wrapTime(-0.25), 0.75);
+});
