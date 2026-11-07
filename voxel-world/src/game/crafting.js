@@ -1,5 +1,7 @@
-import { BRICK, DIRT, GLASS, LOG, PLANKS, SAND, TORCH } from './blocks.js';
-import { COAL, STICK, addItem, countOf, takeItem } from './items.js';
+import { BRICK, DIRT, GLASS, IRON_ORE, LOG, PLANKS, SAND, STONE, TORCH } from './blocks.js';
+import {
+  BUCKET, COAL, IRON_INGOT, IRON_PICKAXE, STICK, STONE_AXE, STONE_PICKAXE, STONE_SHOVEL, addItem, countOf, takeItem,
+} from './items.js';
 
 // 合成配方：不用摆位置，材料够就能合成
 export const RECIPES = [
@@ -8,10 +10,26 @@ export const RECIPES = [
   { id: 'torch', inputs: [[STICK, 1], [COAL, 1]], output: [TORCH, 4], hint: '煤炭在地下的石头里找' },
   { id: 'glass', inputs: [[SAND, 2], [COAL, 1]], output: [GLASS, 2], hint: '用煤炭把沙子烧成玻璃' },
   { id: 'brick', inputs: [[DIRT, 2], [SAND, 1], [COAL, 1]], output: [BRICK, 2], hint: '泥和沙子烧成砖' },
+  { id: 'stonePickaxe', inputs: [[STONE, 3], [STICK, 2]], output: [STONE_PICKAXE, 1], hint: '挖石头、矿石快 4 倍，挖铁矿石必须有镐' },
+  { id: 'stoneShovel', inputs: [[STONE, 1], [STICK, 2]], output: [STONE_SHOVEL, 1], hint: '挖泥土、沙子快 4 倍' },
+  { id: 'stoneAxe', inputs: [[STONE, 3], [STICK, 2]], output: [STONE_AXE, 1], hint: '砍木头、树叶快 4 倍' },
+  { id: 'ironIngot', inputs: [[IRON_ORE, 1], [COAL, 1]], output: [IRON_INGOT, 1], hint: '铁矿石在更深的地下，要用镐挖' },
+  { id: 'ironPickaxe', inputs: [[IRON_INGOT, 3], [STICK, 2]], output: [IRON_PICKAXE, 1], hint: '挖石头、矿石快 8 倍' },
+  { id: 'bucket', inputs: [[IRON_INGOT, 3]], output: [BUCKET, 1], hint: '空桶对着水能装水，水桶能把水倒到别处' },
 ];
+
+// 工具只做一把就够（背包里已经有了就不能再做）
+const SINGLE = new Set([STONE_PICKAXE, STONE_SHOVEL, STONE_AXE, IRON_PICKAXE]);
+export function isSingle(recipe) {
+  return SINGLE.has(recipe.output[0]);
+}
 
 // 现在的材料最多能合成几次
 export function maxCrafts(inv, recipe) {
+  if (isSingle(recipe)) {
+    if (countOf(inv, recipe.output[0]) > 0) return 0;
+    return recipe.inputs.every(([id, need]) => countOf(inv, id) >= need) ? 1 : 0;
+  }
   let n = Infinity;
   for (const [id, need] of recipe.inputs) n = Math.min(n, Math.floor(countOf(inv, id) / need));
   return n;

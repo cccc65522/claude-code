@@ -2,10 +2,10 @@ import { AIR, isLiquid } from './blocks.js';
 
 /**
  * 体素射线检测（逐格步进）。
- * 水会被穿过（能隔着水挖水底的方块）。
+ * 默认会穿过水（能隔着水挖水底的方块）；liquids: true 时碰到水就停（水桶装水用）。
  * 返回第一个碰到的方块坐标 hit、碰到的那个面的法线 normal（放方块的位置 = hit + normal）。
  */
-export function raycast(world, origin, dir, maxDist = 6) {
+export function raycast(world, origin, dir, maxDist = 6, { liquids = false } = {}) {
   const len = Math.hypot(dir[0], dir[1], dir[2]);
   if (len === 0) return null;
   const d = [dir[0] / len, dir[1] / len, dir[2] / len];
@@ -30,7 +30,7 @@ export function raycast(world, origin, dir, maxDist = 6) {
   let t = 0;
   while (t <= maxDist) {
     const id = world.get(pos[0], pos[1], pos[2]);
-    if (id !== AIR && !isLiquid(id)) {
+    if (id !== AIR && (liquids || !isLiquid(id))) {
       return { hit: [...pos], normal: [...normal], block: id, distance: t };
     }
     let axis = 0;

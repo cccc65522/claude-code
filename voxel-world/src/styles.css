@@ -338,6 +338,25 @@ kbd {
   .stack.missing .stack-text { color: #ff8a7a; }
 }
 
+/* 生存模式挖方块的进度环（围着准星） */
+.dig-ring {
+  --dig: 0;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(#fff calc(var(--dig) * 360deg), rgba(255, 255, 255, 0.18) 0);
+  -webkit-mask: radial-gradient(circle, transparent 12px, #000 13px);
+  mask: radial-gradient(circle, transparent 12px, #000 13px);
+}
+.dig-ring.on { opacity: 0.9; }
+.bag-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
 /* 水下：画面蒙一层蓝色 */
 .underwater {
   position: fixed;

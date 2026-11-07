@@ -447,7 +447,8 @@ test('每个配方的产物都能放或者能用来合成别的', () => {
   for (const r of RECIPES) {
     const [out, n] = r.output;
     assert.ok(n > 0);
-    assert.ok(out < 100 || used.has(out), `${itemName(out)} 有用处`);
+    const usable = out < 100 || used.has(out) || TOOLS[out] || out === BUCKET;
+    assert.ok(usable, `${itemName(out)} 有用处`);
   }
   const inv = {};
   addItem(inv, SAND_ID, 4);
@@ -460,4 +461,73 @@ test('读档时背包里不认识的东西和坏数据会被丢掉', () => {
   const inv = sanitizeInventory({ 5: 3, 100: 2, 999: 1, abc: 4, 7: -1, 8: 1.5, 101: 1e9 });
   assert.deepEqual(inv, { 5: 3, 100: 2, 101: 9999 });
   assert.deepEqual(sanitizeInventory(null), {});
+});
+
+// ---------- 工具和水桶 ----------
+import { IRON_ORE, STONE as STONE_B, DIRT as DIRT_B, SAND as SAND_B } from '../src/game/blocks.js';
+import { STONE_PICKAXE, IRON_PICKAXE, STONE_SHOVEL, IRON_INGOT, BUCKET } from '../src/game/items.js';
+import { digInfo, bestTool, TOOLS } from '../src/game/tools.js';
+
+test('挖方块的时间：空手慢，有对应工具快，铁镐比石镐快', () => {
+  const inv = {};
+  const hand = digInfo(STONE_B, inv);
+  assert.ok(hand.time > 1 && hand.tool === null);
+  addItem(inv, STONE_PICKAXE);
+  const stone = digInfo(STONE_B, inv);
+  assert.equal(stone.tool, STONE_PICKAXE);
+  assert.ok(Math.abs(stone.time - hand.time / 4) < 1e-9);
+  addItem(inv, IRON_PICKAXE);
+  assert.equal(bestTool(inv, 'pickaxe'), IRON_PICKAXE);
+  assert.ok(digInfo(STONE_B, inv).time < stone.time);
+  assert.equal(digInfo(DIRT_B, inv).tool, null, '镐不帮着挖泥土');
+  addItem(inv, STONE_SHOVEL);
+  assert.equal(digInfo(SAND_B, inv).tool, STONE_SHOVEL);
+  assert.equal(digInfo(TORCH, {}).time, 0, '火把一碰就掉');
+  assert.equal(digInfo(BEDROCK_ID, inv).time, Infinity);
+  assert.equal(digInfo(WATER, inv).time, Infinity);
+});
+
+test('铁矿石只能用镐挖；铁矿石埋得比煤更深', () => {
+  const none = digInfo(IRON_ORE, {});
+  assert.equal(none.time, Infinity);
+  assert.equal(none.needs, 'pickaxe');
+  assert.ok(Number.isFinite(digInfo(IRON_ORE, { [STONE_PICKAXE]: 1 }).time));
+  const w = new World({ seed: 3, chunks: 4 });
+  let iron = 0;
+  for (let i = 0; i < w.data.length; i++) {
+    if (w.data[i] !== IRON_ORE) continue;
+    iron++;
+    const [x, y, z] = w.coords(i);
+    assert.ok(y <= w.topY(x, z) - 6);
+  }
+  assert.ok(iron > 20, `有一些铁矿石：${iron}`);
+  assert.equal(dropFor(IRON_ORE), IRON_ORE);
+});
+
+test('从石头到水桶的合成路线；工具只能做一把', () => {
+  const inv = {};
+  addItem(inv, STONE_B, 6);
+  addItem(inv, STICK, 4);
+  assert.equal(maxCrafts(inv, recipe('stonePickaxe')), 1, '材料够两把，但只能做一把');
+  assert.equal(craft(inv, recipe('stonePickaxe'), 5), 1);
+  assert.equal(maxCrafts(inv, recipe('stonePickaxe')), 0, '已经有了');
+  assert.equal(countOf(inv, STONE_B), 3);
+  addItem(inv, IRON_ORE, 3);
+  addItem(inv, COAL, 3);
+  assert.equal(craft(inv, recipe('ironIngot'), 99), 3);
+  assert.equal(countOf(inv, IRON_INGOT), 3);
+  assert.equal(craft(inv, recipe('bucket')), 1);
+  assert.equal(countOf(inv, BUCKET), 1);
+  assert.equal(countOf(inv, IRON_INGOT), 0);
+});
+
+test('射线：默认穿过水，liquids 模式下停在水面', () => {
+  const w = empty();
+  w.set(5, 3, 5, SAND_B);
+  w.set(5, 4, 5, WATER);
+  w.set(5, 5, 5, flowId(4));
+  assert.deepEqual(raycast(w, [5.5, 8, 5.5], [0, -1, 0], 6).hit, [5, 3, 5]);
+  const r = raycast(w, [5.5, 8, 5.5], [0, -1, 0], 6, { liquids: true });
+  assert.deepEqual(r.hit, [5, 5, 5]);
+  assert.equal(r.block, flowId(4));
 });

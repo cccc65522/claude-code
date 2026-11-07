@@ -85,6 +85,7 @@ export default function App() {
   const activeRef = useRef(false);
   const statsRef = useRef(null);
   const underwaterRef = useRef(null);
+  const digUiRef = useRef(null);
   const timeRef = useRef(session.time);
   const canvasRef = useRef(null);
   const saveTimer = useRef(null);
@@ -352,12 +353,14 @@ export default function App() {
         statsRef={statsRef}
         timeRef={timeRef}
         underwaterRef={underwaterRef}
+        digUiRef={digUiRef}
         onEdit={onEdit}
         onFlyingChange={setFlying}
         onCanvas={(c) => (canvasRef.current = c)}
       />
 
       <div className="underwater" ref={underwaterRef} />
+      <div className="dig-ring" ref={digUiRef} aria-hidden="true" />
 
       <Hud
         slots={hotbar}
@@ -411,7 +414,7 @@ export default function App() {
               <ul className="help">
                 <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动，<kbd>Shift</kbd> 跑，<kbd>空格</kbd> 跳</li>
                 <li>鼠标转视角，左键挖，右键放，按住可以连续</li>
-                <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块（创造模式还有 <kbd>0</kbd> 火把、<kbd>-</kbd> 水）</li>
+                <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块；<kbd>0</kbd>、<kbd>-</kbd>：生存模式是空桶、水桶，创造模式是火把、水</li>
                 <li><kbd>E</kbd> 打开背包和合成（生存模式）</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
                 <li>水里按 <kbd>空格</kbd> 往上游、<kbd>C</kbd> 往下潜，贴着岸按 <kbd>空格</kbd> 上岸</li>
@@ -430,7 +433,7 @@ export default function App() {
             </div>
             <p className="mode-note">
               {mode === 'survival'
-                ? '挖到的方块进背包，放方块要消耗。原木 → 木板 → 木棍，加上地下挖到的煤炭就能做火把。'
+                ? '按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
                 : '方块无限，随便放。'}
             </p>
             <div className="row time-row">

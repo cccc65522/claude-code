@@ -39,6 +39,8 @@ export default function Inventory({ inventory, atlasUrl, onCraft, onClose, isTou
           <p className="empty">背包是空的。先去挖点方块、砍棵树吧。</p>
         )}
 
+        <p className="bag-note">工具不用拿在手上：挖方块时会自动用背包里最合适的工具。</p>
+
         <h3>合成</h3>
         <ul className="recipes">
           {RECIPES.map((r) => {

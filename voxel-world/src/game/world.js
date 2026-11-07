@@ -1,4 +1,4 @@
-import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER, COAL_ORE, isPassable } from './blocks.js';
+import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER, COAL_ORE, IRON_ORE, isPassable } from './blocks.js';
 import { fbm2, hash2, mulberry32 } from './noise.js';
 
 export const CHUNK = 16;
@@ -87,6 +87,12 @@ export class World {
     return Math.floor(17 + n * 16 + hills * 6);
   }
 
+  oreAt(x, y, z, h) {
+    if (y < h - 4 && hash2(x * 31 + y, z * 17 - y, this.seed + 5) < 0.025) return COAL_ORE;
+    if (y < h - 6 && hash2(x * 13 - y, z * 29 + y, this.seed + 11) < 0.014) return IRON_ORE;
+    return STONE;
+  }
+
   // 某一列最高的非空气方块的 y，没有就返回 -1
   topY(x, z) {
     for (let y = this.sizeY - 1; y >= 0; y--) {
@@ -103,8 +109,8 @@ export class World {
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === 0) id = BEDROCK;
-          // 石头里零星夹着煤矿石
-          else if (y < h - 3) id = y < h - 4 && hash2(x * 31 + y, z * 17 - y, this.seed + 5) < 0.025 ? COAL_ORE : STONE;
+          // 石头里零星夹着煤矿石，更深的地方有铁矿石
+          else if (y < h - 3) id = this.oreAt(x, y, z, h);
           else if (y < h) id = h <= SEA_LEVEL + 1 ? SAND : DIRT;
           else if (h <= SEA_LEVEL + 1) id = SAND;
           else if (h >= 26) id = SNOW;

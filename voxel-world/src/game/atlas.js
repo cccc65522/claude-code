@@ -205,6 +205,83 @@ painters[TILE.coal] = (put, rand) => {
   }
 };
 
+painters[TILE.ironOre] = (put, rand) => {
+  painters[TILE.stone](put, rand);
+  for (let i = 0; i < 6; i++) {
+    const cx = 2 + Math.floor(rand() * 11);
+    const cy = 2 + Math.floor(rand() * 11);
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1]]) put(cx + dx, cy + dy, 214, 162, 120);
+  }
+};
+
+const STONE_HEAD = [132, 132, 138];
+const IRON_HEAD = [218, 222, 228];
+
+function handle(put, rand, from = 3, to = 12) {
+  for (let i = from; i <= to; i++) {
+    const k = 1 + (rand() - 0.5) * 0.2;
+    put(i, 15 - i, 140 * k, 100 * k, 60 * k);
+  }
+}
+function pickaxe(put, rand, [r, g, b]) {
+  transparent(put);
+  handle(put, rand, 2, 11);
+  // 横着的镐头：一道弧
+  const head = [[4, 3], [5, 2], [6, 2], [7, 2], [8, 2], [9, 3], [10, 3], [11, 4], [12, 5], [12, 6], [13, 7], [13, 8], [13, 9], [12, 10], [3, 4], [10, 4], [11, 5]];
+  for (const [x, y] of head) {
+    const k = 1 + (rand() - 0.5) * 0.15;
+    put(x, y, r * k, g * k, b * k);
+  }
+}
+painters[TILE.stonePickaxe] = (put, rand) => pickaxe(put, rand, STONE_HEAD);
+painters[TILE.ironPickaxe] = (put, rand) => pickaxe(put, rand, IRON_HEAD);
+painters[TILE.stoneShovel] = (put, rand) => {
+  transparent(put);
+  handle(put, rand, 2, 9);
+  for (let y = 2; y <= 6; y++) for (let x = 9; x <= 13; x++) {
+    if (Math.abs(x - 11) + Math.abs(y - 4) > 3) continue;
+    const k = 1 + (rand() - 0.5) * 0.15;
+    put(x, y, STONE_HEAD[0] * k, STONE_HEAD[1] * k, STONE_HEAD[2] * k);
+  }
+};
+painters[TILE.stoneAxe] = (put, rand) => {
+  transparent(put);
+  handle(put, rand, 2, 12);
+  for (let y = 2; y <= 7; y++) for (let x = 7; x <= 11; x++) {
+    if (x + y < 10 || x - y > 6 || (x > 9 && y > 5)) continue;
+    const k = 1 + (rand() - 0.5) * 0.15;
+    put(x, y, STONE_HEAD[0] * k, STONE_HEAD[1] * k, STONE_HEAD[2] * k);
+  }
+};
+painters[TILE.ironIngot] = (put, rand) => {
+  transparent(put);
+  for (let y = 6; y <= 10; y++) for (let x = 2; x <= 13; x++) {
+    const inset = 10 - y; // 上窄下宽
+    if (x < 2 + inset / 2 || x > 13 - inset / 2) continue;
+    const edge = y === 10 || x < 3 + inset / 2 || x > 12 - inset / 2;
+    const k = 1 + (rand() - 0.5) * 0.08;
+    if (edge) put(x, y, 92, 96, 104);
+    else if (y === 6) put(x, y, 226 * k, 230 * k, 236 * k);
+    else put(x, y, 168 * k, 174 * k, 184 * k);
+  }
+};
+function bucket(put, rand, water) {
+  transparent(put);
+  for (let y = 5; y <= 13; y++) {
+    const half = 5 - Math.floor((y - 5) / 3);
+    for (let x = 8 - half; x < 8 + half; x++) {
+      const edge = x === 8 - half || x === 8 + half - 1 || y === 13;
+      const k = 1 + (rand() - 0.5) * 0.1;
+      if (water && y <= 7 && !edge) put(x, y, 50 * k, 120 * k, 210 * k);
+      else if (edge || y === 5) put(x, y, 150 * k, 154 * k, 160 * k);
+      else put(x, y, 196 * k, 200 * k, 206 * k);
+    }
+  }
+  for (const [x, y] of [[3, 4], [4, 3], [5, 2], [6, 2], [7, 1], [8, 1], [9, 2], [10, 2], [11, 3], [12, 4]]) put(x, y, 120, 122, 128);
+}
+painters[TILE.bucket] = (put, rand) => bucket(put, rand, false);
+painters[TILE.waterBucket] = (put, rand) => bucket(put, rand, true);
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

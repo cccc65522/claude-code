@@ -14,6 +14,7 @@ export const BEDROCK = 11;
 export const WATER = 12; // 水源
 export const TORCH = 13;
 export const COAL_ORE = 14;
+export const IRON_ORE = 15;
 // 流动的水：20–26，水位 1–7（7 最满，离水源最近）
 export const FLOW_BASE = 19;
 export const FLOW_MAX = 7;
@@ -39,6 +40,14 @@ export const TILE = {
   coalOre: 16,
   stick: 17,
   coal: 18,
+  ironOre: 19,
+  ironIngot: 20,
+  bucket: 21,
+  waterBucket: 22,
+  stonePickaxe: 23,
+  stoneShovel: 24,
+  stoneAxe: 25,
+  ironPickaxe: 26,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });
@@ -56,6 +65,7 @@ export const BLOCKS = {
   [SNOW]: { name: '雪地', tiles: { top: TILE.snowTop, side: TILE.snowSide, bottom: TILE.dirt } },
   [BEDROCK]: { name: '基岩', tiles: all(TILE.bedrock), unbreakable: true },
   [COAL_ORE]: { name: '煤矿石', tiles: all(TILE.coalOre) },
+  [IRON_ORE]: { name: '铁矿石', tiles: all(TILE.ironOre) },
   // 水源：半透明、能穿过、能游泳；会往低处和四周流
   [WATER]: { name: '水', tiles: all(TILE.water), transparent: true, liquid: true, passable: true },
   // 火把：只能立在实心方块上，会发光
