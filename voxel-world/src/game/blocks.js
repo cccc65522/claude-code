@@ -48,6 +48,9 @@ export const TILE = {
   stoneShovel: 24,
   stoneAxe: 25,
   ironPickaxe: 26,
+  apple: 27,
+  berries: 28,
+  pie: 29,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });

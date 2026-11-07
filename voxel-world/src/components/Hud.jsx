@@ -1,7 +1,7 @@
 import { ATLAS_COLS, ATLAS_ROWS } from '../game/mesher.js';
 import { HOTBAR_KEYS } from '../game/blocks.js';
 import { itemIcon, itemName } from '../game/items.js';
-import { MAX_AIR, MAX_HEALTH } from '../game/health.js';
+import { MAX_AIR, MAX_HEALTH, MAX_HUNGER } from '../game/health.js';
 
 // 用图集里的贴图显示物品图标
 export function ItemIcon({ id, atlasUrl }) {
@@ -43,6 +43,33 @@ function Hearts({ health }) {
   );
 }
 
+// 饱食度：10 个鸡腿，从右往左减少
+function Hunger({ hunger }) {
+  const legs = [];
+  for (let i = 0; i < MAX_HUNGER / 2; i++) {
+    const fill = Math.max(0, Math.min(2, hunger - i * 2));
+    legs.push(
+      <svg key={i} className="drumstick" viewBox="0 0 16 16" aria-hidden="true">
+        <g className="leg-empty">
+          <ellipse cx="6.5" cy="6.5" rx="5" ry="4.5" transform="rotate(-45 6.5 6.5)" />
+          <path d="M9.6 9.6 13 13M12 14.5l2.5-2.5" />
+        </g>
+        {fill > 0 && (
+          <g className="leg-full" style={fill === 1 ? { clipPath: 'inset(0 0 0 50%)' } : undefined}>
+            <ellipse cx="6.5" cy="6.5" rx="5" ry="4.5" transform="rotate(-45 6.5 6.5)" />
+            <path d="M9.6 9.6 13 13M12 14.5l2.5-2.5" />
+          </g>
+        )}
+      </svg>,
+    );
+  }
+  return (
+    <div className={'hunger' + (hunger <= 6 ? ' low' : '')} role="img" aria-label={`饱食度 ${hunger / 2} / ${MAX_HUNGER / 2}`}>
+      {legs}
+    </div>
+  );
+}
+
 // 氧气：在水下才显示
 function Bubbles({ air }) {
   return (
@@ -55,14 +82,21 @@ function Bubbles({ air }) {
 }
 
 // counts 为 null 时是创造模式（方块无限，不显示数量），health 为 null 时不显示生命值
-export default function Hud({ slots, counts, selected, onSelect, atlasUrl, statsRef, toast, hideHotbar, health, air }) {
+export default function Hud({ slots, counts, selected, onSelect, atlasUrl, statsRef, toast, hideHotbar, health, air, hunger }) {
   return (
     <div className={'hud' + (hideHotbar ? ' bag-open' : '')}>
       <div className="stats" ref={statsRef} />
       <div className="crosshair" />
       {toast && <div className="toast" key={toast.key}>{toast.text}</div>}
-      {health !== null && !hideHotbar && <Hearts health={health} />}
-      {health !== null && !hideHotbar && air < MAX_AIR && <Bubbles air={air} />}
+      {health !== null && !hideHotbar && (
+        <div className="status">
+          <Hearts health={health} />
+          <div className="status-right">
+            {air < MAX_AIR && <Bubbles air={air} />}
+            <Hunger hunger={hunger} />
+          </div>
+        </div>
+      )}
       <div className="hotbar" role="toolbar" aria-label="快捷栏">
         {slots.map((id, i) => {
           const n = counts ? counts[id] ?? 0 : null;

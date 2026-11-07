@@ -447,7 +447,7 @@ test('每个配方的产物都能放或者能用来合成别的', () => {
   for (const r of RECIPES) {
     const [out, n] = r.output;
     assert.ok(n > 0);
-    const usable = out < 100 || used.has(out) || TOOLS[out] || out === BUCKET;
+    const usable = out < 100 || used.has(out) || TOOLS[out] || out === BUCKET || foodValue(out) > 0;
     assert.ok(usable, `${itemName(out)} 有用处`);
   }
   const inv = {};
@@ -709,4 +709,87 @@ test('准星能打到怪物；天亮后怪物消散，离太远的会被移走',
   assert.equal(shouldRemove(a, player), true);
   assert.equal(stepMonster(w, createMonster([10.5, 1, 20.8]), player, 1 / 30, { day: true }) > 0, false, '消散中的不咬人');
   assert.equal(shouldRemove(createMonster([100, 1, 100]), player), true);
+});
+
+// ---------- 饥饿 ----------
+import { updateHunger, addExhaustion, sanitizeHunger, MAX_HUNGER, REGEN_MIN_HUNGER, EXHAUSTION } from '../src/game/health.js';
+import { APPLE, BERRIES, PIE, foodValue, bonusDrop, bestFood, eat } from '../src/game/items.js';
+import { LEAVES } from '../src/game/blocks.js';
+
+test('饥饿：闲着大约半小时饿一半，跑步、跳跃饿得更快', () => {
+  const idle = createPlayer([0, 0, 0]);
+  for (let i = 0; i < 1000; i++) updateHunger(idle, 1); // 1000 秒
+  assert.equal(idle.hunger, MAX_HUNGER - 10);
+  const runner = createPlayer([0, 0, 0]);
+  for (let i = 0; i < 100; i++) updateHunger(runner, 1, { sprinting: true, jumps: 1 }); // 100 秒边跑边跳
+  assert.ok(runner.hunger <= MAX_HUNGER - 10, `跑跳 100 秒：${runner.hunger}`);
+  const p = createPlayer([0, 0, 0]);
+  addExhaustion(p, 4 * 3 + 1);
+  assert.equal(p.hunger, MAX_HUNGER - 3);
+  assert.ok(Math.abs(p.exhaustion - 1) < 1e-9);
+  assert.ok(EXHAUSTION.sprint > EXHAUSTION.idle);
+});
+
+test('饿到 0 以后每 4 秒掉半颗心；和平模式不会饿还会慢慢吃饱', () => {
+  const p = createPlayer([0, 0, 0]);
+  p.hunger = 0;
+  let dmg = 0;
+  for (let i = 0; i < 120; i++) dmg += updateHunger(p, 0.1); // 12 秒
+  assert.equal(dmg, 3);
+  const q = createPlayer([0, 0, 0]);
+  q.hunger = 4;
+  for (let i = 0; i < 100; i++) assert.equal(updateHunger(q, 0.1, { peaceful: true, sprinting: true }), 0);
+  assert.equal(q.hunger, 9, '10 秒回 5 点');
+  assert.equal(sanitizeHunger(0), 0);
+  assert.equal(sanitizeHunger(25), MAX_HUNGER);
+  assert.equal(sanitizeHunger(undefined), MAX_HUNGER);
+});
+
+test('饱食度不够时不回血，回血会消耗饱食度', () => {
+  const p = createPlayer([0, 0, 0]);
+  hurt(p, 10);
+  p.hunger = REGEN_MIN_HUNGER - 1;
+  for (let i = 0; i < 200; i++) regenerate(p, 0.1);
+  assert.equal(p.health, 10, '饿着不回血');
+  p.hunger = MAX_HUNGER;
+  for (let i = 0; i < 400; i++) regenerate(p, 0.1); // 40 秒
+  assert.ok(p.health > 10);
+  assert.ok(p.hunger < MAX_HUNGER || p.exhaustion > 0, '回血花了体力');
+});
+
+test('食物：树叶有时掉苹果、草方块有时挖出野莓；吃东西不浪费', () => {
+  assert.equal(bonusDrop(LEAVES, () => 0.05), APPLE);
+  assert.equal(bonusDrop(LEAVES, () => 0.5), null);
+  assert.equal(bonusDrop(GRASS_ID, () => 0.1), BERRIES);
+  assert.equal(bonusDrop(STONE, () => 0), null);
+  assert.ok(foodValue(PIE) > foodValue(APPLE) && foodValue(APPLE) > foodValue(BERRIES));
+
+  const inv = {};
+  assert.equal(bestFood(inv, 10), null);
+  addItem(inv, APPLE, 1);
+  addItem(inv, BERRIES, 1);
+  addItem(inv, PIE, 1);
+  assert.equal(bestFood(inv, 5), PIE, '饿得厉害吃果派');
+  assert.equal(bestFood(inv, 15), APPLE, '差 5 点吃苹果正好');
+  assert.equal(bestFood(inv, 19), BERRIES, '差 1 点吃最小的');
+
+  const p = createPlayer([0, 0, 0]);
+  p.hunger = 18;
+  const r = eat(inv, p, APPLE);
+  assert.ok(r.ok);
+  assert.equal(r.gained, 2, '最多吃到满');
+  assert.equal(p.hunger, MAX_HUNGER);
+  assert.equal(eat(inv, p, BERRIES).ok, false, '吃饱了');
+  assert.equal(countOf(inv, BERRIES), 1, '没吃就不扣');
+  assert.equal(eat(inv, { hunger: 0 }, STONE).ok, false);
+});
+
+test('果派的配方', () => {
+  const inv = {};
+  addItem(inv, APPLE, 2);
+  addItem(inv, BERRIES, 3);
+  addItem(inv, COAL, 1);
+  assert.equal(craft(inv, recipe('pie')), 1);
+  assert.equal(countOf(inv, PIE), 1);
+  assert.deepEqual(Object.keys(inv), [String(PIE)]);
 });

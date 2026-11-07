@@ -26,6 +26,9 @@ export function createPlayer(position, yaw = 0, pitch = 0) {
     inWater: false,
     fallStartY: null, // 开始往下掉时的高度，用来算摔落距离
     health: 20,
+    hunger: 20, // 饱食度，0–20
+    exhaustion: 0, // 消耗累计到 4 扣 1 点饱食度
+    jumps: 0, // 跳了几次（算饥饿用，由调用的人清零）
     sinceHurt: 99, // 距离上次受伤的秒数
     regen: 0,
   };
@@ -162,6 +165,7 @@ function step(world, p, input, dt) {
     if (input.jump && p.onGround) {
       p.vel[1] = JUMP_SPEED;
       p.onGround = false;
+      p.jumps++;
     }
     p.vel[1] = Math.max(p.vel[1] - GRAVITY * dt, -50);
   }

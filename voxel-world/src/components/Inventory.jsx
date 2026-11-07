@@ -1,4 +1,5 @@
-import { ITEM_ORDER, countOf, itemName } from '../game/items.js';
+import { FOODS, ITEM_ORDER, countOf, foodValue, itemName } from '../game/items.js';
+import { MAX_HUNGER } from '../game/health.js';
 import { RECIPES, maxCrafts } from '../game/crafting.js';
 import { ItemIcon } from './Hud.jsx';
 
@@ -14,8 +15,9 @@ function Stack({ id, n, atlasUrl, missing }) {
 }
 
 // 背包和合成面板
-export default function Inventory({ inventory, atlasUrl, onCraft, onClose, isTouch }) {
+export default function Inventory({ inventory, atlasUrl, onCraft, onClose, isTouch, onEat, hunger }) {
   const items = ITEM_ORDER.filter((id) => countOf(inventory, id) > 0);
+  const foods = FOODS.filter((id) => countOf(inventory, id) > 0);
   return (
     <div className="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="panel bag" role="dialog" aria-label="背包与合成">
@@ -40,6 +42,27 @@ export default function Inventory({ inventory, atlasUrl, onCraft, onClose, isTou
         )}
 
         <p className="bag-note">工具不用拿在手上：挖方块时会自动用背包里最合适的工具。</p>
+
+        <h3>
+          食物 <span className="h3-note">饱食度 {hunger / 2} / {MAX_HUNGER / 2}</span>
+        </h3>
+        {foods.length ? (
+          <ul className="foods">
+            {foods.map((id) => (
+              <li key={id} className="food">
+                <ItemIcon id={id} atlasUrl={atlasUrl} />
+                <span className="food-text">
+                  {itemName(id)} ×{countOf(inventory, id)} <span className="food-value">+{foodValue(id) / 2} 鸡腿</span>
+                </span>
+                <button type="button" disabled={hunger >= MAX_HUNGER} onClick={() => onEat(id)}>
+                  吃
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">没有吃的。砍树叶有时掉苹果，挖草方块有时挖到野莓。</p>
+        )}
 
         <h3>合成</h3>
         <ul className="recipes">

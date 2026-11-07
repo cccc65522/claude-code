@@ -1,6 +1,6 @@
 import { BRICK, DIRT, GLASS, IRON_ORE, LOG, PLANKS, SAND, STONE, TORCH } from './blocks.js';
 import {
-  BUCKET, COAL, IRON_INGOT, IRON_PICKAXE, STICK, STONE_AXE, STONE_PICKAXE, STONE_SHOVEL, addItem, countOf, takeItem,
+  APPLE, BERRIES, BUCKET, COAL, IRON_INGOT, IRON_PICKAXE, PIE, STICK, STONE_AXE, STONE_PICKAXE, STONE_SHOVEL, addItem, countOf, takeItem,
 } from './items.js';
 
 // 合成配方：不用摆位置，材料够就能合成
@@ -16,6 +16,7 @@ export const RECIPES = [
   { id: 'ironIngot', inputs: [[IRON_ORE, 1], [COAL, 1]], output: [IRON_INGOT, 1], hint: '铁矿石在更深的地下，要用镐挖' },
   { id: 'ironPickaxe', inputs: [[IRON_INGOT, 3], [STICK, 2]], output: [IRON_PICKAXE, 1], hint: '挖石头、矿石快 8 倍' },
   { id: 'bucket', inputs: [[IRON_INGOT, 3]], output: [BUCKET, 1], hint: '空桶对着水能装水，水桶能把水倒到别处' },
+  { id: 'pie', inputs: [[APPLE, 2], [BERRIES, 3], [COAL, 1]], output: [PIE, 1], hint: '苹果从树叶里来，野莓从草方块里挖；一个果派顶 5 个鸡腿' },
 ];
 
 // 工具只做一把就够（背包里已经有了就不能再做）

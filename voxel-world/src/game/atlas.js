@@ -282,6 +282,47 @@ function bucket(put, rand, water) {
 painters[TILE.bucket] = (put, rand) => bucket(put, rand, false);
 painters[TILE.waterBucket] = (put, rand) => bucket(put, rand, true);
 
+// 食物图标
+painters[TILE.apple] = (put, rand) => {
+  transparent(put);
+  for (let y = 4; y < 15; y++) for (let x = 2; x < 14; x++) {
+    const d = Math.hypot((x - 7.5) / 5.5, (y - 9.5) / 5.2);
+    if (d > 1) continue;
+    const k = 1 + (rand() - 0.5) * 0.12;
+    const shine = x < 6 && y < 8;
+    put(x, y, (shine ? 250 : 210) * k, (shine ? 110 : 40) * k, (shine ? 100 : 40) * k);
+  }
+  put(8, 3, 110, 76, 40);
+  put(8, 2, 110, 76, 40);
+  put(9, 2, 80, 160, 60);
+  put(10, 2, 80, 160, 60);
+  put(10, 1, 80, 160, 60);
+};
+painters[TILE.berries] = (put, rand) => {
+  transparent(put);
+  for (const [cx, cy] of [[5, 6], [10, 6], [7.5, 10], [4, 11], [11, 11]]) {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      if (Math.hypot(x - cx, y - cy) > 2.3) continue;
+      const k = 1 + (rand() - 0.5) * 0.15;
+      const shine = x < cx && y < cy;
+      put(x, y, (shine ? 150 : 110) * k, (shine ? 80 : 30) * k, (shine ? 200 : 150) * k);
+    }
+  }
+  for (const [x, y] of [[7, 2], [8, 2], [8, 3], [6, 3]]) put(x, y, 70, 140, 60);
+};
+painters[TILE.pie] = (put, rand) => {
+  transparent(put);
+  for (let y = 6; y <= 12; y++) for (let x = 1; x <= 14; x++) {
+    const top = y <= 8;
+    const inset = top ? 9 - y : 0;
+    if (x < 1 + inset || x > 14 - inset) continue;
+    const k = 1 + (rand() - 0.5) * 0.12;
+    if (y === 12) put(x, y, 150 * k, 100 * k, 50 * k);
+    else if (top && (x + y) % 3 === 0) put(x, y, 170 * k, 40 * k, 70 * k); // 露出来的果酱
+    else put(x, y, 222 * k, 168 * k, 96 * k);
+  }
+};
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

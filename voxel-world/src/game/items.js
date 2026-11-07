@@ -12,6 +12,9 @@ export const IRON_PICKAXE = 105;
 export const IRON_INGOT = 106;
 export const BUCKET = 107;
 export const WATER_BUCKET = 108;
+export const APPLE = 109;
+export const BERRIES = 110;
+export const PIE = 111;
 
 export const ITEMS = {
   [STICK]: { name: '木棍', icon: TILE.stick },
@@ -23,6 +26,9 @@ export const ITEMS = {
   [IRON_PICKAXE]: { name: '铁镐', icon: TILE.ironPickaxe },
   [BUCKET]: { name: '空桶', icon: TILE.bucket },
   [WATER_BUCKET]: { name: '水桶', icon: TILE.waterBucket },
+  [APPLE]: { name: '苹果', icon: TILE.apple, food: 4 },
+  [BERRIES]: { name: '野莓', icon: TILE.berries, food: 2 },
+  [PIE]: { name: '果派', icon: TILE.pie, food: 10 },
 };
 
 export function itemName(id) {
@@ -52,8 +58,44 @@ export const SURVIVAL_HOTBAR = [DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, B
 // 背包里的显示顺序
 export const ITEM_ORDER = [
   DIRT, STONE, SAND, LOG, PLANKS, STICK, COAL, IRON_ORE, IRON_INGOT, LEAVES, GLASS, BRICK, TORCH,
-  STONE_PICKAXE, IRON_PICKAXE, STONE_SHOVEL, STONE_AXE, BUCKET, WATER_BUCKET,
+  STONE_PICKAXE, IRON_PICKAXE, STONE_SHOVEL, STONE_AXE, BUCKET, WATER_BUCKET, APPLE, BERRIES, PIE,
 ];
+
+// ---------- 食物 ----------
+export const FOODS = [APPLE, BERRIES, PIE];
+
+export function foodValue(id) {
+  return ITEMS[id]?.food ?? 0;
+}
+
+// 挖方块时额外掉的东西（有几率）：树叶掉苹果，草方块里挖出野莓
+export function bonusDrop(blockId, rand = Math.random) {
+  if (blockId === LEAVES && rand() < 0.1) return APPLE;
+  if (blockId === GRASS && rand() < 0.15) return BERRIES;
+  return null;
+}
+
+// 自动挑一样吃的：尽量不浪费——先找吃了不会超过上限的里面最顶饱的，没有就挑最小的
+export function bestFood(inv, hunger, max = 20) {
+  const owned = FOODS.filter((id) => countOf(inv, id) > 0);
+  if (!owned.length) return null;
+  const missing = max - hunger;
+  const fits = owned.filter((id) => foodValue(id) <= missing).sort((a, b) => foodValue(b) - foodValue(a));
+  if (fits.length) return fits[0];
+  return owned.sort((a, b) => foodValue(a) - foodValue(b))[0];
+}
+
+/**
+ * 吃东西。返回 { ok, gained, reason }。
+ */
+export function eat(inv, p, id, max = 20) {
+  if (!foodValue(id)) return { ok: false, reason: '这个不能吃' };
+  if (p.hunger >= max) return { ok: false, reason: '已经吃饱了' };
+  if (!takeItem(inv, id)) return { ok: false, reason: `没有${itemName(id)}` };
+  const before = p.hunger;
+  p.hunger = Math.min(max, p.hunger + foodValue(id));
+  return { ok: true, gained: p.hunger - before };
+}
 
 export function countOf(inv, id) {
   return inv[id] ?? 0;

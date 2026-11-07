@@ -221,7 +221,7 @@ kbd {
 .joystick {
   position: absolute;
   left: calc(env(safe-area-inset-left) + 24px);
-  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  bottom: calc(env(safe-area-inset-bottom) + 108px);
   width: 128px;
   height: 128px;
   border-radius: 50%;
@@ -241,7 +241,7 @@ kbd {
 .touch-buttons {
   position: absolute;
   right: calc(env(safe-area-inset-right) + 18px);
-  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  bottom: calc(env(safe-area-inset-bottom) + 108px);
   display: grid;
   grid-template-columns: 64px 64px;
   gap: 10px;
@@ -293,6 +293,13 @@ kbd {
 .mode-note { margin: 8px 0 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
 
 /* ---------- 背包与合成 ---------- */
+.h3-note { font-weight: 400; font-size: 12px; margin-left: 6px; }
+.foods { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.food { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(128, 128, 128, 0.12); }
+.food .block-icon { width: 24px; height: 24px; flex: none; }
+.food-text { flex: 1; font-size: 14px; }
+.food-value { font-size: 12px; color: var(--muted); margin-left: 4px; }
+.panel .food button { min-height: 34px; padding: 0 16px; font-size: 14px; background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .panel.bag { width: min(520px, 100%); text-align: left; background: var(--panel-solid); }
 .hud.bag-open .hotbar { display: none; }
 .bag-head { display: flex; align-items: center; justify-content: space-between; }
@@ -339,15 +346,29 @@ kbd {
 }
 
 /* ---------- 生命值 ---------- */
-.hearts {
+/* 快捷栏上方一行：左边生命值，右边饱食度（水下时上面多一排气泡） */
+.status {
   position: absolute;
   left: 50%;
   bottom: calc(env(safe-area-inset-bottom) + 74px);
   transform: translateX(-50%);
+  width: 560px;
+  max-width: calc(100vw - 24px);
   display: flex;
-  gap: 2px;
+  justify-content: space-between;
+  align-items: flex-end;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
 }
+.status-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.hearts, .hunger { display: flex; gap: 2px; }
+.hunger { flex-direction: row-reverse; }
+.drumstick { width: 18px; height: 18px; }
+.leg-empty ellipse { fill: rgba(30, 20, 10, 0.55); stroke: rgba(0, 0, 0, 0.6); stroke-width: 1; }
+.leg-empty path { stroke: rgba(30, 20, 10, 0.7); stroke-width: 2.4; stroke-linecap: round; fill: none; }
+.leg-full ellipse { fill: #c8742e; }
+.leg-full path { stroke: #f2ead8; stroke-width: 2; stroke-linecap: round; fill: none; }
+.hunger.low .drumstick { animation: heart-shake 0.8s infinite; }
+.hunger.low .drumstick:nth-child(2n) { animation-delay: 0.2s; }
 .heart { width: 18px; height: 18px; }
 .heart-empty { fill: rgba(30, 20, 20, 0.55); stroke: rgba(0, 0, 0, 0.6); stroke-width: 1; }
 .heart-full { fill: #e8333a; }
@@ -359,14 +380,7 @@ kbd {
 }
 
 /* 氧气泡（在生命值上面） */
-.bubbles {
-  position: absolute;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 96px);
-  transform: translateX(-50%);
-  display: flex;
-  gap: 4px;
-}
+.bubbles { display: flex; flex-direction: row-reverse; gap: 4px; }
 .bubble {
   width: 14px;
   height: 14px;
@@ -395,9 +409,10 @@ kbd {
 .overlay.death h1 { color: #c62828; }
 
 @media (max-width: 480px) {
-  .hearts { bottom: calc(env(safe-area-inset-bottom) + 58px); }
-  .bubbles { bottom: calc(env(safe-area-inset-bottom) + 76px); }
+  .status { bottom: calc(env(safe-area-inset-bottom) + 58px); width: 356px; }
   .bubble { width: 11px; height: 11px; }
+  .drumstick { width: 14px; height: 14px; }
+  .hearts, .hunger { gap: 1px; }
   .heart { width: 14px; height: 14px; }
 }
 

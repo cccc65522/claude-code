@@ -9,9 +9,9 @@ import {
   BUCKET, SURVIVAL_HOTBAR, WATER_BUCKET, addItem, countOf, dropFor, itemName, takeItem,
 } from '../game/items.js';
 import { digInfo, toolKindName } from '../game/tools.js';
-import { fallDamage, hurt, regenerate, updateAir } from '../game/health.js';
+import { EXHAUSTION, addExhaustion, fallDamage, hurt, regenerate, updateAir, updateHunger } from '../game/health.js';
 import { attackDamage } from '../game/tools.js';
-import { COAL } from '../game/items.js';
+import { COAL, bonusDrop } from '../game/items.js';
 import {
   damageMonster, rayHitMonster, shouldRemove, stepMonster, trySpawn, DISSOLVE_SECONDS,
 } from '../game/monsters.js';
@@ -214,13 +214,14 @@ function Highlight({ targetRef, digRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, monsters, peacefulRef }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, peacefulRef }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
   const fluidTimer = useRef(0);
   const flicker = useMemo(() => ({ base: new THREE.Color('#ffc27a'), t: 0 }), []);
   const lastAir = useRef(null);
+  const lastHunger = useRef(null);
   const spawnTimer = useRef(0);
   const attackTimer = useRef(0);
   const lastFlying = useRef(playerRef.current.flying);
@@ -245,6 +246,8 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     renderer.rebuildKeys(dirty);
     if (survival) {
       pickUp(dropFor(t.block));
+      pickUp(bonusDrop(t.block)); // 树叶里的苹果、草里的野莓
+      addExhaustion(playerRef.current, EXHAUSTION.dig);
       if (torchAbove && world.get(x, y + 1, z) !== TORCH) pickUp(TORCH); // 掉下来的火把也捡起来
       onInventory();
     }
@@ -349,6 +352,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const attack = (m) => {
     if (attackTimer.current > 0) return;
     attackTimer.current = 0.35;
+    addExhaustion(playerRef.current, EXHAUSTION.attack);
     if (damageMonster(m, attackDamage(inventory), playerRef.current.pos)) {
       m.dissolve = 0.01; // 被打死：消散掉
       if (Math.random() < 0.5) {
@@ -383,13 +387,17 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
 
     const k = (c) => (active && keys.has(c) ? 1 : 0);
     const move = active ? input.move : { x: 0, y: 0 };
-    const landed = stepPlayer(world, p, {
+    const control = {
       forward: k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - move.y,
       right: k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + move.x,
       jump: k('Space') || (active && input.touchJump),
       down: k('KeyC') || k('ControlLeft') || (active && input.touchDown),
       sprint: k('ShiftLeft') || k('ShiftRight') || Math.hypot(move.x, move.y) > 0.95,
-    }, dt);
+    };
+    const landed = stepPlayer(world, p, control, dt);
+    const moving = Math.hypot(control.forward, control.right) > 0.1;
+    const jumps = p.jumps;
+    p.jumps = 0;
 
     // 生存模式：摔落、溺水、怪物，以及慢慢回血
     attackTimer.current = Math.max(0, attackTimer.current - dt);
@@ -409,6 +417,21 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       takeDamage(fallDamage(landed), `从 ${Math.round(landed)} 格高的地方摔了下来`);
       if (active) {
         takeDamage(updateAir(p, eyeInWater(world, p), dt), '淹死了');
+        const hunger0 = p.hunger;
+        takeDamage(
+          updateHunger(p, dt, {
+            sprinting: control.sprint && moving && !p.inWater && !p.flying,
+            swimming: p.inWater && moving,
+            jumps,
+            peaceful: peacefulRef.current,
+          }),
+          '饿死了',
+        );
+        if (p.hunger !== lastHunger.current) {
+          lastHunger.current = p.hunger;
+          onHunger(p.hunger);
+          if (hunger0 > 6 && p.hunger <= 6) onMessage('肚子饿了，快吃点东西');
+        }
         const air = Math.ceil(p.air);
         if (air !== lastAir.current) {
           lastAir.current = air;

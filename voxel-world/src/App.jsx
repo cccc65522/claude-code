@@ -8,9 +8,9 @@ import { World } from './game/world.js';
 import { createPlayer } from './game/player.js';
 import { createAtlasCanvas } from './game/atlas.js';
 import { HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
-import { SURVIVAL_HOTBAR, itemName, sanitizeInventory } from './game/items.js';
+import { SURVIVAL_HOTBAR, bestFood, eat, itemName, sanitizeInventory } from './game/items.js';
 import { craft } from './game/crafting.js';
-import { MAX_AIR, MAX_HEALTH, sanitizeHealth } from './game/health.js';
+import { MAX_AIR, MAX_HEALTH, MAX_HUNGER, sanitizeHealth, sanitizeHunger } from './game/health.js';
 import { Sim } from './game/sim.js';
 import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
 
@@ -70,6 +70,7 @@ function buildSession(save) {
     player = createPlayer(p.pos, Number(p.yaw) || 0, Number(p.pitch) || 0);
     player.flying = !!p.flying;
     player.health = sanitizeHealth(p.health);
+    player.hunger = sanitizeHunger(p.hunger);
   } else {
     player = createPlayer(world.spawnPoint(), Math.PI / 4, -0.2);
   }
@@ -97,6 +98,7 @@ export default function App() {
   const [health, setHealth] = useState(session.player.health);
   const [dead, setDead] = useState(null); // 死了的话是死因
   const [air, setAir] = useState(MAX_AIR);
+  const [hunger, setHunger] = useState(session.player.hunger);
   const [, setInvVersion] = useState(0); // 背包变化时刷新界面
 
   const hotbar = mode === 'creative' ? HOTBAR : SURVIVAL_HOTBAR;
@@ -140,6 +142,7 @@ export default function App() {
   useEffect(() => {
     setFlying(session.player.flying);
     setHealth(session.player.health);
+    setHunger(session.player.hunger);
     setAir(MAX_AIR);
     setDead(null);
     setMode(session.mode);
@@ -170,7 +173,7 @@ export default function App() {
     writeSave({
       seed: session.world.seed,
       edits: session.world.exportEdits(),
-      player: { pos: p.pos, yaw: p.yaw, pitch: p.pitch, flying: p.flying, health: p.health },
+      player: { pos: p.pos, yaw: p.yaw, pitch: p.pitch, flying: p.flying, health: p.health, hunger: p.hunger },
       time: timeRef.current,
       mode: modeRef.current,
       inventory: session.inventory,
@@ -259,6 +262,9 @@ export default function App() {
     p.sinceHurt = 99;
     p.air = MAX_AIR;
     setAir(MAX_AIR);
+    p.hunger = MAX_HUNGER;
+    p.exhaustion = 0;
+    setHunger(MAX_HUNGER);
     session.monsters.length = 0;
     setHealth(p.health);
     setFlying(false);
@@ -266,6 +272,29 @@ export default function App() {
     save();
     lockPointer();
   };
+
+  // 吃东西：id 不给就自动挑一样
+  const eatFood = useCallback(
+    (id) => {
+      if (modeRef.current !== 'survival') return;
+      const p = playerRef.current;
+      const food = id ?? bestFood(session.inventory, p.hunger, MAX_HUNGER);
+      if (food === null) {
+        showToast('背包里没有吃的：砍树叶有时掉苹果，挖草方块有时挖到野莓');
+        return;
+      }
+      const r = eat(session.inventory, p, food, MAX_HUNGER);
+      if (!r.ok) {
+        showToast(r.reason);
+        return;
+      }
+      setHunger(p.hunger);
+      onInventory();
+      onEdit();
+      showToast(`吃了${itemName(food)}，饱食度 +${r.gained / 2}`);
+    },
+    [session, showToast, onInventory, onEdit],
+  );
 
   const onCraft = (recipe, times) => {
     const n = craft(session.inventory, recipe, times);
@@ -300,6 +329,7 @@ export default function App() {
       const slot = key === null ? -1 : HOTBAR_KEYS.indexOf(key);
       if (slot >= 0 && slot < hotbarRef.current.length) selectSlot(slot);
       if (e.code === 'KeyF' && !e.repeat) toggleFly();
+      if (e.code === 'KeyR' && !e.repeat) eatFood();
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       input.keys.add(e.code);
     };
@@ -351,7 +381,7 @@ export default function App() {
       window.removeEventListener('wheel', onWheel);
       document.removeEventListener('pointerlockchange', onLockChange);
     };
-  }, [input, selectSlot, toggleFly, openBag, closeBag]);
+  }, [input, selectSlot, toggleFly, openBag, closeBag, eatFood]);
 
   const play = () => {
     setStarted(true);
@@ -427,6 +457,7 @@ export default function App() {
         onHealth={setHealth}
         onDeath={onDeath}
         onAir={setAir}
+        onHunger={setHunger}
         monsters={session.monsters}
         onEdit={onEdit}
         onFlyingChange={setFlying}
@@ -448,6 +479,7 @@ export default function App() {
         hideHotbar={bagOpen}
         health={mode === 'survival' ? health : null}
         air={air}
+        hunger={hunger}
       />
 
       {isTouch && started && !paused && !bagOpen && !dead && (
@@ -457,6 +489,7 @@ export default function App() {
           onToggleFly={toggleFly}
           onPause={() => setPaused(true)}
           onBag={mode === 'survival' ? openBag : null}
+          onEat={mode === 'survival' ? () => eatFood() : null}
         />
       )}
 
@@ -465,6 +498,8 @@ export default function App() {
           inventory={session.inventory}
           atlasUrl={atlas.url}
           onCraft={onCraft}
+          onEat={eatFood}
+          hunger={hunger}
           onClose={() => closeBag(true)}
           isTouch={isTouch}
         />
@@ -498,14 +533,14 @@ export default function App() {
                 <li>右下角：挖 / 放 / 跳，按住可以连续</li>
                 <li>水里按“跳”往上游，贴着岸按“跳”上岸</li>
                 <li>火把要立在方块上，晚上能照亮周围；水会往低处和四周流</li>
-                <li>底部快捷栏：选方块；生存模式点右上角“背包”合成</li>
+                <li>底部快捷栏：选方块；生存模式点右上角“背包”合成、“吃”吃东西</li>
               </ul>
             ) : (
               <ul className="help">
                 <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动，<kbd>Shift</kbd> 跑，<kbd>空格</kbd> 跳</li>
                 <li>鼠标转视角，左键挖，右键放，按住可以连续</li>
                 <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块；<kbd>0</kbd>、<kbd>-</kbd>：生存模式是空桶、水桶，创造模式是火把、水</li>
-                <li><kbd>E</kbd> 打开背包和合成（生存模式）</li>
+                <li><kbd>E</kbd> 打开背包和合成，<kbd>R</kbd> 吃东西（生存模式）</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
                 <li>水里按 <kbd>空格</kbd> 往上游、<kbd>C</kbd> 往下潜，贴着岸按 <kbd>空格</kbd> 上岸</li>
                 <li>火把要立在方块上，晚上能照亮周围；水会往低处和四周流</li>
@@ -523,7 +558,7 @@ export default function App() {
             </div>
             <p className="mode-note">
               {mode === 'survival'
-                ? '有 10 颗心，从 4 格以上摔下来会掉血，掉进水里不会；在水下待太久会溺水；夜里黑暗处会出现夜影（可以在下面切换成和平），左键打它们；不受伤一会儿会慢慢回血。按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
+                ? '有 10 颗心和 10 个鸡腿（饱食度）：会慢慢饿，跑跳、游泳、挖东西饿得更快，饱食度够才回血，饿到底会掉血，砍树叶找苹果、挖草方块找野莓，按 R 吃；从 4 格以上摔下来会掉血，掉进水里不会；在水下待太久会溺水；夜里黑暗处会出现夜影（可以在下面切换成和平），左键打它们；不受伤一会儿会慢慢回血。按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
                 : '方块无限，随便放。'}
             </p>
             {mode === 'survival' && (
@@ -539,7 +574,7 @@ export default function App() {
                 </div>
                 <p className="mode-note">
                   {peaceful
-                    ? '和平：不会出现夜影，已经出现的也会消失。摔落和溺水照样会受伤。'
+                    ? '和平：不会出现夜影，已经出现的也会消失；不会饿，还会慢慢吃饱。摔落和溺水照样会受伤。'
                     : '夜里黑暗处会出现夜影，火把照着的地方不会有。'}
                 </p>
               </>
