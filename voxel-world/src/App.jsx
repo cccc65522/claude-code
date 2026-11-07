@@ -325,7 +325,7 @@ export default function App() {
         openBag();
         return;
       }
-      const key = e.code.startsWith('Digit') ? e.code.slice(5) : e.code === 'Minus' ? '-' : null;
+      const key = e.code.startsWith('Digit') ? e.code.slice(5) : e.code === 'Minus' ? '-' : e.code === 'Equal' ? '=' : null;
       const slot = key === null ? -1 : HOTBAR_KEYS.indexOf(key);
       if (slot >= 0 && slot < hotbarRef.current.length) selectSlot(slot);
       if (e.code === 'KeyF' && !e.repeat) toggleFly();
@@ -533,13 +533,15 @@ export default function App() {
                 <li>右下角：挖 / 放 / 跳，按住可以连续</li>
                 <li>水里按“跳”往上游，贴着岸按“跳”上岸</li>
                 <li>火把要立在方块上，晚上能照亮周围；水会往低处和四周流</li>
-                <li>底部快捷栏：选方块；生存模式点右上角“背包”合成、“吃”吃东西</li>
+                <li>底部快捷栏：选方块；最后一格是麦种，对着草地按“放”种地</li>
+                <li>生存模式点右上角“背包”合成、“吃”吃东西</li>
               </ul>
             ) : (
               <ul className="help">
                 <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动，<kbd>Shift</kbd> 跑，<kbd>空格</kbd> 跳</li>
                 <li>鼠标转视角，左键挖，右键放，按住可以连续</li>
-                <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块；<kbd>0</kbd>、<kbd>-</kbd>：生存模式是空桶、水桶，创造模式是火把、水</li>
+                <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块；<kbd>0</kbd>、<kbd>-</kbd>：生存模式是空桶、水桶，创造模式是火把、水；<kbd>=</kbd> 麦种</li>
+                <li>选麦种对着草地或泥土右键种地（生存模式要有石锄），附近有水长得快</li>
                 <li><kbd>E</kbd> 打开背包和合成，<kbd>R</kbd> 吃东西（生存模式）</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
                 <li>水里按 <kbd>空格</kbd> 往上游、<kbd>C</kbd> 往下潜，贴着岸按 <kbd>空格</kbd> 上岸</li>

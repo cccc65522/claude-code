@@ -323,6 +323,90 @@ painters[TILE.pie] = (put, rand) => {
   }
 };
 
+// ---------- 耕种 ----------
+painters[TILE.farmland] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) {
+    const furrow = y % 4 === 0 || y % 4 === 1;
+    for (let x = 0; x < TILE_PX; x++) {
+      const k = (furrow ? 0.72 : 1) * (1 + (rand() - 0.5) * 0.25);
+      put(x, y, 104 * k, 70 * k, 44 * k);
+    }
+  }
+};
+
+// 小麦四个阶段：越来越高，最后变成金黄色、顶上有麦穗
+function wheat(stage) {
+  return (put, rand) => {
+    transparent(put);
+    const height = [4, 7, 11, 14][stage];
+    const stems = [1, 4, 7, 10, 13];
+    for (const sx of stems) {
+      const h = height - Math.floor(rand() * 2);
+      for (let i = 0; i < h; i++) {
+        const y = 15 - i;
+        const x = sx + (i > h / 2 && sx % 2 ? 1 : 0);
+        const k = 1 + (rand() - 0.5) * 0.2;
+        if (stage === 3) {
+          const head = i >= h - 4;
+          if (head) {
+            put(x, y, 226 * k, 186 * k, 84 * k);
+            if (x + 1 < TILE_PX) put(x + 1, y, 200 * k, 160 * k, 64 * k);
+          } else {
+            put(x, y, 190 * k, 170 * k, 80 * k);
+          }
+        } else {
+          const g = stage === 2 && i >= h - 3 ? [120, 170, 60] : [70, 150, 50];
+          put(x, y, g[0] * k, g[1] * k, g[2] * k);
+        }
+      }
+    }
+  };
+}
+for (let s = 0; s < 4; s++) painters[TILE.wheat0 + s] = wheat(s);
+
+painters[TILE.seeds] = (put, rand) => {
+  transparent(put);
+  for (const [x, y] of [[4, 6], [8, 4], [11, 7], [6, 10], [10, 11], [3, 12], [12, 3]]) {
+    const k = 1 + (rand() - 0.5) * 0.2;
+    put(x, y, 120 * k, 160 * k, 60 * k);
+    put(x + 1, y, 90 * k, 130 * k, 40 * k);
+  }
+};
+painters[TILE.wheatItem] = (put, rand) => {
+  transparent(put);
+  for (let i = 0; i < 12; i++) {
+    for (const off of [-2, 0, 2]) {
+      const x = 7 + off + Math.round((i - 6) * 0.12 * off);
+      const y = 14 - i;
+      if (x < 0 || x >= TILE_PX) continue;
+      const k = 1 + (rand() - 0.5) * 0.2;
+      const head = i > 6;
+      put(x, y, (head ? 230 : 200) * k, (head ? 190 : 176) * k, (head ? 80 : 90) * k);
+    }
+  }
+};
+painters[TILE.bread] = (put, rand) => {
+  transparent(put);
+  for (let y = 5; y <= 12; y++) for (let x = 1; x <= 14; x++) {
+    const d = Math.hypot((x - 7.5) / 6.8, (y - 9) / 4);
+    if (d > 1) continue;
+    const k = 1 + (rand() - 0.5) * 0.1;
+    const crust = y <= 7 || d > 0.8;
+    const cut = y <= 8 && (x === 4 || x === 8 || x === 12);
+    if (cut) put(x, y, 240 * k, 210 * k, 150 * k);
+    else if (crust) put(x, y, 180 * k, 110 * k, 50 * k);
+    else put(x, y, 214 * k, 150 * k, 80 * k);
+  }
+};
+painters[TILE.stoneHoe] = (put, rand) => {
+  transparent(put);
+  handle(put, rand, 2, 11);
+  for (const [x, y] of [[9, 2], [10, 2], [11, 2], [12, 2], [12, 3], [13, 3], [13, 4], [10, 3], [11, 3]]) {
+    const k = 1 + (rand() - 0.5) * 0.15;
+    put(x, y, STONE_HEAD[0] * k, STONE_HEAD[1] * k, STONE_HEAD[2] * k);
+  }
+};
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

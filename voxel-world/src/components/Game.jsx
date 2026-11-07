@@ -4,14 +4,15 @@ import * as THREE from 'three';
 import { ChunkRenderer } from '../game/renderer.js';
 import { raycast } from '../game/raycast.js';
 import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer } from '../game/player.js';
-import { AIR, BLOCKS, TORCH, WATER, isLiquid } from '../game/blocks.js';
+import { AIR, BLOCKS, FARMLAND, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
+import { GROW_STEP, cropDrops, plantTarget } from '../game/farming.js';
 import {
   BUCKET, SURVIVAL_HOTBAR, WATER_BUCKET, addItem, countOf, dropFor, itemName, takeItem,
 } from '../game/items.js';
 import { digInfo, toolKindName } from '../game/tools.js';
 import { EXHAUSTION, addExhaustion, fallDamage, hurt, regenerate, updateAir, updateHunger } from '../game/health.js';
 import { attackDamage } from '../game/tools.js';
-import { COAL, bonusDrop } from '../game/items.js';
+import { COAL, SEEDS, STONE_HOE, bonusDrop } from '../game/items.js';
 import {
   damageMonster, rayHitMonster, shouldRemove, stepMonster, trySpawn, DISSOLVE_SECONDS,
 } from '../game/monsters.js';
@@ -219,6 +220,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
   const fluidTimer = useRef(0);
+  const growTimer = useRef(0);
   const flicker = useMemo(() => ({ base: new THREE.Color('#ffc27a'), t: 0 }), []);
   const lastAir = useRef(null);
   const lastHunger = useRef(null);
@@ -240,15 +242,23 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const dig = (t) => {
     const survival = modeRef.current === 'survival';
     const [x, y, z] = t.hit;
-    const torchAbove = world.get(x, y + 1, z) === TORCH;
+    const above = world.get(x, y + 1, z);
     const dirty = sim.edit(x, y, z, AIR);
     if (!dirty) return;
     renderer.rebuildKeys(dirty);
     if (survival) {
-      pickUp(dropFor(t.block));
-      pickUp(bonusDrop(t.block)); // 树叶里的苹果、草里的野莓
+      if (isCrop(t.block)) {
+        for (const [id, n] of cropDrops(t.block)) for (let i = 0; i < n; i++) pickUp(id); // 收割
+      } else {
+        pickUp(dropFor(t.block));
+        pickUp(bonusDrop(t.block)); // 树叶里的苹果、草里的野莓和麦种
+      }
       addExhaustion(playerRef.current, EXHAUSTION.dig);
-      if (torchAbove && world.get(x, y + 1, z) !== TORCH) pickUp(TORCH); // 掉下来的火把也捡起来
+      // 上面的火把 / 庄稼跟着掉下来，也捡起来
+      if (world.get(x, y + 1, z) !== above) {
+        if (above === TORCH) pickUp(TORCH);
+        if (isCrop(above)) for (const [id, n] of cropDrops(above)) for (let i = 0; i < n; i++) pickUp(id);
+      }
       onInventory();
     }
     onEdit();
@@ -268,13 +278,38 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     onEdit();
   };
 
+  // 用麦种对着草地 / 泥土 / 耕地右键：需要的话先用锄头翻土，再种下
+  const plant = (t) => {
+    if (!t) return;
+    const survival = modeRef.current === 'survival';
+    const target = plantTarget(world, t.hit);
+    if (target.error) return onMessage(target.error);
+    if (target.till && survival && countOf(inventory, STONE_HOE) <= 0) {
+      return onMessage('要先翻土：用石头和木棍合成石锄');
+    }
+    const dirty = new Set();
+    const add = (d) => d && d.forEach((k) => dirty.add(k));
+    if (target.till) add(sim.edit(...target.base, FARMLAND));
+    add(sim.edit(...target.above, WHEAT_BASE));
+    if (!dirty.size) return;
+    renderer.rebuildKeys(dirty);
+    if (survival) {
+      takeItem(inventory, SEEDS);
+      addExhaustion(playerRef.current, EXHAUSTION.dig);
+      onInventory();
+    }
+    onEdit();
+  };
+
   const place = (t) => {
     const survival = modeRef.current === 'survival';
     const selected = selectedRef.current;
     if (survival && countOf(inventory, selected) <= 0) {
+      if (selected === SEEDS) return onMessage('没有麦种了：挖草方块有时能挖到，收割小麦也会给');
       return onMessage(`没有${itemName(selected)}了，${selected < 100 ? '去背包里合成或者挖一些' : '可以在背包里合成'}`);
     }
     if (selected === BUCKET) return fillBucket();
+    if (selected === SEEDS) return plant(t);
     if (!t) return;
     const x = t.hit[0] + t.normal[0];
     const y = t.hit[1] + t.normal[1];
@@ -500,6 +535,19 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       }
     }
 
+    // 庄稼生长
+    if (active) {
+      growTimer.current += dt;
+      if (growTimer.current >= GROW_STEP) {
+        growTimer.current = 0;
+        const dirty = sim.grow();
+        if (dirty) {
+          renderer.rebuildKeys(dirty);
+          onEdit();
+        }
+      }
+    }
+
     // 水流
     if (active) {
       fluidTimer.current += dt;
@@ -622,6 +670,8 @@ function WorldScene(props) {
     [texture],
   );
   const renderer = useMemo(() => new ChunkRenderer(world, materials.solid, materials.water), [world, materials]);
+  // 开发服务器里方便调试：可以手动重建区块（打包后没有）
+  if (import.meta.env.DEV && window.__voxel) window.__voxel.renderer = renderer;
   useEffect(() => () => {
     renderer.dispose();
     Object.values(materials).forEach((m) => m.dispose());

@@ -15,6 +15,10 @@ export const WATER = 12; // 水源
 export const TORCH = 13;
 export const COAL_ORE = 14;
 export const IRON_ORE = 15;
+export const FARMLAND = 16;
+// 小麦：27–30，四个生长阶段（30 成熟）
+export const WHEAT_BASE = 27;
+export const WHEAT_STAGES = 4;
 // 流动的水：20–26，水位 1–7（7 最满，离水源最近）
 export const FLOW_BASE = 19;
 export const FLOW_MAX = 7;
@@ -51,6 +55,15 @@ export const TILE = {
   apple: 27,
   berries: 28,
   pie: 29,
+  farmland: 30,
+  wheat0: 31,
+  wheat1: 32,
+  wheat2: 33,
+  wheat3: 34,
+  seeds: 35,
+  wheatItem: 36,
+  bread: 37,
+  stoneHoe: 38,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });
@@ -69,11 +82,24 @@ export const BLOCKS = {
   [BEDROCK]: { name: '基岩', tiles: all(TILE.bedrock), unbreakable: true },
   [COAL_ORE]: { name: '煤矿石', tiles: all(TILE.coalOre) },
   [IRON_ORE]: { name: '铁矿石', tiles: all(TILE.ironOre) },
+  [FARMLAND]: { name: '耕地', tiles: { top: TILE.farmland, side: TILE.dirt, bottom: TILE.dirt } },
   // 水源：半透明、能穿过、能游泳；会往低处和四周流
   [WATER]: { name: '水', tiles: all(TILE.water), transparent: true, liquid: true, passable: true },
   // 火把：只能立在实心方块上，会发光
   [TORCH]: { name: '火把', tiles: all(TILE.torch), transparent: true, passable: true, shape: 'torch', light: 14 },
 };
+
+// 小麦：交叉的两片贴图，能穿过，一碰就掉，只能长在耕地上
+for (let stage = 0; stage < WHEAT_STAGES; stage++) {
+  BLOCKS[WHEAT_BASE + stage] = {
+    name: stage === WHEAT_STAGES - 1 ? '成熟的小麦' : '小麦苗',
+    tiles: all(TILE.wheat0 + stage),
+    transparent: true,
+    passable: true,
+    shape: 'crop',
+    stage,
+  };
+}
 
 for (let level = 1; level <= FLOW_MAX; level++) {
   BLOCKS[FLOW_BASE + level] = {
@@ -87,10 +113,11 @@ for (let level = 1; level <= FLOW_MAX; level++) {
 }
 
 // 快捷栏里能放的方块（按 1-9、0 选择）
-export const HOTBAR = [GRASS, DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, BRICK, TORCH, WATER];
+// 第 12 格（=）是麦种（物品 112，定义在 items.js）
+export const HOTBAR = [GRASS, DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, BRICK, TORCH, WATER, 112];
 
 // 快捷栏每格对应的按键
-export const HOTBAR_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-'];
+export const HOTBAR_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
 
 export function isLiquid(id) {
   return BLOCKS[id]?.liquid === true;
@@ -111,6 +138,14 @@ export function waterLevel(id) {
 }
 
 // 人能不能穿过（空气、水、火把）
+export function isCrop(id) {
+  return id >= WHEAT_BASE && id < WHEAT_BASE + WHEAT_STAGES;
+}
+
+export function cropStage(id) {
+  return isCrop(id) ? id - WHEAT_BASE : -1;
+}
+
 export function isPassable(id) {
   return id === AIR || BLOCKS[id]?.passable === true;
 }

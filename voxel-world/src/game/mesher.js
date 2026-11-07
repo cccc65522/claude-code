@@ -3,7 +3,7 @@ import { lightBrightness } from './light.js';
 import { CHUNK } from './world.js';
 
 export const ATLAS_COLS = 4;
-export const ATLAS_ROWS = 8;
+export const ATLAS_ROWS = 12;
 
 // 每个面的四个角。三角形用 (0,1,2)(2,1,3)，从外面看是逆时针。
 // uv 的 v=1 是贴图上方，所以侧面的草在上面。
@@ -45,6 +45,34 @@ function makeBuffers() {
 const TORCH_MIN = 7 / 16;
 const TORCH_MAX = 9 / 16;
 const TORCH_TOP = 10 / 16;
+
+// 庄稼：两片沿对角线交叉的贴图，正反两面都画
+const CROSS = [
+  [[0.1, 0.1], [0.9, 0.9]],
+  [[0.1, 0.9], [0.9, 0.1]],
+];
+function addCross(b, tile, x, y, z, light) {
+  for (const [[ax, az], [bx, bz]] of CROSS) {
+    for (const back of [false, true]) {
+      const start = b.positions.length / 3;
+      const corners = [
+        [ax, 0, az, 0, 0],
+        [bx, 0, bz, 1, 0],
+        [ax, 1, az, 0, 1],
+        [bx, 1, bz, 1, 1],
+      ];
+      for (const [px, py, pz, u, v] of corners) {
+        b.positions.push(x + px, y + py, z + pz);
+        b.normals.push(0, 1, 0); // 朝上，和地面一样亮
+        pushUv(b, tile, u, v);
+        b.colors.push(1, 1, 1);
+        b.light.push(light);
+      }
+      if (back) b.indices.push(start, start + 2, start + 1, start + 1, start + 2, start + 3);
+      else b.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
+    }
+  }
+}
 
 function addTorch(b, tile, x, y, z) {
   for (const face of FACES) {
@@ -139,6 +167,11 @@ export function buildChunkGeometry(world, cx, cz) {
             }
             water.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
           }
+          continue;
+        }
+
+        if (def.shape === 'crop') {
+          addCross(solid, def.tiles.side, x, y, z, lightBrightness(world.lightAt(x, y, z)));
           continue;
         }
 

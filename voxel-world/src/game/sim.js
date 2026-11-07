@@ -1,4 +1,5 @@
-import { AIR, TORCH } from './blocks.js';
+import { AIR, TORCH, isCrop } from './blocks.js';
+import { growCrops, supportedBy } from './farming.js';
 import { Fluids } from './fluid.js';
 import { computeLight, relight } from './light.js';
 
@@ -8,6 +9,9 @@ export class Sim {
   constructor(world) {
     this.world = world;
     this.fluids = new Fluids(world);
+    // 所有庄稼所在的格子（长大要用）
+    this.crops = new Set();
+    for (let i = 0; i < world.data.length; i++) if (isCrop(world.data[i])) this.crops.add(i);
     computeLight(world);
     // 读档后，改过的地方可能还有没流完的水
     for (const key of world.edits.keys()) {
@@ -32,8 +36,14 @@ export class Sim {
     if (!world.set(x, y, z, id)) return null;
     const changed = [world.index(x, y, z)];
 
-    // 脚下的方块没了，上面的火把掉下来
-    if (world.get(x, y + 1, z) === TORCH && !world.isSolidBlock(x, y, z)) {
+    if (isCrop(id)) this.crops.add(world.index(x, y, z));
+    else this.crops.delete(world.index(x, y, z));
+
+    // 脚下的方块没了，上面的火把掉下来；耕地没了，上面的庄稼也没了
+    const above = world.get(x, y + 1, z);
+    const loseTorch = above === TORCH && !world.isSolidBlock(x, y, z);
+    const loseCrop = isCrop(above) && !supportedBy(above, world.get(x, y, z));
+    if (loseTorch || loseCrop) {
       world.set(x, y + 1, z, AIR);
       changed.push(world.index(x, y + 1, z));
       this.fluids.schedule(x, y + 1, z);
@@ -44,6 +54,13 @@ export class Sim {
     // 放下或挖掉不透明的方块也会改变光的走向，所以每次都重算（只有光变了的区块才重建）
     this.chunkKeysFor(relight(world), dirty);
     return dirty;
+  }
+
+  // 庄稼生长：返回要重建的区块，没长就是 null
+  grow(rand) {
+    if (!this.crops.size) return null;
+    const grown = growCrops(this.world, this.crops, rand);
+    return grown.length ? this.chunkKeysFor(grown) : null;
   }
 
   // 推进一步水流

@@ -793,3 +793,126 @@ test('果派的配方', () => {
   assert.equal(countOf(inv, PIE), 1);
   assert.deepEqual(Object.keys(inv), [String(PIE)]);
 });
+
+// ---------- 耕种 ----------
+import { FARMLAND, WHEAT_BASE, WHEAT_STAGES, isCrop, cropStage } from '../src/game/blocks.js';
+import { SEEDS, WHEAT, BREAD, STONE_HOE } from '../src/game/items.js';
+import { plantTarget, isWet, growCrops, cropDrops } from '../src/game/farming.js';
+
+function farmWorld() {
+  const w = floorWorld();
+  for (let x = 0; x < w.sizeX; x++) for (let z = 0; z < w.sizeZ; z++) w.rawSet(x, 1, z, GRASS_ID);
+  return w;
+}
+
+test('种地：草地、泥土要先翻土，耕地直接种；上面要空着', () => {
+  const w = farmWorld();
+  assert.deepEqual(plantTarget(w, [5, 1, 5]).till, true);
+  w.set(5, 1, 5, FARMLAND);
+  assert.equal(plantTarget(w, [5, 1, 5]).till, false);
+  assert.deepEqual(plantTarget(w, [5, 1, 5]).above, [5, 2, 5]);
+  assert.ok(plantTarget(w, [5, 0, 5]).error, '石头上不能种');
+  w.set(5, 2, 5, WHEAT_BASE);
+  assert.ok(plantTarget(w, [5, 1, 5]).error, '已经种了');
+  assert.equal(digInfo(WHEAT_BASE, {}).time, 0, '庄稼一碰就掉');
+  assert.equal(w.isSolid(5, 2, 5), false, '庄稼能穿过');
+});
+
+test('耕地 4 格内有水算湿润；湿润的长得快很多', () => {
+  const w = farmWorld();
+  assert.equal(isWet(w, 10, 1, 10), false);
+  w.set(14, 1, 10, WATER);
+  assert.equal(isWet(w, 10, 1, 10), true);
+  assert.equal(isWet(w, 9, 1, 10), false, '5 格远就不算');
+
+  const crops = new Set();
+  for (let z = 4; z < 12; z++) {
+    w.set(11, 1, z, FARMLAND);
+    w.set(11, 2, z, WHEAT_BASE); // 靠水
+    w.set(2, 1, z, FARMLAND);
+    w.set(2, 2, z, WHEAT_BASE); // 干地
+    crops.add(w.index(11, 2, z));
+    crops.add(w.index(2, 2, z));
+  }
+  let s = 7;
+  const rand = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let t = 0; t < 40; t++) growCrops(w, crops, rand); // 40 秒
+  let wet = 0;
+  let dry = 0;
+  for (let z = 4; z < 12; z++) {
+    wet += cropStage(w.get(11, 2, z));
+    dry += cropStage(w.get(2, 2, z));
+  }
+  assert.ok(wet > dry * 1.5, `湿 ${wet} 干 ${dry}`);
+  for (let t = 0; t < 2000; t++) growCrops(w, crops, rand);
+  assert.equal(w.get(2, 2, 4), WHEAT_BASE + WHEAT_STAGES - 1, '最终都会成熟');
+  assert.equal(w.get(2, 2, 4), WHEAT_BASE + 3);
+});
+
+test('收割：成熟的给小麦和种子，没熟的退回种子', () => {
+  assert.deepEqual(cropDrops(WHEAT_BASE + 1), [[SEEDS, 1]]);
+  assert.deepEqual(cropDrops(WHEAT_BASE + 3, () => 0.2), [[WHEAT, 1], [SEEDS, 1]]);
+  assert.deepEqual(cropDrops(WHEAT_BASE + 3, () => 0.8), [[WHEAT, 1], [SEEDS, 2]]);
+  assert.deepEqual(cropDrops(STONE), []);
+  assert.equal(dropFor(FARMLAND), DIRT_ID);
+  assert.equal(dropFor(WHEAT_BASE + 3), null);
+  assert.equal(bonusDrop(GRASS_ID, () => 0.3), SEEDS, '草方块里挖出麦种');
+});
+
+test('Sim：挖掉耕地上面的庄稼会没了；水流过会冲掉庄稼；庄稼会被记住用来生长', () => {
+  const w = farmWorld();
+  const sim = new Sim(w);
+  sim.edit(8, 1, 8, FARMLAND);
+  sim.edit(8, 2, 8, WHEAT_BASE);
+  assert.ok(sim.crops.has(w.index(8, 2, 8)));
+  sim.edit(8, 1, 8, DIRT_ID);
+  assert.equal(w.get(8, 2, 8), AIR, '耕地变回泥土，庄稼没了');
+
+  sim.edit(8, 1, 8, FARMLAND);
+  sim.edit(8, 2, 8, WHEAT_BASE + 2);
+  runFluids(sim);
+  assert.equal(w.get(8, 2, 8), WHEAT_BASE + 2, '没有水时庄稼不会被水流逻辑动到');
+  sim.edit(6, 2, 8, WATER);
+  runFluids(sim);
+  assert.ok(isFlowing(w.get(8, 2, 8)), '被水冲掉了');
+
+  // 读档时会找到已有的庄稼
+  const w2 = farmWorld();
+  w2.set(3, 1, 3, FARMLAND);
+  w2.set(3, 2, 3, WHEAT_BASE);
+  const sim2 = new Sim(w2);
+  assert.equal(sim2.crops.size, 1);
+  let grown = null;
+  for (let i = 0; i < 500 && !grown; i++) grown = sim2.grow(() => 0);
+  assert.ok(grown.has('0,0'));
+  assert.equal(w2.get(3, 2, 3), WHEAT_BASE + 1);
+});
+
+test('网格：庄稼是两片交叉的贴图（正反面），不挡住下面耕地的顶面', () => {
+  const w = floorWorld(1);
+  w.set(5, 1, 5, FARMLAND);
+  w.set(5, 2, 5, WHEAT_BASE + 3);
+  const g = buildChunkGeometry(w, 0, 0);
+  let cropVerts = 0;
+  let farmTop = 0;
+  for (let i = 0; i < g.positions.length; i += 3) {
+    const [x, y, z] = [g.positions[i], g.positions[i + 1], g.positions[i + 2]];
+    if (y > 2 && y <= 3 && x > 5 && x < 6 && z > 5 && z < 6) cropVerts++;
+    if (y === 2 && g.normals[i + 1] === 1 && x >= 5 && x <= 6 && z >= 5 && z <= 6) farmTop++;
+  }
+  assert.equal(cropVerts, 8, '两片 × 正反两面 × 上面两个顶点');
+  assert.ok(farmTop >= 4, '耕地顶面还在');
+});
+
+test('锄头和面包的配方', () => {
+  const inv = {};
+  addItem(inv, STONE_B, 2);
+  addItem(inv, STICK, 2);
+  assert.equal(craft(inv, recipe('stoneHoe')), 1);
+  assert.equal(countOf(inv, STONE_HOE), 1);
+  addItem(inv, WHEAT, 7);
+  assert.equal(craft(inv, recipe('bread'), 9), 2);
+  assert.equal(countOf(inv, BREAD), 2);
+  assert.ok(foodValue(BREAD) > foodValue(APPLE));
+  assert.ok(isCrop(WHEAT_BASE) && !isCrop(FARMLAND));
+});

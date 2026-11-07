@@ -1,4 +1,4 @@
-import { AIR, TORCH, WATER, FLOW_MAX, flowId, isFlowing, isLiquid, waterLevel } from './blocks.js';
+import { AIR, TORCH, WATER, FLOW_MAX, flowId, isCrop, isFlowing, isLiquid, waterLevel } from './blocks.js';
 
 // 流动的水，规则和常见的方块游戏类似（自己实现的简化版）：
 // - 水源（WATER）永远不变，除非被玩家挖掉或者放方块替换
@@ -13,7 +13,7 @@ const NEIGHBORS = [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 
 
 // 水能流进去的格子
 export function canFlowInto(id) {
-  return id === AIR || id === TORCH || isFlowing(id);
+  return id === AIR || id === TORCH || isCrop(id) || isFlowing(id);
 }
 
 // 某一格水应该变成什么（不是水能占的格子就原样返回）
@@ -38,7 +38,8 @@ export function desiredFluid(world, x, y, z) {
   }
 
   if (sources >= 2 && supported) return WATER;
-  if (level <= 0) return id === TORCH ? TORCH : AIR;
+  // 没有水流过来：火把和庄稼保持原样
+  if (level <= 0) return id === TORCH || isCrop(id) ? id : AIR;
   return flowId(Math.min(level, FLOW_MAX));
 }
 

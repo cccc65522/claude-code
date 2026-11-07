@@ -1,5 +1,5 @@
 import {
-  AIR, BLOCKS, BRICK, COAL_ORE, DIRT, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SNOW, STONE, TILE, TORCH,
+  AIR, BLOCKS, BRICK, COAL_ORE, DIRT, FARMLAND, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SNOW, STONE, TILE, TORCH, isCrop,
 } from './blocks.js';
 
 // 物品 = 方块（id < 100）+ 不能放的材料（id >= 100）
@@ -15,6 +15,10 @@ export const WATER_BUCKET = 108;
 export const APPLE = 109;
 export const BERRIES = 110;
 export const PIE = 111;
+export const SEEDS = 112;
+export const WHEAT = 113;
+export const BREAD = 114;
+export const STONE_HOE = 115;
 
 export const ITEMS = {
   [STICK]: { name: '木棍', icon: TILE.stick },
@@ -29,6 +33,10 @@ export const ITEMS = {
   [APPLE]: { name: '苹果', icon: TILE.apple, food: 4 },
   [BERRIES]: { name: '野莓', icon: TILE.berries, food: 2 },
   [PIE]: { name: '果派', icon: TILE.pie, food: 10 },
+  [SEEDS]: { name: '麦种', icon: TILE.seeds },
+  [WHEAT]: { name: '小麦', icon: TILE.wheatItem },
+  [BREAD]: { name: '面包', icon: TILE.bread, food: 6 },
+  [STONE_HOE]: { name: '石锄', icon: TILE.stoneHoe },
 };
 
 export function itemName(id) {
@@ -45,33 +53,39 @@ export function isPlaceable(id) {
 
 // 挖掉一个方块得到什么（null = 什么都没有）
 export function dropFor(blockId) {
-  if (blockId === GRASS || blockId === SNOW) return DIRT;
+  if (blockId === GRASS || blockId === SNOW || blockId === FARMLAND) return DIRT;
+  if (isCrop(blockId)) return null; // 庄稼的收获见 farming.js 的 cropDrops
   if (blockId === COAL_ORE) return COAL;
   const def = BLOCKS[blockId];
   if (!def || def.unbreakable || def.liquid) return null;
   return blockId;
 }
 
-// 生存模式的快捷栏（1–9 选方块，0 空桶，- 水桶）。工具不用选，挖的时候自动用。
-export const SURVIVAL_HOTBAR = [DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, BRICK, TORCH, BUCKET, WATER_BUCKET];
+// 生存模式的快捷栏（1–9 选方块，0 空桶，- 水桶，= 麦种）。工具不用选，挖的时候自动用。
+export const SURVIVAL_HOTBAR = [DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, BRICK, TORCH, BUCKET, WATER_BUCKET, SEEDS];
 
 // 背包里的显示顺序
 export const ITEM_ORDER = [
   DIRT, STONE, SAND, LOG, PLANKS, STICK, COAL, IRON_ORE, IRON_INGOT, LEAVES, GLASS, BRICK, TORCH,
-  STONE_PICKAXE, IRON_PICKAXE, STONE_SHOVEL, STONE_AXE, BUCKET, WATER_BUCKET, APPLE, BERRIES, PIE,
+  STONE_PICKAXE, IRON_PICKAXE, STONE_SHOVEL, STONE_AXE, STONE_HOE, BUCKET, WATER_BUCKET,
+  SEEDS, WHEAT, APPLE, BERRIES, BREAD, PIE,
 ];
 
 // ---------- 食物 ----------
-export const FOODS = [APPLE, BERRIES, PIE];
+export const FOODS = [APPLE, BERRIES, BREAD, PIE];
 
 export function foodValue(id) {
   return ITEMS[id]?.food ?? 0;
 }
 
-// 挖方块时额外掉的东西（有几率）：树叶掉苹果，草方块里挖出野莓
+// 挖方块时额外掉的东西（有几率）：树叶掉苹果，草方块里挖出野莓或麦种
 export function bonusDrop(blockId, rand = Math.random) {
-  if (blockId === LEAVES && rand() < 0.1) return APPLE;
-  if (blockId === GRASS && rand() < 0.15) return BERRIES;
+  if (blockId === LEAVES) return rand() < 0.1 ? APPLE : null;
+  if (blockId === GRASS) {
+    const r = rand();
+    if (r < 0.15) return BERRIES;
+    if (r < 0.4) return SEEDS;
+  }
   return null;
 }
 
