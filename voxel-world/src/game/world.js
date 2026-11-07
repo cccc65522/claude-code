@@ -1,0 +1,173 @@
+import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK } from './blocks.js';
+import { fbm2, hash2, mulberry32 } from './noise.js';
+
+export const CHUNK = 16;
+export const HEIGHT = 48;
+export const SEA_LEVEL = 12;
+
+export class World {
+  /**
+   * @param {object} opts
+   * @param {number} opts.seed 世界种子
+   * @param {number} [opts.chunks] 每条边有几个区块
+   * @param {boolean} [opts.generate] false 时得到一个空世界（测试用）
+   */
+  constructor({ seed = 1, chunks = 8, generate = true } = {}) {
+    this.seed = seed >>> 0;
+    this.chunks = chunks;
+    this.sizeX = chunks * CHUNK;
+    this.sizeZ = chunks * CHUNK;
+    this.sizeY = HEIGHT;
+    this.data = new Uint8Array(this.sizeX * this.sizeY * this.sizeZ);
+    // 玩家改动过的方块："x,y,z" -> id。只存改动，存档很小。
+    this.edits = new Map();
+    if (generate) this.generate();
+  }
+
+  inBounds(x, y, z) {
+    return x >= 0 && y >= 0 && z >= 0 && x < this.sizeX && y < this.sizeY && z < this.sizeZ;
+  }
+
+  index(x, y, z) {
+    return (y * this.sizeZ + z) * this.sizeX + x;
+  }
+
+  get(x, y, z) {
+    if (!this.inBounds(x, y, z)) return AIR;
+    return this.data[this.index(x, y, z)];
+  }
+
+  // 只改数据，不记作玩家改动（生成地形用）
+  rawSet(x, y, z, id) {
+    if (!this.inBounds(x, y, z)) return;
+    this.data[this.index(x, y, z)] = id;
+  }
+
+  // 玩家改方块。返回 false 表示没改（越界或者本来就是这个方块）。
+  set(x, y, z, id) {
+    if (!this.inBounds(x, y, z)) return false;
+    const i = this.index(x, y, z);
+    if (this.data[i] === id) return false;
+    this.data[i] = id;
+    this.edits.set(`${x},${y},${z}`, id);
+    return true;
+  }
+
+  // 物理碰撞用：世界边界外面当作墙，脚下当作地板
+  isSolid(x, y, z) {
+    if (y < 0) return true;
+    if (y >= this.sizeY) return false;
+    if (x < 0 || z < 0 || x >= this.sizeX || z >= this.sizeZ) return true;
+    return this.data[this.index(x, y, z)] !== AIR;
+  }
+
+  heightAt(x, z) {
+    const n = fbm2(x / 48, z / 48, this.seed, 4);
+    const hills = fbm2(x / 18, z / 18, this.seed + 77, 2);
+    return Math.floor(6 + n * 26 + hills * 6);
+  }
+
+  // 某一列最高的非空气方块的 y，没有就返回 -1
+  topY(x, z) {
+    for (let y = this.sizeY - 1; y >= 0; y--) {
+      if (this.get(x, y, z) !== AIR) return y;
+    }
+    return -1;
+  }
+
+  generate() {
+    const { sizeX, sizeZ } = this;
+    for (let z = 0; z < sizeZ; z++) {
+      for (let x = 0; x < sizeX; x++) {
+        const h = Math.min(this.heightAt(x, z), this.sizeY - 10);
+        for (let y = 0; y <= h; y++) {
+          let id;
+          if (y === 0) id = BEDROCK;
+          else if (y < h - 3) id = STONE;
+          else if (y < h) id = h <= SEA_LEVEL + 1 ? SAND : DIRT;
+          else if (h <= SEA_LEVEL + 1) id = SAND;
+          else if (h >= 29) id = SNOW;
+          else id = GRASS;
+          this.rawSet(x, y, z, id);
+        }
+      }
+    }
+    this.plantTrees();
+  }
+
+  plantTrees() {
+    const margin = 3;
+    for (let z = margin; z < this.sizeZ - margin; z++) {
+      for (let x = margin; x < this.sizeX - margin; x++) {
+        if (hash2(x, z, this.seed + 999) > 0.012) continue;
+        const y = this.topY(x, z);
+        if (this.get(x, y, z) !== GRASS) continue;
+        this.growTree(x, y + 1, z, mulberry32(this.seed ^ (x * 73856093) ^ (z * 19349663)));
+      }
+    }
+  }
+
+  growTree(x, y, z, rand) {
+    const trunk = 4 + Math.floor(rand() * 3);
+    if (y + trunk + 2 >= this.sizeY) return;
+    this.rawSet(x, y - 1, z, DIRT);
+    const top = y + trunk;
+    for (let dy = -2; dy <= 1; dy++) {
+      const r = dy >= 0 ? 1 : 2;
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          // 把四个角削掉一些，树冠更圆
+          if (Math.abs(dx) === r && Math.abs(dz) === r && (dy === 1 || rand() < 0.5)) continue;
+          const lx = x + dx;
+          const ly = top + dy;
+          const lz = z + dz;
+          if (this.get(lx, ly, lz) === AIR) this.rawSet(lx, ly, lz, LEAVES);
+        }
+      }
+    }
+    for (let i = 0; i < trunk; i++) this.rawSet(x, y + i, z, LOG);
+  }
+
+  // 出生点：地图中间最高方块上方
+  spawnPoint() {
+    const x = Math.floor(this.sizeX / 2);
+    const z = Math.floor(this.sizeZ / 2);
+    return [x + 0.5, this.topY(x, z) + 1, z + 0.5];
+  }
+
+  // 修改 (x,z) 处方块后需要重建网格的区块（在区块边上时连邻居一起）
+  affectedChunks(x, z) {
+    const cx = Math.floor(x / CHUNK);
+    const cz = Math.floor(z / CHUNK);
+    const list = [[cx, cz]];
+    const lx = x - cx * CHUNK;
+    const lz = z - cz * CHUNK;
+    if (lx === 0 && cx > 0) list.push([cx - 1, cz]);
+    if (lx === CHUNK - 1 && cx < this.chunks - 1) list.push([cx + 1, cz]);
+    if (lz === 0 && cz > 0) list.push([cx, cz - 1]);
+    if (lz === CHUNK - 1 && cz < this.chunks - 1) list.push([cx, cz + 1]);
+    return list;
+  }
+
+  exportEdits() {
+    const out = [];
+    for (const [key, id] of this.edits) {
+      const [x, y, z] = key.split(',').map(Number);
+      out.push([x, y, z, id]);
+    }
+    return out;
+  }
+
+  // 读回存档里的改动，忽略格式不对的条目
+  applyEdits(list) {
+    if (!Array.isArray(list)) return 0;
+    let n = 0;
+    for (const e of list) {
+      if (!Array.isArray(e) || e.length !== 4 || !e.every(Number.isInteger)) continue;
+      const [x, y, z, id] = e;
+      if (id < 0 || id > 255) continue;
+      if (this.set(x, y, z, id)) n++;
+    }
+    return n;
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "voxel-world",
+  "version": "1.0.0",
+  "private": true,
+  "description": "方块小镇：用 React + three.js 做的原创 3D 方块世界，可以挖方块、放方块，电脑和手机都能玩",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^9.8.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.2.1",
+    "vite": "^8.3.6"
+  }
+}
