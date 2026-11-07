@@ -345,6 +345,9 @@ class SoundEngine {
         this.tone(d, { type: 'square', from: (kind === 'hit' ? 260 : 120) * r, to: 80 * r, gain: 0.18, attack: 0.01, decay: 0.12, delay: i * 0.17, filter: 500 });
         this.burst(d, { type: 'lowpass', freq: 500, gain: 0.2, decay: 0.1, delay: i * 0.17 });
       }
+    } else if (species === 'lizard') {
+      // 沙丘蜥：短短的“嘶”一声
+      this.burst(d, { type: 'highpass', freq: 3500 * r, q: 0.8, gain: kind === 'hit' ? 0.35 : 0.18, attack: 0.01, decay: 0.12 });
     } else if (species === 'duck') {
       const n = kind === 'hit' ? 1 : 2;
       for (let i = 0; i < n; i++) {

@@ -93,6 +93,9 @@ export const TILE = {
   ice: 53,
   sandstoneSide: 54,
   sandstoneTop: 55,
+  scale: 56,
+  scaleArmor: 57,
+  ironArmor: 58,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });

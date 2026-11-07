@@ -447,7 +447,7 @@ test('每个配方的产物都能放或者能用来合成别的', () => {
   for (const r of RECIPES) {
     const [out, n] = r.output;
     assert.ok(n > 0);
-    const usable = out < 100 || used.has(out) || TOOLS[out] || out === BUCKET || foodValue(out) > 0 || canUseCustomSlot(out);
+    const usable = out < 100 || used.has(out) || TOOLS[out] || out === BUCKET || foodValue(out) > 0 || canUseCustomSlot(out) || armorOf({ [out]: 1 }) > 0;
     assert.ok(usable, `${itemName(out)} 有用处`);
   }
   const inv = {};
@@ -1881,4 +1881,65 @@ test('下雨时露天的庄稼长得和有水的一样快，屋里的不受影�
   const roof = grow(true, true);
   assert.ok(rain > dry * 1.6, `淋雨 ${rain}，不下雨 ${dry}`);
   assert.ok(roof < rain * 0.8, `屋顶下 ${roof}`);
+});
+
+// ---------- 沙丘蜥和护甲 ----------
+import { SCALE, SCALE_ARMOR, IRON_ARMOR, armorOf, armoredDamage } from '../src/game/items.js';
+
+test('沙丘蜥：只住在沙漠的沙子上，爱吃仙人掌，掉肉和鳞片', () => {
+  const big = new World({ seed: 1 });
+  // 找一块沙漠和一块海边沙滩
+  let desert = null;
+  let beach = null;
+  for (let z = 0; z < 256 && (!desert || !beach); z += 2) for (let x = 0; x < 256 && (!desert || !beach); x += 2) {
+    const y = big.topY(x, z);
+    if (big.get(x, y, z) !== SAND_B || big.get(x, y + 1, z) !== AIR) continue;
+    if (big.biomeAt(x, z) === 'desert') desert = desert ?? [x, y + 1, z];
+    else beach = beach ?? [x, y + 1, z];
+  }
+  assert.ok(habitatAt(big, ...desert).includes('lizard'));
+  assert.ok(!habitatAt(big, ...beach).includes('lizard'), '普通的沙滩上没有');
+  const liz = createAnimal([5.5, 2, 5.5], { species: 'lizard' });
+  assert.equal(foodFor(liz), CACTUS);
+  assert.equal(animalName(liz), '沙丘蜥');
+  assert.deepEqual(animalDrops(liz, () => 0), [[RAW_MEAT, 1]], '运气不好没有鳞片');
+  assert.deepEqual(animalDrops(liz, () => 0.99), [[RAW_MEAT, 1], [SCALE, 2]]);
+  const back = deserializeAnimals(JSON.parse(JSON.stringify(serializeAnimals([liz]))), farmWorld());
+  assert.equal(back[0].species, 'lizard', '存档记得是沙丘蜥');
+});
+
+test('沙丘蜥一阵一阵地跑，被打了逃得很快', () => {
+  const w = floorWorld();
+  for (let x = 0; x < 32; x++) for (let z = 0; z < 32; z++) w.rawSet(x, 0, z, SAND_B);
+  const player = createPlayer([16.5, 1, 16.5]);
+  const liz = createAnimal([12.5, 1, 16.5], { species: 'lizard' });
+  const rabbit = createAnimal([12.5, 1, 16.5]);
+  damageAnimal(liz, 1, player.pos);
+  damageAnimal(rabbit, 1, player.pos);
+  for (let i = 0; i < 45; i++) {
+    stepAnimal(w, liz, player, 1 / 30, { rand: seq(0.5) });
+    stepAnimal(w, rabbit, player, 1 / 30, { rand: seq(0.5) });
+  }
+  const dl = Math.hypot(liz.pos[0] - 16.5, liz.pos[2] - 16.5);
+  const dr = Math.hypot(rabbit.pos[0] - 16.5, rabbit.pos[2] - 16.5);
+  assert.ok(dl > dr, `1.5 秒后：沙丘蜥离玩家 ${dl.toFixed(1)} 格，兔子 ${dr.toFixed(1)} 格`);
+});
+
+test('护甲：放在背包里就生效，用最好的一件；只能做一件；伤害至少 1 点', () => {
+  assert.equal(armorOf({}), 0);
+  assert.equal(armorOf({ [SCALE_ARMOR]: 1 }), 0.25);
+  assert.equal(armorOf({ [SCALE_ARMOR]: 1, [IRON_ARMOR]: 1 }), 0.45);
+  assert.equal(armoredDamage(3, 0), 3);
+  assert.equal(armoredDamage(3, 0.25), 2);
+  assert.equal(armoredDamage(3, 0.45), 2);
+  assert.equal(armoredDamage(2, 0.45), 1);
+  assert.equal(armoredDamage(1, 0.45), 1, '至少 1 点');
+  assert.equal(armoredDamage(0, 0.45), 0);
+  const inv = {};
+  addItem(inv, SCALE, 12);
+  addItem(inv, IRON_INGOT, 5);
+  assert.equal(craft(inv, recipe('scaleArmor'), 5), 1, '护甲只做一件');
+  assert.equal(craft(inv, recipe('ironArmor')), 1);
+  assert.equal(countOf(inv, SCALE), 6);
+  assert.equal(armorOf(inv), 0.45);
 });

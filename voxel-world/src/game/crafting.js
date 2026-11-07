@@ -1,7 +1,7 @@
 import { BED, BRICK, CHEST, DIRT, GLASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SANDSTONE, STONE, TORCH } from './blocks.js';
 import {
   APPLE, BERRIES, BREAD, BUCKET, COAL, IRON_INGOT, IRON_PICKAXE, PIE, STICK, STONE_AXE, STONE_HOE, STONE_PICKAXE, STONE_SHOVEL, WHEAT,
-  RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, DOOR_ITEM, LADDER_ITEM, addItem, countOf, takeItem,
+  RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, DOOR_ITEM, LADDER_ITEM, SCALE, SCALE_ARMOR, IRON_ARMOR, addItem, countOf, takeItem,
 } from './items.js';
 
 // 合成配方：不用摆位置，材料够就能合成
@@ -22,6 +22,8 @@ export const RECIPES = [
   { id: 'stoneHoe', inputs: [[STONE, 2], [STICK, 2]], output: [STONE_HOE, 1], hint: '有了锄头，用麦种对着草地或泥土右键就能翻土种地' },
   { id: 'ironIngot', inputs: [[IRON_ORE, 1], [COAL, 1]], output: [IRON_INGOT, 1], hint: '铁矿石在更深的地下，要用镐挖' },
   { id: 'ironPickaxe', inputs: [[IRON_INGOT, 3], [STICK, 2]], output: [IRON_PICKAXE, 1], hint: '挖石头、矿石快 8 倍' },
+  { id: 'scaleArmor', inputs: [[SCALE, 6]], output: [SCALE_ARMOR, 1], hint: '鳞片从沙漠里的沙丘蜥身上来；被咬、被撞、被扎少受 25% 伤害' },
+  { id: 'ironArmor', inputs: [[IRON_INGOT, 5]], output: [IRON_ARMOR, 1], hint: '被咬、被撞、被扎少受 45% 伤害（放在背包里就自动穿上）' },
   { id: 'bucket', inputs: [[IRON_INGOT, 3]], output: [BUCKET, 1], hint: '空桶对着水能装水，水桶能把水倒到别处' },
   { id: 'bread', inputs: [[WHEAT, 3]], output: [BREAD, 1], hint: '小麦要自己种：草方块里挖麦种，种在耕地上' },
   { id: 'cookedMeat', inputs: [[RAW_MEAT, 2], [COAL, 1]], output: [COOKED_MEAT, 2], hint: '生肉从动物身上来：绒耳兔、鬃毛野猪、圆圆鸭' },
@@ -30,7 +32,7 @@ export const RECIPES = [
 ];
 
 // 工具只做一把就够（背包里已经有了就不能再做）
-const SINGLE = new Set([STONE_PICKAXE, STONE_SHOVEL, STONE_AXE, IRON_PICKAXE, STONE_HOE]);
+const SINGLE = new Set([STONE_PICKAXE, STONE_SHOVEL, STONE_AXE, IRON_PICKAXE, STONE_HOE, SCALE_ARMOR, IRON_ARMOR]);
 export function isSingle(recipe) {
   return SINGLE.has(recipe.output[0]);
 }

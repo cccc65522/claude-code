@@ -18,7 +18,7 @@ import {
 import { digInfo, toolKindName } from '../game/tools.js';
 import { EXHAUSTION, addExhaustion, fallDamage, hurt, regenerate, updateAir, updateHunger } from '../game/health.js';
 import { attackDamage } from '../game/tools.js';
-import { COAL, DOOR_ITEM, LADDER_ITEM, SEEDS, STONE_HOE, bonusDrop } from '../game/items.js';
+import { COAL, DOOR_ITEM, LADDER_ITEM, SEEDS, STONE_HOE, armorOf, armoredDamage, bonusDrop } from '../game/items.js';
 import {
   damageMonster, rayHitMonster, shouldRemove, stepMonster, trySpawn, DISSOLVE_SECONDS, SUNLIT,
 } from '../game/monsters.js';
@@ -676,8 +676,10 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
 
     // 生存模式：摔落、溺水、怪物，以及慢慢回血
     attackTimer.current = Math.max(0, attackTimer.current - dt);
-    const takeDamage = (amount, cause) => {
-      if (modeRef.current !== 'survival' || p.health <= 0 || hurt(p, amount) <= 0) return;
+    // armored：被咬、被撞、被扎这类伤害，背包里的护甲能挡掉一部分（摔落、溺水、饥饿不算）
+    const takeDamage = (amount, cause, armored = false) => {
+      const dmg = armored ? armoredDamage(amount, armorOf(inventory)) : amount;
+      if (modeRef.current !== 'survival' || p.health <= 0 || hurt(p, dmg) <= 0) return;
       sound.hurt();
         const el = hurtUiRef.current;
         if (el) {
@@ -694,7 +696,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       sfx.current.cactus = Math.max(0, (sfx.current.cactus ?? 0) - dt);
       if (sfx.current.cactus === 0 && touchesBlock(world, p, CACTUS)) {
         sfx.current.cactus = 0.5;
-        takeDamage(1, '被仙人掌扎倒了');
+        takeDamage(1, '被仙人掌扎倒了', true);
       }
       takeDamage(fallDamage(landed), `从 ${Math.round(landed)} 格高的地方摔了下来`);
       if (active) {
@@ -746,7 +748,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
             p.vel[0] += (dx / len) * 7;
             p.vel[2] += (dz / len) * 7;
             p.vel[1] = Math.max(p.vel[1], 5);
-            takeDamage(bite, '被夜影咬倒了');
+            takeDamage(bite, '被夜影咬倒了', true);
           }
           if (m.dissolve > 0) m.dissolve += dt * (m.health <= 0 ? 2 : 0); // 被打死的消散得更快
         }
@@ -843,7 +845,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
           p.vel[0] += (dx / len) * 6;
           p.vel[2] += (dz / len) * 6;
           p.vel[1] = Math.max(p.vel[1], 4.5);
-          takeDamage(ev.damage, `被${SPECIES[a.species].name}撞倒了`);
+          takeDamage(ev.damage, `被${SPECIES[a.species].name}撞倒了`, true);
         }
         // 下蛋：脚下那格空着、下面是实心方块才放得下
         if (ev.egg) {
@@ -1057,7 +1059,28 @@ const MODELS = {
   },
 };
 
-const BASE_COLOR = { rabbit: '#d8bf98', boar: '#6e4b33', duck: '#f1e8cf' };
+// 沙丘蜥：扁扁的沙色身子，背上两道深色条纹，长尾巴，四条小短腿
+MODELS.lizard = (mat, shared) => {
+  const g = new THREE.Group();
+  const tail = part(box(0.1, 0.08, 0.6), mat, 0, 0.1, -0.6);
+  tail.rotation.x = 0.08;
+  g.add(
+    part(box(0.34, 0.18, 0.62), mat, 0, 0.16, -0.02),
+    part(box(0.24, 0.16, 0.24), mat, 0, 0.18, 0.4),
+    part(box(0.3, 0.02, 0.08), shared.stripe, 0, 0.255, 0.08),
+    part(box(0.3, 0.02, 0.08), shared.stripe, 0, 0.255, -0.14),
+    tail,
+    part(shared.eye, shared.dark, -0.1, 0.22, 0.525),
+    part(shared.eye, shared.dark, 0.1, 0.22, 0.525),
+    part(box(0.08, 0.1, 0.08), mat, -0.2, 0.05, 0.18),
+    part(box(0.08, 0.1, 0.08), mat, 0.2, 0.05, 0.18),
+    part(box(0.08, 0.1, 0.08), mat, -0.2, 0.05, -0.2),
+    part(box(0.08, 0.1, 0.08), mat, 0.2, 0.05, -0.2),
+  );
+  return { group: g, heartY: 0.6 };
+};
+
+const BASE_COLOR = { rabbit: '#d8bf98', boar: '#6e4b33', duck: '#f1e8cf', lizard: '#d6b26a' };
 
 function Animals({ animals, world }) {
   const group = useRef();
@@ -1074,6 +1097,7 @@ function Animals({ animals, world }) {
       snout: lambert('#b07a66'),
       duckHead: lambert('#3e8a62'),
       orange: lambert('#f0962e'),
+      stripe: lambert('#8a6230'),
       heartMat: new THREE.MeshBasicMaterial({ color: '#ff4d6a', fog: false }),
       red: new THREE.Color('#ff3b3b'),
     }),

@@ -82,7 +82,7 @@ function Bubbles({ air }) {
 }
 
 // counts 为 null 时是创造模式（方块无限，不显示数量），health 为 null 时不显示生命值
-export default function Hud({ slots, counts, selected, onSelect, atlasUrl, statsRef, toast, hideHotbar, health, air, hunger }) {
+export default function Hud({ slots, counts, selected, onSelect, atlasUrl, statsRef, toast, hideHotbar, health, air, hunger, armor = 0 }) {
   return (
     <div className={'hud' + (hideHotbar ? ' bag-open' : '')}>
       <div className="stats" ref={statsRef} />
@@ -90,7 +90,17 @@ export default function Hud({ slots, counts, selected, onSelect, atlasUrl, stats
       {toast && <div className="toast" key={toast.key}>{toast.text}</div>}
       {health !== null && !hideHotbar && (
         <div className="status">
-          <Hearts health={health} />
+          <div className="status-left">
+            {armor > 0 && (
+              <span className="armor" aria-label={`护甲：少受 ${Math.round(armor * 100)}% 伤害`} role="img">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M8 1 14 3.5v4.2c0 3.6-2.6 5.9-6 7.3-3.4-1.4-6-3.7-6-7.3V3.5Z" />
+                </svg>
+                {Math.round(armor * 100)}%
+              </span>
+            )}
+            <Hearts health={health} />
+          </div>
           <div className="status-right">
             {air < MAX_AIR && <Bubbles air={air} />}
             <Hunger hunger={hunger} />

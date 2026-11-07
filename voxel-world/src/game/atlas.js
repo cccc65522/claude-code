@@ -571,6 +571,35 @@ painters[TILE.sandstoneSide] = (put, rand) => {
 };
 painters[TILE.sandstoneTop] = (put, rand) => fill(put, rand, [220, 200, 142], 0.08);
 
+// 鳞片和护甲图标
+painters[TILE.scale] = (put, rand) => {
+  transparent(put);
+  for (let y = 3; y < 14; y++) for (let x = 3; x < 13; x++) {
+    const d = Math.hypot((x - 7.5) / 4.6, (y - 8) / 5.2);
+    if (d > 1) continue;
+    const k = 1 + (rand() - 0.5) * 0.12;
+    const ridge = (x + y) % 4 === 0;
+    put(x, y, (ridge ? 150 : 200) * k, (ridge ? 120 : 168) * k, (ridge ? 70 : 100) * k);
+  }
+};
+function armor(base, dark) {
+  return (put, rand) => {
+    transparent(put);
+    for (let y = 2; y < 15; y++) for (let x = 1; x < 15; x++) {
+      const sleeve = y < 6 && (x < 4 || x > 11);
+      const body = x >= 4 && x <= 11;
+      const neck = y < 4 && x >= 6 && x <= 9;
+      if ((!sleeve && !body) || neck) continue;
+      const k = 1 + (rand() - 0.5) * 0.1;
+      const edge = x === 4 || x === 11 || y === 14 || (sleeve && (y === 5));
+      const c = edge ? dark : base;
+      put(x, y, c[0] * k, c[1] * k, c[2] * k);
+    }
+  };
+}
+painters[TILE.scaleArmor] = armor([206, 172, 104], [140, 108, 60]);
+painters[TILE.ironArmor] = armor([196, 200, 208], [110, 114, 124]);
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

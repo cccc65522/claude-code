@@ -1,6 +1,6 @@
-import { AIR, GRASS, LOG, SAND, SNOW, isLiquid } from './blocks.js';
+import { AIR, CACTUS, GRASS, LOG, SAND, SNOW, isLiquid } from './blocks.js';
 import { moveBody } from './player.js';
-import { APPLE, BERRIES, RAW_MEAT, SEEDS } from './items.js';
+import { APPLE, BERRIES, RAW_MEAT, SCALE, SEEDS } from './items.js';
 import { touching } from './monsters.js';
 
 // 动物（都是原创设计）。不同种类住的地方、爱吃的东西、被打后的反应都不一样：
@@ -22,8 +22,13 @@ export const SPECIES = {
     name: '圆圆鸭', babyName: '小圆圆鸭', half: 0.25, height: 0.55, health: 4, food: BERRIES,
     gait: 'walk', speed: 1.1, fleeSpeed: 3.6, meat: [1, 1], temper: 'shy', lays: true, weight: 3,
   },
+  // 沙丘蜥：沙漠里贴着地面一阵阵快跑，爱吃仙人掌，身上有鳞片
+  lizard: {
+    name: '沙丘蜥', babyName: '小沙丘蜥', half: 0.25, height: 0.35, health: 4, food: CACTUS,
+    gait: 'walk', speed: 2.6, fleeSpeed: 6.5, meat: [1, 1], extra: [SCALE, 0, 2], temper: 'shy', weight: 3, dash: true,
+  },
 };
-export const SPECIES_ORDER = ['rabbit', 'boar', 'duck'];
+export const SPECIES_ORDER = ['rabbit', 'boar', 'duck', 'lizard'];
 
 export const ANIMAL_HALF = SPECIES.rabbit.half;
 export const ANIMAL_HEIGHT = SPECIES.rabbit.height;
@@ -105,6 +110,7 @@ export function habitatAt(world, x, y, z) {
   if (below === GRASS || below === SNOW) out.push('rabbit'); // 兔子在雪原也有
   if (below === GRASS && near(world, x, y, z, 5, [0, 1, 2, 3], (id) => id === LOG)) out.push('boar');
   if ((below === SAND || below === GRASS) && near(world, x, y, z, 5, [-1, 0], isLiquid)) out.push('duck');
+  if (below === SAND && world.biomeAt?.(x, z) === 'desert') out.push('lizard');
   return out;
 }
 
@@ -240,12 +246,13 @@ export function stepAnimal(world, a, player, dt, { rand = Math.random, lure = fa
     if (!dir && a.dissolve === 0) {
       a.wanderTime -= dt;
       if (a.wanderTime <= 0) {
-        if (rand() < 0.4) a.wanderDir = null;
+        if (rand() < (s.dash ? 0.55 : 0.4)) a.wanderDir = null;
         else {
           const ang = rand() * Math.PI * 2;
           a.wanderDir = [Math.cos(ang), Math.sin(ang)];
         }
-        a.wanderTime = 1.5 + rand() * 3;
+        // 沙丘蜥：跑一小段就停下，停一会儿再跑
+        a.wanderTime = s.dash ? (a.wanderDir ? 0.4 + rand() * 0.5 : 1 + rand() * 2.5) : 1.5 + rand() * 3;
       }
       if (a.wanderDir) {
         dir = a.wanderDir;
@@ -338,8 +345,15 @@ export function damageAnimal(a, amount, fromPos, { hostile = false } = {}) {
 
 export function animalDrops(a, rand = Math.random) {
   if (a.baby) return [];
-  const [min, max] = SPECIES[a.species].meat;
-  return [[RAW_MEAT, min + Math.floor(rand() * (max - min + 1))]];
+  const s = SPECIES[a.species];
+  const [min, max] = s.meat;
+  const out = [[RAW_MEAT, min + Math.floor(rand() * (max - min + 1))]];
+  if (s.extra) {
+    const [id, lo, hi] = s.extra;
+    const n = lo + Math.floor(rand() * (hi - lo + 1));
+    if (n > 0) out.push([id, n]);
+  }
+  return out;
 }
 
 // 动物会存档，所以不会因为离得远就消失，只有被打死才去掉

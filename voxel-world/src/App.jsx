@@ -12,7 +12,7 @@ import { World } from './game/world.js';
 import { createPlayer } from './game/player.js';
 import { createAtlasCanvas } from './game/atlas.js';
 import { HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
-import { SEEDS, SURVIVAL_HOTBAR, bestFood, eat, itemName, sanitizeInventory } from './game/items.js';
+import { SEEDS, SURVIVAL_HOTBAR, armorOf, bestFood, eat, itemName, sanitizeInventory } from './game/items.js';
 import { craft } from './game/crafting.js';
 import { deserializeAnimals, serializeAnimals } from './game/animals.js';
 import {
@@ -628,6 +628,7 @@ export default function App() {
         health={mode === 'survival' ? health : null}
         air={air}
         hunger={hunger}
+        armor={mode === 'survival' ? armorOf(session.inventory) : 0}
       />
 
       {isTouch && started && !paused && !panelOpen && !dead && (

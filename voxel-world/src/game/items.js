@@ -25,6 +25,9 @@ export const DUCK_EGG = 118;
 export const EGG_PANCAKE = 119;
 export const DOOR_ITEM = 120;
 export const LADDER_ITEM = 121;
+export const SCALE = 122;
+export const SCALE_ARMOR = 123;
+export const IRON_ARMOR = 124;
 
 export const ITEMS = {
   [STICK]: { name: '木棍', icon: TILE.stick },
@@ -50,6 +53,10 @@ export const ITEMS = {
   // 门和梯子放下去时会按朝向变成不同的方块，所以背包里是单独的物品
   [DOOR_ITEM]: { name: '门', icon: TILE.doorBottom, placeable: true },
   [LADDER_ITEM]: { name: '梯子', icon: TILE.ladder, placeable: true },
+  [SCALE]: { name: '鳞片', icon: TILE.scale },
+  // 护甲：放在背包里就自动穿上（用最好的那件），被咬、被撞、被扎时少受伤
+  [SCALE_ARMOR]: { name: '鳞甲', icon: TILE.scaleArmor, armor: 0.25 },
+  [IRON_ARMOR]: { name: '铁甲', icon: TILE.ironArmor, armor: 0.45 },
 };
 
 export function itemName(id) {
@@ -85,7 +92,7 @@ export const SURVIVAL_HOTBAR = [DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, B
 export const ITEM_ORDER = [
   DIRT, STONE, SAND, LOG, PLANKS, STICK, COAL, IRON_ORE, IRON_INGOT, LEAVES, GLASS, BRICK, TORCH,
   STONE_PICKAXE, IRON_PICKAXE, STONE_SHOVEL, STONE_AXE, STONE_HOE, BUCKET, WATER_BUCKET,
-  SEEDS, WHEAT, APPLE, BERRIES, BREAD, PIE, RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, BED, CHEST, DOOR_ITEM, LADDER_ITEM,
+  SEEDS, WHEAT, APPLE, BERRIES, BREAD, PIE, RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, BED, CHEST, DOOR_ITEM, LADDER_ITEM, SCALE, SCALE_ARMOR, IRON_ARMOR,
 ];
 
 // ---------- 食物 ----------
@@ -156,4 +163,18 @@ export function sanitizeInventory(raw) {
     inv[id] = Math.min(value, MAX_STACK);
   }
   return inv;
+}
+
+// ---------- 护甲 ----------
+// 背包里最好的那件护甲能挡掉几成伤害（没有就是 0）
+export function armorOf(inv) {
+  let best = 0;
+  for (const [id, def] of Object.entries(ITEMS)) if (def.armor && countOf(inv, Number(id)) > 0) best = Math.max(best, def.armor);
+  return best;
+}
+
+// 穿着护甲时实际受到的伤害（至少 1 点，不会完全免疫）
+export function armoredDamage(amount, armor) {
+  if (amount <= 0) return 0;
+  return Math.max(1, Math.round(amount * (1 - armor)));
 }
