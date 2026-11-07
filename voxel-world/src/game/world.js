@@ -12,7 +12,7 @@ export class World {
    * @param {number} [opts.chunks] 每条边有几个区块
    * @param {boolean} [opts.generate] false 时得到一个空世界（测试用）
    */
-  constructor({ seed = 1, chunks = 8, generate = true } = {}) {
+  constructor({ seed = 1, chunks = 16, generate = true } = {}) {
     this.seed = seed >>> 0;
     this.chunks = chunks;
     this.sizeX = chunks * CHUNK;

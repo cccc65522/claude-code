@@ -64,7 +64,7 @@ export class Fluids {
   }
 
   /**
-   * 推进一步。返回 { changed: 变化格子的下标, removedTorch: 有没有火把被冲掉 }。
+   * 推进一步。返回 { changed: 变化格子的下标, removedTorches: 被冲掉的火把所在的格子下标 }。
    */
   tick(limit = 4000) {
     const world = this.world;
@@ -80,14 +80,14 @@ export class Fluids {
       const next = desiredFluid(world, x, y, z);
       if (next !== world.data[i]) updates.push([i, x, y, z, next]);
     }
-    let removedTorch = false;
+    const removedTorches = [];
     const changed = [];
     for (const [i, x, y, z, next] of updates) {
-      if (world.data[i] === TORCH) removedTorch = true;
+      if (world.data[i] === TORCH) removedTorches.push(i);
       world.set(x, y, z, next);
       changed.push(i);
       this.schedule(x, y, z);
     }
-    return { changed, removedTorch };
+    return { changed, removedTorches };
   }
 }

@@ -608,6 +608,8 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     }
 
     camera.position.set(p.pos[0], p.pos[1] + EYE_HEIGHT, p.pos[2]);
+    // 远处还没建好的区块每帧建一点；离太远的区块不画
+    renderer.update(p.pos[0], p.pos[2], 6);
     sound.setListener([p.pos[0], p.pos[1] + EYE_HEIGHT, p.pos[2]], p.yaw);
     camera.rotation.set(p.pitch, p.yaw, 0, 'YXZ');
 
@@ -978,7 +980,13 @@ function WorldScene(props) {
     }),
     [texture],
   );
-  const renderer = useMemo(() => new ChunkRenderer(world, materials.solid, materials.water), [world, materials]);
+  const renderer = useMemo(() => {
+    const r = new ChunkRenderer(world, materials.solid, materials.water);
+    // 先把玩家身边的区块建好，远处的在 Controller 里每帧建一些
+    const p = props.playerRef.current;
+    r.buildAround(p.pos[0], p.pos[2], 2);
+    return r;
+  }, [world, materials]); // eslint-disable-line react-hooks/exhaustive-deps
   // 开发服务器里方便调试：可以手动重建区块（打包后没有）
   if (import.meta.env.DEV && window.__voxel) window.__voxel.renderer = renderer;
   useEffect(() => () => {

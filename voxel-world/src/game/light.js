@@ -41,15 +41,6 @@ export function computeLight(world) {
   }
 }
 
-// 重算光照，返回光照有变化的格子下标
-export function relight(world) {
-  const old = world.light.slice();
-  computeLight(world);
-  const changed = [];
-  const { light } = world;
-  for (let i = 0; i < light.length; i++) if (light[i] !== old[i]) changed.push(i);
-  return changed;
-}
 
 // ---------- 天光 ----------
 // 方块属性查表（光照要对几万个格子算，查表比每次查 BLOCKS 快很多）
@@ -168,7 +159,7 @@ export function updateSkyLight(world, x, z, radius = SKY_REGION) {
     }
   }
   // 外面那一圈只当光源，不改它们：先把它们的扩散限制在区域里
-  spreadSkyRegion(world, queue, x0, x1, z0, z1);
+  spreadRegion(world, sky, queue, x0, x1, z0, z1);
 
   const changed = [];
   for (let y = 0; y < SY; y++) {
@@ -182,9 +173,11 @@ export function updateSkyLight(world, x, z, radius = SKY_REGION) {
   return changed;
 }
 
-// 和 spreadSky 一样，但只往区域 [x0,x1]×[z0,z1] 里面照（区域外面的格子保持不变）
-function spreadSkyRegion(world, queue, x0, x1, z0, z1) {
-  const { data, sky, sizeX: SX, sizeY: SY, sizeZ: SZ } = world;
+// 和 spreadSky 一样，但只往区域 [x0,x1]×[z0,z1] 里面照（区域外面的格子保持不变）。
+// arr 是要扩散的光（world.sky 或 world.light）
+function spreadRegion(world, arr, queue, x0, x1, z0, z1) {
+  const { data, sizeX: SX, sizeY: SY, sizeZ: SZ } = world;
+  const sky = arr;
   const plane = SX * SZ;
   for (let head = 0; head < queue.length; head++) {
     const i = queue[head];
@@ -205,4 +198,55 @@ function spreadSkyRegion(world, queue, x0, x1, z0, z1) {
     if (inX && inZ && y > 0 && sky[(n = i - plane)] < level && !OPAQUE[data[n]]) { sky[n] = level; queue.push(n); }
     if (inX && inZ && y < SY - 1 && sky[(n = i + plane)] < level && !OPAQUE[data[n]]) { sky[n] = level; queue.push(n); }
   }
+}
+
+// ---------- 火把光的局部更新 ----------
+const EMIT = new Uint8Array(256);
+for (let id = 0; id < 256; id++) EMIT[id] = BLOCKS[id]?.light ?? 0;
+
+/**
+ * 改了 (x,z) 附近的方块以后，只重算周围 radius 格内的火把光：
+ * 先把区域里的光清掉、重新放上区域里的火把，再让紧挨着区域的外面一圈把光照进来。
+ * （一次改动最多影响 14 格远，区域外面的光不会变。）返回火把光有变化的格子下标。
+ */
+export function updateBlockLight(world, x, z, radius = SKY_REGION) {
+  const { sizeX: SX, sizeY: SY, sizeZ: SZ, light, data } = world;
+  const x0 = Math.max(0, x - radius);
+  const x1 = Math.min(SX - 1, x + radius);
+  const z0 = Math.max(0, z - radius);
+  const z1 = Math.min(SZ - 1, z + radius);
+  const rx = x1 - x0 + 1;
+  const rz = z1 - z0 + 1;
+  const old = new Uint8Array(rx * rz * SY);
+  const queue = [];
+  for (let y = 0; y < SY; y++) {
+    for (let cz = z0; cz <= z1; cz++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        const i = (y * SZ + cz) * SX + cx;
+        old[(y * rz + (cz - z0)) * rx + (cx - x0)] = light[i];
+        light[i] = EMIT[data[i]];
+        if (light[i] > 1) queue.push(i);
+      }
+    }
+  }
+  for (let y = 0; y < SY; y++) {
+    for (let cz = Math.max(0, z0 - 1); cz <= Math.min(SZ - 1, z1 + 1); cz++) {
+      for (let cx = Math.max(0, x0 - 1); cx <= Math.min(SX - 1, x1 + 1); cx++) {
+        if (cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1) continue;
+        const i = (y * SZ + cz) * SX + cx;
+        if (light[i] > 1) queue.push(i);
+      }
+    }
+  }
+  spreadRegion(world, light, queue, x0, x1, z0, z1);
+  const changed = [];
+  for (let y = 0; y < SY; y++) {
+    for (let cz = z0; cz <= z1; cz++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        const i = (y * SZ + cz) * SX + cx;
+        if (light[i] !== old[(y * rz + (cz - z0)) * rx + (cx - x0)]) changed.push(i);
+      }
+    }
+  }
+  return changed;
 }

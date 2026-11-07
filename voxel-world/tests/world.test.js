@@ -1486,3 +1486,67 @@ test('音效：走路每 1.7 格响一下脚步，跑步步子大一点，在空
   assert.equal(clampVolume(2), 1);
   assert.equal(clampVolume(-1), 0);
 });
+
+// ---------- 大世界 ----------
+import { updateBlockLight } from '../src/game/light.js';
+import { ChunkRenderer, VIEW_DISTANCE } from '../src/game/renderer.js';
+
+test('世界默认 256×256；火把光的局部更新和整个重算的结果一样', () => {
+  const w = new World({ seed: 7 });
+  assert.equal(w.sizeX, 256);
+  assert.equal(w.sizeZ, 256);
+  computeLight(w);
+  let s = 3;
+  const rand = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let k = 0; k < 30; k++) {
+    // 在一小片区域里反复放火把、挖方块、放石头，让光互相影响
+    const x = 100 + Math.floor(rand() * 30);
+    const z = 100 + Math.floor(rand() * 30);
+    const y = w.topY(x, z);
+    const r = rand();
+    if (r < 0.4) w.rawSet(x, y + 1, z, TORCH);
+    else if (r < 0.7) w.rawSet(x, y, z, AIR);
+    else w.rawSet(x, y + 1, z, STONE);
+    updateBlockLight(w, x, z);
+  }
+  const partial = w.light.slice();
+  computeLight(w);
+  assert.deepEqual(partial, w.light);
+});
+
+test('Sim 改方块只重算附近的光，很快', () => {
+  const w = new World({ seed: 2 });
+  const sim = new Sim(w);
+  const times = [];
+  for (let k = 0; k < 20; k++) {
+    const x = 60 + k * 6;
+    const z = 128;
+    const t0 = performance.now();
+    sim.edit(x, w.topY(x, z) + 1, z, TORCH);
+    times.push(performance.now() - t0);
+  }
+  times.sort((a, b) => a - b);
+  assert.ok(times[10] < 25, `中位数 ${times[10].toFixed(1)} ms`);
+});
+
+test('区块渲染：一开始只建身边的，之后由近到远补齐；远处的不画；没建的区块改了也不用重建', () => {
+  const w = new World({ seed: 1, chunks: 8 });
+  const r = new ChunkRenderer(w, null, null);
+  assert.equal(r.built, 0);
+  r.buildAround(8, 8, 1); // 角落里：只有 2×2 个区块在范围内
+  assert.equal(r.built, 4);
+  const first = r.nearestPending(8, 8);
+  assert.ok(['2,0', '0,2', '2,1', '1,2', '2,2'].includes(first), `下一个最近的：${first}`);
+  r.rebuildKeys(new Set(['7,7'])); // 还没建：跳过
+  assert.equal(r.meshes.has('7,7'), false);
+  while (r.pending.size) r.update(8, 8, 1000);
+  assert.equal(r.built, r.total);
+  assert.equal(r.meshes.get('0,0').solid.visible, true);
+  r.update(8, 8, 0);
+  const farKey = [...r.meshes.keys()].find((k) => {
+    const [cx, cz] = k.split(',').map(Number);
+    return Math.hypot((cx + 0.5) * 16 - 8, (cz + 0.5) * 16 - 8) > VIEW_DISTANCE + 16;
+  });
+  assert.ok(farKey, '有离得很远的区块');
+  assert.equal(r.meshes.get(farKey).solid.visible, false);
+});

@@ -176,7 +176,7 @@ export default function App() {
   playerRef.current = session.player;
 
   // 只在开发服务器里暴露，方便调试和浏览器测试；打包后的版本里没有
-  if (import.meta.env.DEV) window.__voxel = { session };
+  if (import.meta.env.DEV) window.__voxel = Object.assign(window.__voxel || {}, { session });
 
   useEffect(() => {
     setFlying(session.player.flying);
