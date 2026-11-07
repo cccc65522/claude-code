@@ -1,6 +1,6 @@
 import {
-  BED, BEDROCK, BRICK, CHEST, COAL_ORE, DIRT, EGG, FARMLAND, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND,
-  SNOW, STONE, TORCH, isCrop, isLiquid,
+  BED, BEDROCK, BRICK, CACTUS, CHEST, COAL_ORE, DIRT, EGG, FARMLAND, GLASS, GRASS, ICE, IRON_ORE, LEAVES, LOG, PLANKS, SAND,
+  SANDSTONE, SNOW, STONE, TORCH, isCrop, isDoor, isLadder, isLiquid,
 } from './blocks.js';
 
 // 音效：全部用 Web Audio 当场合成（噪声加滤波、振荡器加包络），没有音频文件。
@@ -10,8 +10,10 @@ import {
 
 // 方块听起来像什么材质
 export function soundMaterial(id) {
-  if (id === STONE || id === COAL_ORE || id === IRON_ORE || id === BRICK || id === BEDROCK) return 'stone';
-  if (id === LOG || id === PLANKS || id === CHEST || id === BED || id === TORCH) return 'wood';
+  if (id === STONE || id === COAL_ORE || id === IRON_ORE || id === BRICK || id === BEDROCK || id === SANDSTONE) return 'stone';
+  if (id === LOG || id === PLANKS || id === CHEST || id === BED || id === TORCH || isDoor(id) || isLadder(id)) return 'wood';
+  if (id === ICE) return 'glass';
+  if (id === CACTUS) return 'leaves';
   if (id === SAND) return 'sand';
   if (id === SNOW) return 'snow';
   if (id === LEAVES || isCrop(id)) return 'leaves';

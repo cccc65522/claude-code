@@ -23,6 +23,9 @@ export const CHEST = 31;
 export const DOOR_BASE = 32;
 // 梯子：48–51，4 个朝向（贴在哪一面墙上）
 export const LADDER_BASE = 48;
+export const CACTUS = 52;
+export const ICE = 53;
+export const SANDSTONE = 54;
 // 朝向：0 = 北（-z），1 = 东（+x），2 = 南（+z），3 = 西（-x）
 export const SIDES = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 // 小麦：27–30，四个生长阶段（30 成熟）
@@ -85,6 +88,11 @@ export const TILE = {
   doorBottom: 48,
   doorTop: 49,
   ladder: 50,
+  cactusSide: 51,
+  cactusTop: 52,
+  ice: 53,
+  sandstoneSide: 54,
+  sandstoneTop: 55,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });
@@ -107,6 +115,11 @@ export const BLOCKS = {
   [BED]: { name: '床', tiles: { top: TILE.bedTop, side: TILE.bedSide, bottom: TILE.planks }, transparent: true, shape: 'bed', interact: 'sleep' },
   // 箱子：右键打开存东西
   [CHEST]: { name: '箱子', tiles: { top: TILE.chestTop, side: TILE.chestSide, bottom: TILE.chestTop }, interact: 'chest' },
+  // 仙人掌：长在沙子上，碰到会扎人；底下没了支撑整根倒
+  [CACTUS]: { name: '仙人掌', tiles: { top: TILE.cactusTop, side: TILE.cactusSide, bottom: TILE.cactusTop }, transparent: true, shape: 'cactus' },
+  // 冰：雪原里的湖面结的冰，上面很滑；挖开会变回水
+  [ICE]: { name: '冰', tiles: all(TILE.ice), slippery: true },
+  [SANDSTONE]: { name: '砂岩', tiles: { top: TILE.sandstoneTop, side: TILE.sandstoneSide, bottom: TILE.sandstoneTop } },
   [EGG]: { name: '鸭蛋', tiles: all(TILE.eggBlock), transparent: true, passable: true, shape: 'egg' },
   [FARMLAND]: { name: '耕地', tiles: { top: TILE.farmland, side: TILE.dirt, bottom: TILE.dirt } },
   // 水源：半透明、能穿过、能游泳；会往低处和四周流

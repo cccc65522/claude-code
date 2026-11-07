@@ -1,4 +1,4 @@
-import { BED, BRICK, CHEST, DIRT, GLASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, STONE, TORCH } from './blocks.js';
+import { BED, BRICK, CHEST, DIRT, GLASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SANDSTONE, STONE, TORCH } from './blocks.js';
 import {
   APPLE, BERRIES, BREAD, BUCKET, COAL, IRON_INGOT, IRON_PICKAXE, PIE, STICK, STONE_AXE, STONE_HOE, STONE_PICKAXE, STONE_SHOVEL, WHEAT,
   RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, DOOR_ITEM, LADDER_ITEM, addItem, countOf, takeItem,
@@ -11,6 +11,7 @@ export const RECIPES = [
   { id: 'torch', inputs: [[STICK, 1], [COAL, 1]], output: [TORCH, 4], hint: '煤炭在地下的石头里找' },
   { id: 'glass', inputs: [[SAND, 2], [COAL, 1]], output: [GLASS, 2], hint: '用煤炭把沙子烧成玻璃' },
   { id: 'brick', inputs: [[DIRT, 2], [SAND, 1], [COAL, 1]], output: [BRICK, 2], hint: '泥和沙子烧成砖' },
+  { id: 'sandstone', inputs: [[SAND, 4]], output: [SANDSTONE, 1], hint: '沙漠里沙子下面也挖得到砂岩' },
   { id: 'bed', inputs: [[PLANKS, 3], [LEAVES, 4]], output: [BED, 1], hint: '晚上睡一觉就天亮；睡过的床就是重生点' },
   { id: 'chest', inputs: [[PLANKS, 8]], output: [CHEST, 1], hint: '右键打开，能存东西' },
   { id: 'door', inputs: [[PLANKS, 6]], output: [DOOR_ITEM, 1], hint: '两格高，右键开关；关着的门夜影进不来' },

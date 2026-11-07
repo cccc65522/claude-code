@@ -1,4 +1,4 @@
-import { AIR, BLOCKS, EGG, LADDER_BASE, SIDES, TORCH, isCrop, isDoor } from './blocks.js';
+import { AIR, BLOCKS, CACTUS, EGG, LADDER_BASE, SAND, SIDES, TORCH, isCrop, isDoor } from './blocks.js';
 import { growCrops, supportedBy } from './farming.js';
 import { Fluids } from './fluid.js';
 import { computeLight, computeSkyLight, updateBlockLight, updateSkyLight } from './light.js';
@@ -63,6 +63,12 @@ export class Sim {
     if ((needsFloor && !solid) || (isCrop(above) && !supportedBy(above, world.get(x, y, z)))) {
       remove(x, y + 1, z);
       if (isDoor(above) && isDoor(world.get(x, y + 2, z))) remove(x, y + 2, z, false);
+    }
+    // 仙人掌只能长在沙子或仙人掌上：底下没了，上面整根倒下
+    for (let cy = y + 1; world.get(x, cy, z) === CACTUS; cy++) {
+      const below = world.get(x, cy - 1, z);
+      if (below === SAND || below === CACTUS) break;
+      remove(x, cy, z);
     }
     // 墙没了，贴在上面的梯子掉下来
     if (!solid) {

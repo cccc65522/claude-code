@@ -5,8 +5,9 @@ import { ChunkRenderer } from '../game/renderer.js';
 import { lightBrightness } from '../game/light.js';
 import { sound, soundMaterial, stepFootsteps } from '../game/sound.js';
 import { raycast } from '../game/raycast.js';
-import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer } from '../game/player.js';
-import { AIR, BLOCKS, CHEST, EGG, FARMLAND, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
+import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer, touchesBlock } from '../game/player.js';
+import { AIR, BLOCKS, CACTUS, CHEST, EGG, FARMLAND, ICE, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
+import { BIOMES } from '../game/biomes.js';
 import { chestKey, emptyChestInto } from '../game/home.js';
 import { doorPlacement, ladderPlacement, toggleDoor } from '../game/building.js';
 import { GROW_STEP, cropDrops, plantTarget } from '../game/farming.js';
@@ -255,7 +256,8 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const dig = (t) => {
     const survival = modeRef.current === 'survival';
     const [x, y, z] = t.hit;
-    const dirty = sim.edit(x, y, z, AIR);
+    // 冰挖开以后变回水
+    const dirty = sim.edit(x, y, z, t.block === ICE ? WATER : AIR);
     if (!dirty) return;
     const fell = sim.lastRemoved; // 因为没了支撑一起掉下来的东西
     renderer.rebuildKeys(dirty);
@@ -587,6 +589,12 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     };
     if (modeRef.current === 'survival' && p.health > 0) {
       const health0 = p.health;
+      // 碰到仙人掌：每半秒扎掉半颗心
+      sfx.current.cactus = Math.max(0, (sfx.current.cactus ?? 0) - dt);
+      if (sfx.current.cactus === 0 && touchesBlock(world, p, CACTUS)) {
+        sfx.current.cactus = 0.5;
+        takeDamage(1, '被仙人掌扎倒了');
+      }
       takeDamage(fallDamage(landed), `从 ${Math.round(landed)} 格高的地方摔了下来`);
       if (active) {
         takeDamage(updateAir(p, eyeInWater(world, p), dt), '淹死了');
@@ -786,7 +794,7 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       statsTimer.current = 0;
       const t = targetRef.current;
       statsRef.current.textContent =
-        `${clockText(timeRef.current)}  X ${p.pos[0].toFixed(1)}  Y ${p.pos[1].toFixed(1)}  Z ${p.pos[2].toFixed(1)}` +
+        `${clockText(timeRef.current)}  ${BIOMES[world.biomeAt(Math.floor(p.pos[0]), Math.floor(p.pos[2]))]?.name ?? ''}  X ${p.pos[0].toFixed(1)}  Y ${p.pos[1].toFixed(1)}  Z ${p.pos[2].toFixed(1)}` +
         (p.flying ? '  · 飞行中' : p.inWater ? '  · 游泳中' : '') +
         ((e) => (e ? `  · 对准：${isAnimal(e) ? animalName(e) : '夜影'}` : t ? `  · 对准：${BLOCKS[t.block]?.name ?? '?'}` : ''))(entityInSight());
     }

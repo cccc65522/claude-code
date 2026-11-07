@@ -1,4 +1,4 @@
-import { AIR, GRASS, LOG, SAND, isLiquid } from './blocks.js';
+import { AIR, GRASS, LOG, SAND, SNOW, isLiquid } from './blocks.js';
 import { moveBody } from './player.js';
 import { APPLE, BERRIES, RAW_MEAT, SEEDS } from './items.js';
 import { touching } from './monsters.js';
@@ -102,7 +102,7 @@ function near(world, x, y, z, radius, dys, test) {
 export function habitatAt(world, x, y, z) {
   const below = world.get(x, y - 1, z);
   const out = [];
-  if (below === GRASS) out.push('rabbit');
+  if (below === GRASS || below === SNOW) out.push('rabbit'); // 兔子在雪原也有
   if (below === GRASS && near(world, x, y, z, 5, [0, 1, 2, 3], (id) => id === LOG)) out.push('boar');
   if ((below === SAND || below === GRASS) && near(world, x, y, z, 5, [-1, 0], isLiquid)) out.push('duck');
   return out;

@@ -534,6 +534,43 @@ painters[TILE.ladder] = (put, rand) => {
   }
 };
 
+// 仙人掌：深浅绿的竖条纹加小刺；顶面是一圈环
+painters[TILE.cactusSide] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+    const rib = x % 4 === 1;
+    const k = (rib ? 1.18 : 0.92) * (1 + (rand() - 0.5) * 0.1);
+    if (!rib && (x + y * 3) % 7 === 0) put(x, y, 230, 226, 190); // 刺
+    else put(x, y, 70 * k, 140 * k, 62 * k);
+  }
+};
+painters[TILE.cactusTop] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+    const d = Math.hypot(x - 7.5, y - 7.5);
+    const k = (d > 5 ? 0.85 : d > 3 ? 1.1 : 0.95) * (1 + (rand() - 0.5) * 0.1);
+    put(x, y, 78 * k, 150 * k, 68 * k);
+  }
+};
+// 冰：淡蓝色，有几道白色的裂纹
+painters[TILE.ice] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+    const k = 1 + (rand() - 0.5) * 0.06;
+    const crack = x - y === 4 || x + y === 18 || (y === 10 && x > 2 && x < 8);
+    if (crack) put(x, y, 236, 246, 252);
+    else put(x, y, 160 * k, 200 * k, 236 * k);
+  }
+};
+// 砂岩：沙色的横向层理
+painters[TILE.sandstoneSide] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) {
+    const band = y < 3 ? 1.08 : y % 5 === 0 ? 0.88 : 1;
+    for (let x = 0; x < TILE_PX; x++) {
+      const k = band * (1 + (rand() - 0.5) * 0.08);
+      put(x, y, 214 * k, 192 * k, 134 * k);
+    }
+  }
+};
+painters[TILE.sandstoneTop] = (put, rand) => fill(put, rand, [220, 200, 142], 0.08);
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

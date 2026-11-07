@@ -1,5 +1,5 @@
 import {
-  AIR, BED, BLOCKS, BRICK, CHEST, COAL_ORE, DIRT, EGG, FARMLAND, isDoor, isLadder, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SNOW, STONE, TILE, TORCH, isCrop,
+  AIR, BED, BLOCKS, BRICK, CHEST, COAL_ORE, DIRT, EGG, FARMLAND, ICE, isDoor, isLadder, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SNOW, STONE, TILE, TORCH, isCrop,
 } from './blocks.js';
 
 // 物品 = 方块（id < 100）+ 不能放的材料（id >= 100）
@@ -69,6 +69,7 @@ export function dropFor(blockId) {
   if (blockId === GRASS || blockId === SNOW || blockId === FARMLAND) return DIRT;
   if (isCrop(blockId)) return null; // 庄稼的收获见 farming.js 的 cropDrops
   if (blockId === EGG) return DUCK_EGG;
+  if (blockId === ICE) return null; // 冰挖开变回水，不掉东西
   if (isDoor(blockId)) return DOOR_ITEM;
   if (isLadder(blockId)) return LADDER_ITEM;
   if (blockId === COAL_ORE) return COAL;

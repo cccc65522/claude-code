@@ -1725,3 +1725,94 @@ test('所有贴图编号都在图集范围内（超出会采到错的贴图）',
   const tiles = Object.values(TILE_T);
   assert.equal(new Set(tiles).size, tiles.length, '没有两个贴图共用一个编号');
 });
+
+// ---------- 生物群系 ----------
+import { biomeAt, BIOMES } from '../src/game/biomes.js';
+import { CACTUS, ICE, SANDSTONE } from '../src/game/blocks.js';
+import { touchesBlock } from '../src/game/player.js';
+
+test('生物群系：同一个种子同一个地方结果一样；一个世界里四种都有', () => {
+  assert.equal(biomeAt(1, 50, 60), biomeAt(1, 50, 60));
+  const w = new World({ seed: 1 });
+  const count = { plains: 0, forest: 0, desert: 0, snow: 0 };
+  for (let z = 0; z < 256; z += 4) for (let x = 0; x < 256; x += 4) count[w.biomeAt(x, z)]++;
+  for (const [k, v] of Object.entries(count)) assert.ok(v > 100, `${BIOMES[k].name} 占了 ${v} 个采样点`);
+});
+
+test('生物群系：沙漠是沙子下面砂岩、长仙人掌不长树；雪原地面是雪、湖面结冰、长雪松；森林的树比平原多', () => {
+  const w = new World({ seed: 1 });
+  const stat = { desert: { sand: 0, n: 0, cactus: 0, logs: 0, sandstone: 0 }, snow: { snowTop: 0, n: 0, ice: 0, water: 0 }, forest: { logs: 0, n: 0 }, plains: { logs: 0, n: 0 } };
+  for (let z = 0; z < 256; z++) for (let x = 0; x < 256; x++) {
+    const b = w.biomeAt(x, z);
+    const h = Math.min(w.heightAt(x, z), w.sizeY - 10);
+    const top = w.topY(x, z);
+    const topId = w.get(x, top, z);
+    if (b === 'desert') {
+      stat.desert.n++;
+      if (w.get(x, h, z) === SAND_B) stat.desert.sand++;
+      if (h > 8 && w.get(x, h - 5, z) === SANDSTONE) stat.desert.sandstone++;
+      if (topId === CACTUS) stat.desert.cactus++;
+      // 树干（边界旁边的树冠可能伸进沙漠，所以只数树干）
+      for (let y = h + 1; y <= top; y++) if (w.get(x, y, z) === LOG) { stat.desert.logs++; break; }
+    } else if (b === 'snow') {
+      stat.snow.n++;
+      if (topId === SNOW_ID || topId === LEAVES || topId === LOG) stat.snow.snowTop++;
+      if (topId === ICE) stat.snow.ice++;
+      if (topId === WATER) stat.snow.water++;
+    } else {
+      stat[b].n++;
+      for (let y = top; y > top - 10 && y > 0; y--) if (w.get(x, y, z) === LOG) { stat[b].logs++; break; }
+    }
+  }
+  assert.ok(stat.desert.sand / stat.desert.n > 0.9, '沙漠的地面几乎都是沙子');
+  assert.ok(stat.desert.sandstone / stat.desert.n > 0.5, '沙子下面有砂岩');
+  assert.ok(stat.desert.cactus > 20, `沙漠里有仙人掌：${stat.desert.cactus}`);
+  assert.equal(stat.desert.logs, 0, '沙漠里不长树（没有树干）');
+  assert.ok(stat.snow.snowTop / stat.snow.n > 0.6, '雪原大多是雪');
+  assert.ok(stat.snow.ice > 0 && stat.snow.water === 0, '雪原的湖面都结冰了');
+  assert.ok(stat.forest.logs / stat.forest.n > (stat.plains.logs / stat.plains.n) * 2, '森林的树多得多');
+});
+
+test('仙人掌：碰到会被扎；沙子没了整根倒下；冰上很滑', () => {
+  const w = floorWorld();
+  for (let x = 0; x < 32; x++) for (let z = 0; z < 32; z++) w.rawSet(x, 1, z, SAND_B);
+  const sim = new Sim(w);
+  for (let y = 2; y <= 4; y++) sim.edit(10, y, 10, CACTUS);
+  assert.equal(w.isSolid(10, 3, 10), true);
+  const near = createPlayer([11.31, 2, 10.5]); // 贴着仙人掌东边
+  const far = createPlayer([13.5, 2, 10.5]);
+  assert.equal(touchesBlock(w, near, CACTUS), true);
+  assert.equal(touchesBlock(w, far, CACTUS), false);
+  sim.edit(10, 1, 10, AIR); // 挖掉下面的沙子
+  for (let y = 2; y <= 4; y++) assert.equal(w.get(10, y, 10), AIR, `y=${y} 倒了`);
+  assert.equal(sim.lastRemoved.filter((id) => id === CACTUS).length, 3, '三段仙人掌都能捡回来');
+  assert.equal(dropFor(CACTUS), CACTUS);
+
+  // 冰上：同样往前走 1 秒再松手，在冰上会多滑出一段
+  const slide = (floor) => {
+    const g = floorWorld();
+    for (let x = 0; x < 32; x++) for (let z = 0; z < 32; z++) g.rawSet(x, 0, z, floor);
+    const p = createPlayer([4.5, 1, 16.5], -Math.PI / 2);
+    for (let i = 0; i < 30; i++) stepPlayer(g, p, { forward: 1 }, 1 / 30);
+    const x0 = p.pos[0];
+    for (let i = 0; i < 60; i++) stepPlayer(g, p, {}, 1 / 30);
+    return p.pos[0] - x0;
+  };
+  const onStone = slide(STONE);
+  const onIce = slide(ICE);
+  assert.ok(onIce > onStone * 3, `松手后滑行：冰 ${onIce.toFixed(2)} 格，石头 ${onStone.toFixed(2)} 格`);
+  assert.equal(dropFor(ICE), null, '冰不掉东西（挖开变成水）');
+});
+
+test('砂岩的配方；兔子在雪原也会出现，夜影不会生在仙人掌上', () => {
+  const inv = {};
+  addItem(inv, SAND_B, 9);
+  assert.equal(craft(inv, recipe('sandstone'), 9), 2);
+  assert.equal(countOf(inv, SANDSTONE), 2);
+  const w = floorWorld();
+  for (let x = 0; x < 32; x++) for (let z = 0; z < 32; z++) w.rawSet(x, 1, z, SNOW_ID);
+  assert.ok(habitatAt(w, 5, 2, 5).includes('rabbit'));
+  w.rawSet(8, 2, 8, CACTUS);
+  computeLight(w);
+  assert.equal(canSpawnAt(w, 8, 3, 8), false);
+});

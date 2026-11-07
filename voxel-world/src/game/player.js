@@ -1,4 +1,4 @@
-import { isLadder, isLiquid } from './blocks.js';
+import { BLOCKS, isLadder, isLiquid } from './blocks.js';
 
 // 玩家物理：一个 0.6 x 1.8 x 0.6 的盒子，分轴移动并和方块做碰撞。
 
@@ -42,6 +42,20 @@ export function bodyInWater(world, p) {
 // 眼睛是否在水下（用来切换水下的画面）
 export function eyeInWater(world, p) {
   return isLiquid(world.get(Math.floor(p.pos[0]), Math.floor(p.pos[1] + EYE_HEIGHT), Math.floor(p.pos[2])));
+}
+
+// 玩家有没有碰到某种方块（盒子往外多算一点点，贴着也算碰到）
+export function touchesBlock(world, p, id, margin = 0.05) {
+  const half = (p.half ?? HALF) + margin;
+  const height = p.height ?? PLAYER_HEIGHT;
+  for (let y = Math.floor(p.pos[1] - margin); y <= Math.floor(p.pos[1] + height); y++) {
+    for (let z = Math.floor(p.pos[2] - half); z <= Math.floor(p.pos[2] + half); z++) {
+      for (let x = Math.floor(p.pos[0] - half); x <= Math.floor(p.pos[0] + half); x++) {
+        if (world.get(x, y, z) === id) return true;
+      }
+    }
+  }
+  return false;
 }
 
 // 玩家盒子和某个方块格子是否重叠（放方块时用来防止把自己埋住）
@@ -159,7 +173,9 @@ function step(world, p, input, dt) {
   const wantZ = (-cos * f - sin * r) * speed;
 
   // 地上转向很快，空中稍微慢一点
-  const accel = p.onGround || p.flying || p.inWater ? 1 : 0.25;
+  // 冰上很滑：加速和减速都慢很多
+  const onIce = p.onGround && BLOCKS[world.get(Math.floor(p.pos[0]), Math.floor(p.pos[1] - 0.05), Math.floor(p.pos[2]))]?.slippery;
+  const accel = onIce ? 0.12 : p.onGround || p.flying || p.inWater ? 1 : 0.25;
   const k = Math.min(1, dt * 18 * accel);
   p.vel[0] += (wantX - p.vel[0]) * k;
   p.vel[2] += (wantZ - p.vel[2]) * k;

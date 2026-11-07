@@ -1,5 +1,5 @@
 import {
-  BED, BRICK, CHEST, COAL_ORE, DIRT, EGG, FARMLAND, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SNOW, STONE, TORCH, BLOCKS, isCrop,
+  BED, BRICK, CACTUS, CHEST, COAL_ORE, DIRT, EGG, FARMLAND, ICE, SANDSTONE, GLASS, GRASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, SNOW, STONE, TORCH, BLOCKS, isCrop,
 } from './blocks.js';
 import { IRON_PICKAXE, STONE_AXE, STONE_HOE, STONE_PICKAXE, STONE_SHOVEL, countOf } from './items.js';
 
@@ -9,6 +9,7 @@ export const HARDNESS = {
   [LEAVES]: 0.25, [LOG]: 1.6, [PLANKS]: 1.4,
   [STONE]: 1.8, [COAL_ORE]: 2.2, [IRON_ORE]: 2.8, [BRICK]: 1.8,
   [GLASS]: 0.35, [TORCH]: 0, [EGG]: 0, [FARMLAND]: 0.6, [BED]: 0.5, [CHEST]: 1.2,
+  [CACTUS]: 0.4, [ICE]: 0.5, [SANDSTONE]: 1.2,
 };
 // 门（32–47）和梯子（48–51）：用斧头快
 for (let id = 32; id < 48; id++) HARDNESS[id] = 1;
@@ -19,6 +20,7 @@ export const TOOL_KIND = {
   [GRASS]: 'shovel', [DIRT]: 'shovel', [SAND]: 'shovel', [SNOW]: 'shovel', [FARMLAND]: 'shovel',
   [LOG]: 'axe', [PLANKS]: 'axe', [LEAVES]: 'axe', [BED]: 'axe', [CHEST]: 'axe',
   [STONE]: 'pickaxe', [COAL_ORE]: 'pickaxe', [IRON_ORE]: 'pickaxe', [BRICK]: 'pickaxe', [GLASS]: 'pickaxe',
+  [ICE]: 'pickaxe', [SANDSTONE]: 'pickaxe', [CACTUS]: 'axe',
 };
 for (let id = 32; id < 52; id++) TOOL_KIND[id] = 'axe';
 

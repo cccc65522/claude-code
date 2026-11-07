@@ -1,4 +1,4 @@
-import { AIR } from './blocks.js';
+import { AIR, CACTUS } from './blocks.js';
 import { moveBody } from './player.js';
 
 // 夜影：夜里在黑暗的地方出现的怪物，一跳一跳地朝玩家扑过来。
@@ -45,7 +45,7 @@ export function createMonster(pos) {
 // 能不能在 (x,y,z) 这一格出现：脚下是实心方块，这格和上面一格是空气，而且够黑
 export function canSpawnAt(world, x, y, z) {
   if (y < 1 || !world.inBounds(x, y, z)) return false;
-  if (!world.isSolidBlock(x, y - 1, z)) return false;
+  if (!world.isSolidBlock(x, y - 1, z) || world.get(x, y - 1, z) === CACTUS) return false;
   if (world.get(x, y, z) !== AIR || world.get(x, y + 1, z) !== AIR) return false;
   return world.lightAt(x, y, z) < DARK_ENOUGH;
 }

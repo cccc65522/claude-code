@@ -96,14 +96,16 @@ function addBedBox(b, tiles, x, y, z, light, sky = 1) {
 }
 
 // 一个小盒子（鸭蛋）：整张贴图贴在每个面上
+// tile 可以是一个编号（每面一样），也可以是 { top, side, bottom }
 function addBox(b, tile, x, y, z, min, max, light, sky = 1) {
   for (const face of FACES) {
     const [dx, dy, dz] = face.dir;
     const start = b.positions.length / 3;
+    const t = typeof tile === 'number' ? tile : tile[face.side];
     for (const [px, py, pz, u, v] of face.corners) {
       b.positions.push(x + (px ? max[0] : min[0]), y + (py ? max[1] : min[1]), z + (pz ? max[2] : min[2]));
       b.normals.push(dx, dy, dz);
-      pushUv(b, tile, u, v);
+      pushUv(b, t, u, v);
       b.colors.push(1, 1, 1);
       b.light.push(light);
       b.sky.push(sky);
@@ -230,6 +232,13 @@ export function buildChunkGeometry(world, cx, cz) {
           // 薄薄的一块板：门（关着贴在一边，开着转到旁边那一面）或者贴墙的梯子
           const [min, max] = panelBox(block);
           addBox(solid, def.tiles.side, x, y, z, min, max, lightBrightness(world.lightAt(x, y, z)), lightBrightness(world.skyAt(x, y, z)));
+          continue;
+        }
+
+        if (def.shape === 'cactus') {
+          // 比一格稍细一点
+          const e = 1 / 16;
+          addBox(solid, def.tiles, x, y, z, [e, 0, e], [1 - e, 1, 1 - e], lightBrightness(world.lightAt(x, y, z)), lightBrightness(world.skyAt(x, y, z)));
           continue;
         }
 

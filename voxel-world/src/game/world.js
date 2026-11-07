@@ -1,5 +1,8 @@
-import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER, COAL_ORE, IRON_ORE, isPassable } from './blocks.js';
+import {
+  AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER, COAL_ORE, IRON_ORE, CACTUS, ICE, SANDSTONE, isPassable,
+} from './blocks.js';
 import { fbm2, hash2, mulberry32 } from './noise.js';
+import { biomeAt } from './biomes.js';
 
 export const CHUNK = 16;
 export const HEIGHT = 48;
@@ -88,6 +91,10 @@ export class World {
     return this.inBounds(x, y, z) && !isPassable(this.get(x, y, z));
   }
 
+  biomeAt(x, z) {
+    return biomeAt(this.seed, x, z);
+  }
+
   heightAt(x, z) {
     // 分形噪声的值大多挤在 0.5 附近，拉开一些，才会有低于海平面的湖和高出来的雪山
     const n = (fbm2(x / 48, z / 48, this.seed, 4) - 0.5) * 2.4;
@@ -116,27 +123,34 @@ export class World {
       for (let x = 0; x < sizeX; x++) {
         const h = Math.min(this.heightAt(x, z), this.sizeY - 10);
         heights[z * sizeX + x] = h;
+        const biome = this.biomeAt(x, z);
+        const beach = h <= SEA_LEVEL + 1;
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === 0) id = BEDROCK;
+          else if (biome === 'desert' && y >= h - 6 && y < h - 3) id = SANDSTONE; // 沙漠：沙子下面是砂岩
           // 石头里零星夹着煤矿石，更深的地方有铁矿石
           else if (y < h - 3) id = this.oreAt(x, y, z, h);
-          else if (y < h) id = h <= SEA_LEVEL + 1 ? SAND : DIRT;
-          else if (h <= SEA_LEVEL + 1) id = SAND;
-          else if (h >= 26) id = SNOW;
+          else if (biome === 'desert') id = SAND;
+          else if (y < h) id = beach ? SAND : DIRT;
+          else if (beach) id = biome === 'snow' ? SNOW : SAND; // 雪原的岸边也盖着雪
+          else if (h >= 26 || biome === 'snow') id = SNOW;
           else id = GRASS;
           this.rawSet(x, y, z, id);
         }
       }
     }
     this.carveCaves(heights);
-    // 低于海平面的地方灌满水，形成湖和小海湾
+    // 低于海平面的地方灌满水，形成湖和小海湾；雪原里的水面结冰
     for (let z = 0; z < sizeZ; z++) {
       for (let x = 0; x < sizeX; x++) {
-        for (let y = heights[z * sizeX + x] + 1; y <= SEA_LEVEL; y++) this.rawSet(x, y, z, WATER);
+        const frozen = this.biomeAt(x, z) === 'snow';
+        for (let y = heights[z * sizeX + x] + 1; y <= SEA_LEVEL; y++) {
+          this.rawSet(x, y, z, frozen && y === SEA_LEVEL ? ICE : WATER);
+        }
       }
     }
-    this.plantTrees();
+    this.plantTrees(heights);
   }
 
   // 洞穴：一条条弯弯曲曲的“虫子”在地下钻过去，把经过的地方挖空。
@@ -185,16 +199,53 @@ export class World {
     }
   }
 
-  plantTrees() {
+  // heights：每一列的地面高度（树要种在地面上，旁边的树冠盖过来也没关系）
+  plantTrees(heights) {
     const margin = 3;
     for (let z = margin; z < this.sizeZ - margin; z++) {
       for (let x = margin; x < this.sizeX - margin; x++) {
-        if (hash2(x, z, this.seed + 999) > 0.012) continue;
-        const y = this.topY(x, z);
-        if (this.get(x, y, z) !== GRASS) continue;
-        this.growTree(x, y + 1, z, mulberry32(this.seed ^ (x * 73856093) ^ (z * 19349663)));
+        const biome = this.biomeAt(x, z);
+        const chance = { plains: 0.012, forest: 0.08, desert: 0.006, snow: 0.014 }[biome];
+        if (hash2(x, z, this.seed + 999) > chance) continue;
+        const y = heights ? heights[z * this.sizeX + x] : this.topY(x, z);
+        const ground = this.get(x, y, z);
+        if (heights && !isPassable(this.get(x, y + 1, z)) && this.get(x, y + 1, z) !== LEAVES) continue;
+        const rand = mulberry32(this.seed ^ (x * 73856093) ^ (z * 19349663));
+        if (biome === 'desert') {
+          if (ground === SAND) this.growCactus(x, y + 1, z, rand);
+        } else if (biome === 'snow') {
+          if (ground === SNOW || ground === GRASS) this.growSpruce(x, y + 1, z, rand);
+        } else if (ground === GRASS) {
+          this.growTree(x, y + 1, z, rand);
+        }
       }
     }
+  }
+
+  // 仙人掌：1–3 格高，四周要空着
+  growCactus(x, y, z, rand) {
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (this.get(x + dx, y, z + dz) !== AIR) return;
+    const h = 1 + Math.floor(rand() * 3);
+    for (let i = 0; i < h; i++) this.rawSet(x, y + i, z, CACTUS);
+  }
+
+  // 雪松：细高的树干，树冠一层层往上变小，像个尖塔
+  growSpruce(x, y, z, rand) {
+    const trunk = 6 + Math.floor(rand() * 3);
+    if (y + trunk + 2 >= this.sizeY) return;
+    this.rawSet(x, y - 1, z, DIRT);
+    for (let i = 1; i <= trunk + 1; i++) {
+      const fromTop = trunk + 1 - i;
+      const r = i <= 2 ? 0 : fromTop <= 1 ? 0 : fromTop <= 3 ? 1 : 2 - ((fromTop % 2) === 0 ? 0 : 1);
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (r > 0 && Math.abs(dx) === r && Math.abs(dz) === r) continue;
+          const ly = y + i;
+          if (this.get(x + dx, ly, z + dz) === AIR) this.rawSet(x + dx, ly, z + dz, LEAVES);
+        }
+      }
+    }
+    for (let i = 0; i < trunk; i++) this.rawSet(x, y + i, z, LOG);
   }
 
   growTree(x, y, z, rand) {
