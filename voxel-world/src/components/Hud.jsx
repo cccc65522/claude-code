@@ -1,6 +1,7 @@
 import { ATLAS_COLS, ATLAS_ROWS } from '../game/mesher.js';
 import { HOTBAR_KEYS } from '../game/blocks.js';
 import { itemIcon, itemName } from '../game/items.js';
+import { MAX_HEALTH } from '../game/health.js';
 
 // 用图集里的贴图显示物品图标
 export function ItemIcon({ id, atlasUrl }) {
@@ -19,13 +20,37 @@ export function ItemIcon({ id, atlasUrl }) {
   );
 }
 
-// counts 为 null 时是创造模式（方块无限，不显示数量）
-export default function Hud({ slots, counts, selected, onSelect, atlasUrl, statsRef, toast, hideHotbar }) {
+const HEART = 'M8 14.2 1.9 8.3A3.7 3.7 0 0 1 8 3.6a3.7 3.7 0 0 1 6.1 4.7Z';
+
+// 生命值：10 颗心，每颗 2 点
+function Hearts({ health }) {
+  const hearts = [];
+  for (let i = 0; i < MAX_HEALTH / 2; i++) {
+    const fill = Math.max(0, Math.min(2, health - i * 2)); // 0 空，1 半颗，2 满
+    hearts.push(
+      <svg key={i} className="heart" viewBox="0 0 16 16" aria-hidden="true">
+        <path d={HEART} className="heart-empty" />
+        {fill > 0 && (
+          <path d={HEART} className="heart-full" style={fill === 1 ? { clipPath: 'inset(0 50% 0 0)' } : undefined} />
+        )}
+      </svg>,
+    );
+  }
+  return (
+    <div className={'hearts' + (health <= 6 ? ' low' : '')} role="img" aria-label={`生命值 ${health / 2} / ${MAX_HEALTH / 2}`}>
+      {hearts}
+    </div>
+  );
+}
+
+// counts 为 null 时是创造模式（方块无限，不显示数量），health 为 null 时不显示生命值
+export default function Hud({ slots, counts, selected, onSelect, atlasUrl, statsRef, toast, hideHotbar, health }) {
   return (
     <div className={'hud' + (hideHotbar ? ' bag-open' : '')}>
       <div className="stats" ref={statsRef} />
       <div className="crosshair" />
       {toast && <div className="toast" key={toast.key}>{toast.text}</div>}
+      {health !== null && !hideHotbar && <Hearts health={health} />}
       <div className="hotbar" role="toolbar" aria-label="快捷栏">
         {slots.map((id, i) => {
           const n = counts ? counts[id] ?? 0 : null;

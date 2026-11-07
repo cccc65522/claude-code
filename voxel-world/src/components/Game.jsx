@@ -9,6 +9,7 @@ import {
   BUCKET, SURVIVAL_HOTBAR, WATER_BUCKET, addItem, countOf, dropFor, itemName, takeItem,
 } from '../game/items.js';
 import { digInfo, toolKindName } from '../game/tools.js';
+import { fallDamage, hurt, regenerate } from '../game/health.js';
 import { DAY_SECONDS, clockText, skyAt, wrapTime } from '../game/daynight.js';
 
 const REACH = 6;
@@ -208,7 +209,7 @@ function Highlight({ targetRef, digRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
@@ -343,13 +344,30 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
 
     const k = (c) => (active && keys.has(c) ? 1 : 0);
     const move = active ? input.move : { x: 0, y: 0 };
-    stepPlayer(world, p, {
+    const landed = stepPlayer(world, p, {
       forward: k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - move.y,
       right: k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + move.x,
       jump: k('Space') || (active && input.touchJump),
       down: k('KeyC') || k('ControlLeft') || (active && input.touchDown),
       sprint: k('ShiftLeft') || k('ShiftRight') || Math.hypot(move.x, move.y) > 0.95,
     }, dt);
+
+    // 生存模式：摔落伤害和慢慢回血
+    if (modeRef.current === 'survival' && p.health > 0) {
+      const lost = hurt(p, fallDamage(landed));
+      if (lost > 0) {
+        const el = hurtUiRef.current;
+        if (el) {
+          el.classList.remove('hit');
+          void el.offsetWidth; // 重新播放闪红动画
+          el.classList.add('hit');
+        }
+        onHealth(p.health);
+        if (p.health <= 0) onDeath(`从 ${Math.round(landed)} 格高的地方摔了下来`);
+      } else if (active && regenerate(p, dt)) {
+        onHealth(p.health);
+      }
+    }
 
     if (p.flying !== lastFlying.current) {
       lastFlying.current = p.flying;

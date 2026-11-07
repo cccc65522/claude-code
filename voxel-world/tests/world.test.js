@@ -531,3 +531,72 @@ test('射线：默认穿过水，liquids 模式下停在水面', () => {
   assert.deepEqual(r.hit, [5, 5, 5]);
   assert.equal(r.block, flowId(4));
 });
+
+// ---------- 生命值和摔落 ----------
+import { fallDamage, hurt, regenerate, sanitizeHealth, MAX_HEALTH } from '../src/game/health.js';
+
+function dropPlayer(w, from, input = {}) {
+  const p = createPlayer(from);
+  let landed = 0;
+  for (let i = 0; i < 200; i++) landed = Math.max(landed, stepPlayer(w, p, input, 1 / 30));
+  return { p, landed };
+}
+
+test('摔落伤害：3 格以内不疼，之后每多 1 格扣 1 点', () => {
+  assert.equal(fallDamage(0), 0);
+  assert.equal(fallDamage(3), 0);
+  assert.equal(fallDamage(3.9), 0);
+  assert.equal(fallDamage(4), 1);
+  assert.equal(fallDamage(12.4), 9);
+});
+
+test('从高处掉到地上会算出掉了多高', () => {
+  const w = floorWorld();
+  const { p, landed } = dropPlayer(w, [8.5, 13, 8.5]);
+  assert.ok(Math.abs(landed - 12) < 0.05, `掉了 ${landed}`);
+  assert.ok(p.onGround);
+  assert.equal(fallDamage(landed), 9);
+  // 从静止开始掉，起点高度要算移动之前的
+  assert.equal(fallDamage(dropPlayer(w, [8.5, 11, 8.5]).landed), 7);
+});
+
+test('原地跳、走下一格台阶都不会受伤', () => {
+  const w = floorWorld();
+  const p = createPlayer([8.5, 1, 8.5]);
+  for (let i = 0; i < 5; i++) stepPlayer(w, p, {}, 1 / 30);
+  let worst = 0;
+  for (let i = 0; i < 60; i++) worst = Math.max(worst, stepPlayer(w, p, { jump: true }, 1 / 30));
+  assert.ok(worst > 0.5 && worst < 1.5, `跳起来又落下：${worst}`);
+  assert.equal(fallDamage(worst), 0);
+});
+
+test('掉进水里、飞着下降不会摔伤', () => {
+  const w = floorWorld();
+  for (let x = 4; x < 12; x++) for (let z = 4; z < 12; z++) w.rawSet(x, 1, z, WATER);
+  assert.equal(dropPlayer(w, [8.5, 20, 8.5]).landed, 0, '掉进只有一格深的水里');
+  const f = createPlayer([20.5, 20, 20.5]);
+  f.flying = true;
+  let landed = 0;
+  for (let i = 0; i < 200; i++) landed = Math.max(landed, stepPlayer(w, f, { down: true }, 1 / 30));
+  assert.equal(f.flying, false, '落地时自动停止飞行');
+  assert.equal(landed, 0);
+});
+
+test('受伤和回血：受伤后一段时间才开始慢慢回血', () => {
+  const p = createPlayer([0, 0, 0]);
+  assert.equal(p.health, MAX_HEALTH);
+  assert.equal(hurt(p, 5), 5);
+  assert.equal(p.health, 15);
+  for (let i = 0; i < 50; i++) regenerate(p, 0.1); // 5 秒
+  assert.equal(p.health, 15, '还没开始回血');
+  for (let i = 0; i < 40; i++) regenerate(p, 0.1); // 再 4 秒
+  assert.equal(p.health, 16);
+  assert.equal(hurt(p, 99), 16, '最多扣到 0');
+  assert.equal(p.health, 0);
+  assert.equal(hurt(p, 1), 0, '死了不再扣');
+  for (let i = 0; i < 200; i++) regenerate(p, 0.1);
+  assert.equal(p.health, 0, '死了不会回血');
+  assert.equal(sanitizeHealth(7), 7);
+  assert.equal(sanitizeHealth(0), MAX_HEALTH);
+  assert.equal(sanitizeHealth('x'), MAX_HEALTH);
+});

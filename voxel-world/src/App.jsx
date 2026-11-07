@@ -10,6 +10,7 @@ import { createAtlasCanvas } from './game/atlas.js';
 import { HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
 import { SURVIVAL_HOTBAR, itemName, sanitizeInventory } from './game/items.js';
 import { craft } from './game/crafting.js';
+import { MAX_HEALTH, sanitizeHealth } from './game/health.js';
 import { Sim } from './game/sim.js';
 import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
 
@@ -50,6 +51,7 @@ function buildSession(save) {
       world.inBounds(Math.floor(p.pos[0]), 0, Math.floor(p.pos[2]))) {
     player = createPlayer(p.pos, Number(p.yaw) || 0, Number(p.pitch) || 0);
     player.flying = !!p.flying;
+    player.health = sanitizeHealth(p.health);
   } else {
     player = createPlayer(world.spawnPoint(), Math.PI / 4, -0.2);
   }
@@ -70,6 +72,8 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [mode, setMode] = useState(session.mode);
   const [bagOpen, setBagOpen] = useState(false);
+  const [health, setHealth] = useState(session.player.health);
+  const [dead, setDead] = useState(null); // 死了的话是死因
   const [, setInvVersion] = useState(0); // 背包变化时刷新界面
 
   const hotbar = mode === 'creative' ? HOTBAR : SURVIVAL_HOTBAR;
@@ -86,6 +90,7 @@ export default function App() {
   const statsRef = useRef(null);
   const underwaterRef = useRef(null);
   const digUiRef = useRef(null);
+  const hurtUiRef = useRef(null);
   const timeRef = useRef(session.time);
   const canvasRef = useRef(null);
   const saveTimer = useRef(null);
@@ -108,6 +113,8 @@ export default function App() {
 
   useEffect(() => {
     setFlying(session.player.flying);
+    setHealth(session.player.health);
+    setDead(null);
     setMode(session.mode);
     timeRef.current = session.time;
   }, [session]);
@@ -117,13 +124,13 @@ export default function App() {
   selectedRef.current = hotbar[slot];
 
   useEffect(() => {
-    activeRef.current = started && !paused && !bagOpen;
+    activeRef.current = started && !paused && !bagOpen && !dead;
     if (!activeRef.current) {
       input.keys.clear();
       input.held = {};
       input.move = { x: 0, y: 0 };
     }
-  }, [started, paused, bagOpen, input]);
+  }, [started, paused, bagOpen, dead, input]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -136,7 +143,7 @@ export default function App() {
     writeSave({
       seed: session.world.seed,
       edits: session.world.exportEdits(),
-      player: { pos: p.pos, yaw: p.yaw, pitch: p.pitch, flying: p.flying },
+      player: { pos: p.pos, yaw: p.yaw, pitch: p.pitch, flying: p.flying, health: p.health },
       time: timeRef.current,
       mode: modeRef.current,
       inventory: session.inventory,
@@ -207,6 +214,28 @@ export default function App() {
     },
     [lockPointer],
   );
+
+  const onDeath = useCallback((reason) => {
+    setDead(reason);
+    setBagOpen(false);
+    if (!isTouch && document.pointerLockElement) document.exitPointerLock();
+  }, []);
+
+  // 重生：回到出生点，满血，背包保留
+  const respawn = () => {
+    const p = playerRef.current;
+    p.pos = session.world.spawnPoint();
+    p.vel = [0, 0, 0];
+    p.flying = false;
+    p.fallStartY = null;
+    p.health = MAX_HEALTH;
+    p.sinceHurt = 99;
+    setHealth(p.health);
+    setFlying(false);
+    setDead(null);
+    save();
+    lockPointer();
+  };
 
   const onCraft = (recipe, times) => {
     const n = craft(session.inventory, recipe, times);
@@ -354,6 +383,9 @@ export default function App() {
         timeRef={timeRef}
         underwaterRef={underwaterRef}
         digUiRef={digUiRef}
+        hurtUiRef={hurtUiRef}
+        onHealth={setHealth}
+        onDeath={onDeath}
         onEdit={onEdit}
         onFlyingChange={setFlying}
         onCanvas={(c) => (canvasRef.current = c)}
@@ -361,6 +393,7 @@ export default function App() {
 
       <div className="underwater" ref={underwaterRef} />
       <div className="dig-ring" ref={digUiRef} aria-hidden="true" />
+      <div className="hurt" ref={hurtUiRef} aria-hidden="true" />
 
       <Hud
         slots={hotbar}
@@ -371,9 +404,10 @@ export default function App() {
         statsRef={statsRef}
         toast={toast}
         hideHotbar={bagOpen}
+        health={mode === 'survival' ? health : null}
       />
 
-      {isTouch && started && !paused && !bagOpen && (
+      {isTouch && started && !paused && !bagOpen && !dead && (
         <TouchControls
           input={input}
           flying={flying}
@@ -393,7 +427,20 @@ export default function App() {
         />
       )}
 
-      {(!started || paused) && !bagOpen && (
+      {dead && (
+        <div className="overlay death">
+          <div className="panel" role="alertdialog" aria-label="你死了">
+            <h1>你死了</h1>
+            <p className="sub">{dead}。</p>
+            <button type="button" className="primary" onClick={respawn}>
+              重生
+            </button>
+            <p className="mode-note">会回到出生点，生命值回满，背包里的东西都还在。</p>
+          </div>
+        </div>
+      )}
+
+      {(!started || paused) && !bagOpen && !dead && (
         <div className="overlay">
           <div className="panel">
             <h1>方块小镇</h1>
@@ -433,7 +480,7 @@ export default function App() {
             </div>
             <p className="mode-note">
               {mode === 'survival'
-                ? '按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
+                ? '有 10 颗心，从 4 格以上摔下来会掉血，掉进水里不会；不受伤一会儿会慢慢回血。按住才能挖，挖到的方块进背包，放方块要消耗。合成镐、铲、斧挖得更快（自动使用），铁矿石要用镐挖，铁锭能做水桶。'
                 : '方块无限，随便放。'}
             </p>
             <div className="row time-row">

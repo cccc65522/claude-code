@@ -24,6 +24,10 @@ export function createPlayer(position, yaw = 0, pitch = 0) {
     onGround: false,
     flying: false,
     inWater: false,
+    fallStartY: null, // 开始往下掉时的高度，用来算摔落距离
+    health: 20,
+    sinceHurt: 99, // 距离上次受伤的秒数
+    regen: 0,
   };
 }
 
@@ -85,15 +89,19 @@ function moveAxis(world, p, axis, amount) {
 
 /**
  * input: { forward, right（-1..1，摇杆或按键）, jump, down, sprint }
+ * 返回这一帧落地时摔下来的高度（没落地是 0），用来算摔落伤害。
  */
 export function stepPlayer(world, p, input, dt) {
   // 帧率很低时拆成小步，防止穿墙
   const steps = Math.ceil(dt / 0.02);
   const h = dt / steps;
-  for (let i = 0; i < steps; i++) step(world, p, input, h);
+  let landed = 0;
+  for (let i = 0; i < steps; i++) landed = Math.max(landed, step(world, p, input, h));
+  return landed;
 }
 
 function step(world, p, input, dt) {
+  const y0 = p.pos[1]; // 这一步移动前的高度（从这里开始算掉落）
   p.inWater = !p.flying && bodyInWater(world, p);
   const speed = p.flying ? FLY_SPEED : p.inWater ? SWIM_SPEED : input.sprint ? SPRINT_SPEED : WALK_SPEED;
   let f = input.forward || 0;
@@ -139,4 +147,16 @@ function step(world, p, input, dt) {
   const hitY = moveAxis(world, p, 1, p.vel[1] * dt);
   p.onGround = hitY && falling;
   if (p.onGround && p.flying) p.flying = false;
+
+  // 记录掉落：飞行或者掉进水里就重新算，落地时返回掉了多高
+  let landed = 0;
+  if (p.flying || p.inWater || bodyInWater(world, p)) {
+    p.fallStartY = null;
+  } else if (p.onGround) {
+    if (p.fallStartY !== null) landed = Math.max(0, p.fallStartY - p.pos[1]);
+    p.fallStartY = null;
+  } else {
+    p.fallStartY = Math.max(p.fallStartY ?? y0, y0, p.pos[1]);
+  }
+  return landed;
 }

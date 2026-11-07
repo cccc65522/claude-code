@@ -76,7 +76,7 @@ canvas { display: block; }
 .toast {
   position: absolute;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  bottom: calc(env(safe-area-inset-bottom) + 104px);
   transform: translateX(-50%);
   padding: 4px 12px;
   border-radius: 999px;
@@ -336,6 +336,48 @@ kbd {
 
 @media (prefers-color-scheme: dark) {
   .stack.missing .stack-text { color: #ff8a7a; }
+}
+
+/* ---------- 生命值 ---------- */
+.hearts {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 74px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+.heart { width: 18px; height: 18px; }
+.heart-empty { fill: rgba(30, 20, 20, 0.55); stroke: rgba(0, 0, 0, 0.6); stroke-width: 1; }
+.heart-full { fill: #e8333a; }
+.hearts.low .heart { animation: heart-shake 0.6s infinite; }
+.hearts.low .heart:nth-child(2n) { animation-delay: 0.15s; }
+@keyframes heart-shake {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+
+/* 受伤时屏幕边缘闪红 */
+.hurt {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 120px 30px rgba(220, 20, 20, 0.75);
+}
+.hurt.hit { animation: hurt-flash 0.6s ease-out; }
+@keyframes hurt-flash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.overlay.death { background: rgba(120, 10, 10, 0.45); }
+.overlay.death h1 { color: #c62828; }
+
+@media (max-width: 480px) {
+  .hearts { bottom: calc(env(safe-area-inset-bottom) + 58px); }
+  .heart { width: 14px; height: 14px; }
 }
 
 /* 生存模式挖方块的进度环（围着准星） */
