@@ -1,4 +1,4 @@
-import { AIR, EGG, TORCH, isCrop } from './blocks.js';
+import { AIR, BLOCKS, EGG, LADDER_BASE, SIDES, TORCH, isCrop, isDoor } from './blocks.js';
 import { growCrops, supportedBy } from './farming.js';
 import { Fluids } from './fluid.js';
 import { computeLight, computeSkyLight, updateBlockLight, updateSkyLight } from './light.js';
@@ -34,20 +34,41 @@ export class Sim {
    */
   edit(x, y, z, id) {
     const world = this.world;
+    const before = world.get(x, y, z);
     if (!world.set(x, y, z, id)) return null;
     const changed = [world.index(x, y, z)];
+    // 因为没了支撑而一起掉下来的东西（火把、庄稼、蛋、门、梯子），调用的人可以把它们捡回背包
+    this.lastRemoved = [];
+    const remove = (ax, ay, az, drop = true) => {
+      const was = world.get(ax, ay, az);
+      if (!world.set(ax, ay, az, AIR)) return;
+      changed.push(world.index(ax, ay, az));
+      this.fluids.schedule(ax, ay, az);
+      if (drop) this.lastRemoved.push(was);
+    };
 
     if (isCrop(id)) this.crops.add(world.index(x, y, z));
     else this.crops.delete(world.index(x, y, z));
 
-    // 脚下的方块没了，上面的火把掉下来；耕地没了，上面的庄稼也没了
+    // 门的上下两半是一起的：拆掉一半，另一半也没了（只掉一扇门）
+    if (isDoor(before) && !isDoor(id)) {
+      const other = BLOCKS[before].door.half ? y - 1 : y + 1;
+      if (isDoor(world.get(x, other, z))) remove(x, other, z, false);
+    }
+
+    // 脚下的方块没了，上面的火把、蛋、门掉下来；耕地没了，上面的庄稼也没了
+    const solid = world.isSolidBlock(x, y, z);
     const above = world.get(x, y + 1, z);
-    const loseTorch = (above === TORCH || above === EGG) && !world.isSolidBlock(x, y, z); // 火把和蛋要放在实心方块上
-    const loseCrop = isCrop(above) && !supportedBy(above, world.get(x, y, z));
-    if (loseTorch || loseCrop) {
-      world.set(x, y + 1, z, AIR);
-      changed.push(world.index(x, y + 1, z));
-      this.fluids.schedule(x, y + 1, z);
+    const needsFloor = above === TORCH || above === EGG || (isDoor(above) && BLOCKS[above].door.half === 0);
+    if ((needsFloor && !solid) || (isCrop(above) && !supportedBy(above, world.get(x, y, z)))) {
+      remove(x, y + 1, z);
+      if (isDoor(above) && isDoor(world.get(x, y + 2, z))) remove(x, y + 2, z, false);
+    }
+    // 墙没了，贴在上面的梯子掉下来
+    if (!solid) {
+      SIDES.forEach(([sx, sz], f) => {
+        if (world.get(x - sx, y, z - sz) === LADDER_BASE + f) remove(x - sx, y, z - sz);
+      });
     }
     this.fluids.schedule(x, y, z);
 

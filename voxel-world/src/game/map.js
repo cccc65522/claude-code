@@ -29,6 +29,7 @@ const BASE = {
   [TORCH]: [250, 200, 80],
   [EGG]: [236, 236, 222],
 };
+for (let id = 32; id < 52; id++) BASE[id] = [160, 112, 64]; // 门和梯子：木头色
 
 // 这一列地图上显示的方块和高度（跳过空气；水显示成水，记下水有多深）
 export function surfaceOf(world, x, z) {

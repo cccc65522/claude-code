@@ -500,6 +500,40 @@ painters[TILE.chestSide] = (put, rand) => {
   }
 };
 
+// 门：木板拼的，上半有一扇小窗（透明），下半有个门把手
+function door(top) {
+  return (put, rand) => {
+    for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) {
+      const frame = x <= 1 || x >= 14 || (top ? y <= 1 : y >= 14);
+      const k = (frame ? 0.78 : 1) * (1 + (rand() - 0.5) * 0.12) * (x % 5 === 0 ? 0.9 : 1);
+      if (top && x >= 4 && x <= 11 && y >= 4 && y <= 10 && x !== 7 && x !== 8 && y !== 7) put(x, y, 0, 0, 0, 0);
+      else put(x, y, 160 * k, 112 * k, 64 * k);
+    }
+    if (!top) {
+      put(11, 6, 210, 200, 120);
+      put(11, 7, 180, 170, 100);
+    }
+  };
+}
+painters[TILE.doorBottom] = door(false);
+painters[TILE.doorTop] = door(true);
+// 梯子：两根竖杆加四根横档，其它地方透明
+painters[TILE.ladder] = (put, rand) => {
+  transparent(put);
+  for (let y = 0; y < TILE_PX; y++) {
+    for (const x of [2, 3, 12, 13]) {
+      const k = 1 + (rand() - 0.5) * 0.15;
+      put(x, y, 130 * k, 92 * k, 54 * k);
+    }
+    if (y % 4 === 1 || y % 4 === 2) {
+      for (let x = 4; x < 12; x++) {
+        const k = (y % 4 === 2 ? 0.8 : 1) * (1 + (rand() - 0.5) * 0.15);
+        put(x, y, 160 * k, 114 * k, 66 * k);
+      }
+    }
+  }
+};
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

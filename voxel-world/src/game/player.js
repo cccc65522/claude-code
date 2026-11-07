@@ -1,4 +1,4 @@
-import { isLiquid } from './blocks.js';
+import { isLadder, isLiquid } from './blocks.js';
 
 // 玩家物理：一个 0.6 x 1.8 x 0.6 的盒子，分轴移动并和方块做碰撞。
 
@@ -130,7 +130,18 @@ export function stepPlayer(world, p, input, dt) {
   return landed;
 }
 
+const CLIMB_SPEED = 3.2;
+
+// 脚下或腰部那一格是梯子
+export function onLadder(world, p) {
+  if (p.flying) return false;
+  const x = Math.floor(p.pos[0]);
+  const z = Math.floor(p.pos[2]);
+  return isLadder(world.get(x, Math.floor(p.pos[1] + 0.1), z)) || isLadder(world.get(x, Math.floor(p.pos[1] + 1), z));
+}
+
 function step(world, p, input, dt) {
+  p.onLadder = false;
   const y0 = p.pos[1]; // 这一步移动前的高度（从这里开始算掉落）
   p.inWater = !p.flying && bodyInWater(world, p);
   const speed = p.flying ? FLY_SPEED : p.inWater ? SWIM_SPEED : input.sprint ? SPRINT_SPEED : WALK_SPEED;
@@ -156,6 +167,12 @@ function step(world, p, input, dt) {
   if (p.flying) {
     const wantY = ((input.jump ? 1 : 0) - (input.down ? 1 : 0)) * speed;
     p.vel[1] += (wantY - p.vel[1]) * Math.min(1, dt * 12);
+  } else if (onLadder(world, p)) {
+    // 梯子：往前走或按跳往上爬，按下蹲往下，不按就慢慢滑下去
+    p.onLadder = true;
+    if (input.jump || (input.forward || 0) > 0.1) p.vel[1] = CLIMB_SPEED;
+    else if (input.down) p.vel[1] = -CLIMB_SPEED;
+    else p.vel[1] = -1.2;
   } else if (p.inWater) {
     // 水里：浮力很大，慢慢下沉；按跳往上游，按下蹲往下潜
     if (input.jump) p.vel[1] = Math.min(SWIM_UP, p.vel[1] + 20 * dt);
@@ -181,7 +198,7 @@ function step(world, p, input, dt) {
 
   // 记录掉落：飞行或者掉进水里就重新算，落地时返回掉了多高
   let landed = 0;
-  if (p.flying || p.inWater || bodyInWater(world, p)) {
+  if (p.flying || p.inWater || p.onLadder || bodyInWater(world, p)) {
     p.fallStartY = null;
   } else if (p.onGround) {
     if (p.fallStartY !== null) landed = Math.max(0, p.fallStartY - p.pos[1]);

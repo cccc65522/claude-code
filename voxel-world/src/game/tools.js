@@ -10,6 +10,9 @@ export const HARDNESS = {
   [STONE]: 1.8, [COAL_ORE]: 2.2, [IRON_ORE]: 2.8, [BRICK]: 1.8,
   [GLASS]: 0.35, [TORCH]: 0, [EGG]: 0, [FARMLAND]: 0.6, [BED]: 0.5, [CHEST]: 1.2,
 };
+// 门（32–47）和梯子（48–51）：用斧头快
+for (let id = 32; id < 48; id++) HARDNESS[id] = 1;
+for (let id = 48; id < 52; id++) HARDNESS[id] = 0.4;
 
 // 每种方块用什么工具挖更快
 export const TOOL_KIND = {
@@ -17,6 +20,7 @@ export const TOOL_KIND = {
   [LOG]: 'axe', [PLANKS]: 'axe', [LEAVES]: 'axe', [BED]: 'axe', [CHEST]: 'axe',
   [STONE]: 'pickaxe', [COAL_ORE]: 'pickaxe', [IRON_ORE]: 'pickaxe', [BRICK]: 'pickaxe', [GLASS]: 'pickaxe',
 };
+for (let id = 32; id < 52; id++) TOOL_KIND[id] = 'axe';
 
 // 没有对应工具就挖不动的方块
 export const NEEDS_TOOL = { [IRON_ORE]: 'pickaxe' };

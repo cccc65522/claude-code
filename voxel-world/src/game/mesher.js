@@ -1,9 +1,10 @@
 import { AIR, BLOCKS, isLiquid, isOpaque, isTransparent, waterLevel } from './blocks.js';
 import { lightBrightness } from './light.js';
+import { panelBox } from './building.js';
 import { CHUNK } from './world.js';
 
 export const ATLAS_COLS = 4;
-export const ATLAS_ROWS = 12;
+export const ATLAS_ROWS = 16; // 4×16 = 64 格；TILE 编号要小于这个数（有测试检查）
 
 // 每个面的四个角。三角形用 (0,1,2)(2,1,3)，从外面看是逆时针。
 // uv 的 v=1 是贴图上方，所以侧面的草在上面。
@@ -222,6 +223,13 @@ export function buildChunkGeometry(world, cx, cz) {
         if (def.shape === 'bed') {
           // 矮矮的一格：顶面是被子，侧面是木框
           addBedBox(solid, def.tiles, x, y, z, lightBrightness(world.lightAt(x, y + 1, z)), lightBrightness(world.skyAt(x, y + 1, z)));
+          continue;
+        }
+
+        if (def.shape === 'door' || def.shape === 'ladder') {
+          // 薄薄的一块板：门（关着贴在一边，开着转到旁边那一面）或者贴墙的梯子
+          const [min, max] = panelBox(block);
+          addBox(solid, def.tiles.side, x, y, z, min, max, lightBrightness(world.lightAt(x, y, z)), lightBrightness(world.skyAt(x, y, z)));
           continue;
         }
 

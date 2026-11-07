@@ -8,6 +8,7 @@ import { raycast } from '../game/raycast.js';
 import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer } from '../game/player.js';
 import { AIR, BLOCKS, CHEST, EGG, FARMLAND, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
 import { chestKey, emptyChestInto } from '../game/home.js';
+import { doorPlacement, ladderPlacement, toggleDoor } from '../game/building.js';
 import { GROW_STEP, cropDrops, plantTarget } from '../game/farming.js';
 import {
   BUCKET, SURVIVAL_HOTBAR, WATER_BUCKET, addItem, countOf, dropFor, itemName, takeItem,
@@ -15,7 +16,7 @@ import {
 import { digInfo, toolKindName } from '../game/tools.js';
 import { EXHAUSTION, addExhaustion, fallDamage, hurt, regenerate, updateAir, updateHunger } from '../game/health.js';
 import { attackDamage } from '../game/tools.js';
-import { COAL, SEEDS, STONE_HOE, bonusDrop } from '../game/items.js';
+import { COAL, DOOR_ITEM, LADDER_ITEM, SEEDS, STONE_HOE, bonusDrop } from '../game/items.js';
 import {
   damageMonster, rayHitMonster, shouldRemove, stepMonster, trySpawn, DISSOLVE_SECONDS, SUNLIT,
 } from '../game/monsters.js';
@@ -254,9 +255,9 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const dig = (t) => {
     const survival = modeRef.current === 'survival';
     const [x, y, z] = t.hit;
-    const above = world.get(x, y + 1, z);
     const dirty = sim.edit(x, y, z, AIR);
     if (!dirty) return;
+    const fell = sim.lastRemoved; // 因为没了支撑一起掉下来的东西
     renderer.rebuildKeys(dirty);
     sound.block(soundMaterial(t.block), [x + 0.5, y + 0.5, z + 0.5], 'break');
     // 挖掉箱子：里面的东西倒进背包
@@ -275,10 +276,10 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
         pickUp(bonusDrop(t.block)); // 树叶里的苹果、草里的野莓和麦种
       }
       addExhaustion(playerRef.current, EXHAUSTION.dig);
-      // 上面的火把 / 庄稼跟着掉下来，也捡起来
-      if (world.get(x, y + 1, z) !== above) {
-        if (above === TORCH) pickUp(TORCH);
-        if (isCrop(above)) for (const [id, n] of cropDrops(above)) for (let i = 0; i < n; i++) pickUp(id);
+      // 跟着掉下来的火把、庄稼、蛋、门、梯子也捡起来
+      for (const id of fell) {
+        if (isCrop(id)) for (const [d, n] of cropDrops(id)) for (let i = 0; i < n; i++) pickUp(d);
+        else pickUp(dropFor(id));
       }
       onInventory();
     }
@@ -343,6 +344,50 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     onMessage(`喂了${sp.name}${itemName(food)}：再喂一只靠近它的${sp.name}，就会生${sp.babyName}`);
   };
 
+  // 改好几格，一起重建、出声、扣东西
+  const applyCells = (cells, item, material) => {
+    const dirty = new Set();
+    for (const [x, y, z, id] of cells) sim.edit(x, y, z, id)?.forEach((k) => dirty.add(k));
+    if (!dirty.size) return false;
+    renderer.rebuildKeys(dirty);
+    const [x, y, z] = cells[0];
+    sound.block(material, [x + 0.5, y + 0.5, z + 0.5], 'place');
+    if (item !== null && modeRef.current === 'survival') {
+      takeItem(inventory, item);
+      onInventory();
+    }
+    onEdit();
+    return true;
+  };
+
+  // 放门（两格高，门板朝着玩家面对的方向）和梯子（贴在点中的墙上）
+  const build = (t, item) => {
+    if (!t) return;
+    const p = playerRef.current;
+    if (item === DOOR_ITEM) {
+      const r = doorPlacement(world, t.hit[0] + t.normal[0], t.hit[1] + t.normal[1], t.hit[2] + t.normal[2], p.yaw);
+      if (r.error) return onMessage(r.error);
+      if (r.cells.some(([x, y, z]) => overlapsBlock(p, x, y, z))) return onMessage('站开一点再放门');
+      return applyCells(r.cells, item, 'wood');
+    }
+    const r = ladderPlacement(world, t.hit, t.normal);
+    if (r.error) return onMessage(r.error);
+    return applyCells([r.cell], item, 'wood');
+  };
+
+  // 开关门：站在门口时关不上
+  const useDoor = (t) => {
+    const cells = toggleDoor(world, ...t.hit);
+    if (!cells) return;
+    const closing = !BLOCKS[cells[0][3]].passable;
+    if (closing && cells.some(([x, y, z]) => overlapsBlock(playerRef.current, x, y, z))) return onMessage('站在门口关不上门');
+    const dirty = new Set();
+    for (const [x, y, z, id] of cells) sim.edit(x, y, z, id)?.forEach((k) => dirty.add(k));
+    renderer.rebuildKeys(dirty);
+    sound.door(!closing, [cells[0][0] + 0.5, cells[0][1] + 1, cells[0][2] + 0.5]);
+    onEdit();
+  };
+
   const place = (t) => {
     const survival = modeRef.current === 'survival';
     const selected = selectedRef.current;
@@ -352,12 +397,14 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     const use = t && BLOCKS[t.block]?.interact;
     if (use === 'chest') return onOpenChest(chestKey(...t.hit));
     if (use === 'sleep') return onSleep([...t.hit]);
+    if (use === 'door') return useDoor(t);
     if (survival && countOf(inventory, selected) <= 0) {
       if (selected === SEEDS) return onMessage('没有麦种了：挖草方块有时能挖到，收割小麦也会给');
       return onMessage(`没有${itemName(selected)}了，${selected < 100 ? '去背包里合成或者挖一些' : '可以在背包里合成'}`);
     }
     if (selected === BUCKET) return fillBucket();
     if (selected === SEEDS) return plant(t);
+    if (selected === DOOR_ITEM || selected === LADDER_ITEM) return build(t, selected);
     if (!t) return;
     const x = t.hit[0] + t.normal[0];
     const y = t.hit[1] + t.normal[1];

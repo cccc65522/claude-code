@@ -271,6 +271,19 @@ class SoundEngine {
     this.tone(d, { type: 'sine', from: fill ? 300 : 500, to: fill ? 500 : 300, gain: 0.12, decay: 0.2 });
   }
 
+  // 开门：吱呀一声；关门：咚一下
+  door(open, at) {
+    const d = this.out(at, 0.9);
+    if (!d) return;
+    if (open) {
+      this.tone(d, { type: 'sawtooth', from: 380, to: 520, gain: 0.08, attack: 0.04, decay: 0.3, filter: 900 });
+      this.tone(d, { type: 'triangle', from: 160, to: 130, gain: 0.25, decay: 0.12 });
+    } else {
+      this.tone(d, { type: 'triangle', from: 150, to: 90, gain: 0.45, decay: 0.15 });
+      this.burst(d, { type: 'lowpass', freq: 600, gain: 0.4, decay: 0.1 });
+    }
+  }
+
   pickup() {
     const d = this.out(null, 0.5);
     if (!d) return;

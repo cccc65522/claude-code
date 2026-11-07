@@ -1,7 +1,7 @@
 import { BED, BRICK, CHEST, DIRT, GLASS, IRON_ORE, LEAVES, LOG, PLANKS, SAND, STONE, TORCH } from './blocks.js';
 import {
   APPLE, BERRIES, BREAD, BUCKET, COAL, IRON_INGOT, IRON_PICKAXE, PIE, STICK, STONE_AXE, STONE_HOE, STONE_PICKAXE, STONE_SHOVEL, WHEAT,
-  RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, addItem, countOf, takeItem,
+  RAW_MEAT, COOKED_MEAT, DUCK_EGG, EGG_PANCAKE, DOOR_ITEM, LADDER_ITEM, addItem, countOf, takeItem,
 } from './items.js';
 
 // 合成配方：不用摆位置，材料够就能合成
@@ -13,6 +13,8 @@ export const RECIPES = [
   { id: 'brick', inputs: [[DIRT, 2], [SAND, 1], [COAL, 1]], output: [BRICK, 2], hint: '泥和沙子烧成砖' },
   { id: 'bed', inputs: [[PLANKS, 3], [LEAVES, 4]], output: [BED, 1], hint: '晚上睡一觉就天亮；睡过的床就是重生点' },
   { id: 'chest', inputs: [[PLANKS, 8]], output: [CHEST, 1], hint: '右键打开，能存东西' },
+  { id: 'door', inputs: [[PLANKS, 6]], output: [DOOR_ITEM, 1], hint: '两格高，右键开关；关着的门夜影进不来' },
+  { id: 'ladder', inputs: [[STICK, 7]], output: [LADDER_ITEM, 3], hint: '贴在墙上，往前走或跳就能往上爬' },
   { id: 'stonePickaxe', inputs: [[STONE, 3], [STICK, 2]], output: [STONE_PICKAXE, 1], hint: '挖石头、矿石快 4 倍，挖铁矿石必须有镐' },
   { id: 'stoneShovel', inputs: [[STONE, 1], [STICK, 2]], output: [STONE_SHOVEL, 1], hint: '挖泥土、沙子快 4 倍' },
   { id: 'stoneAxe', inputs: [[STONE, 3], [STICK, 2]], output: [STONE_AXE, 1], hint: '砍木头、树叶快 4 倍' },

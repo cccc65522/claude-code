@@ -447,7 +447,7 @@ test('每个配方的产物都能放或者能用来合成别的', () => {
   for (const r of RECIPES) {
     const [out, n] = r.output;
     assert.ok(n > 0);
-    const usable = out < 100 || used.has(out) || TOOLS[out] || out === BUCKET || foodValue(out) > 0;
+    const usable = out < 100 || used.has(out) || TOOLS[out] || out === BUCKET || foodValue(out) > 0 || canUseCustomSlot(out);
     assert.ok(usable, `${itemName(out)} 有用处`);
   }
   const inv = {};
@@ -1609,4 +1609,119 @@ test('地图：探索记录打包存档后能原样读回来，坏数据返回 n
   assert.equal(unpackExplored('abc', size), null);
   assert.equal(unpackExplored(null, size), null);
   assert.equal(unpackExplored(packExplored(new Uint8Array(64)), size), null, '大小不对');
+});
+
+// ---------- 门和梯子 ----------
+import { DOOR_BASE, LADDER_BASE, doorId, isDoor, isLadder } from '../src/game/blocks.js';
+import { DOOR_ITEM, LADDER_ITEM } from '../src/game/items.js';
+import { facingFromYaw, doorPlacement, toggleDoor, ladderPlacement, ladderWall, panelBox } from '../src/game/building.js';
+import { onLadder } from '../src/game/player.js';
+
+test('门：放在两格高的空地上，门板朝着玩家面对的方向；开着能过、关着挡路', () => {
+  assert.equal(facingFromYaw(0), 0, '面朝 -z 是北');
+  assert.equal(facingFromYaw(-Math.PI / 2), 1, '面朝 +x 是东');
+  assert.equal(facingFromYaw(Math.PI), 2);
+  assert.equal(facingFromYaw(Math.PI / 2), 3);
+  const w = floorWorld();
+  const r = doorPlacement(w, 5, 1, 5, 0);
+  assert.deepEqual(r.cells, [[5, 1, 5, doorId(0, false, 0)], [5, 2, 5, doorId(1, false, 0)]]);
+  assert.ok(doorPlacement(w, 5, 2, 5, 0).error, '悬空不行');
+  w.set(6, 2, 6, STONE);
+  assert.ok(doorPlacement(w, 6, 1, 6, 0).error, '上面没空');
+  for (const [x, y, z, id] of r.cells) w.set(x, y, z, id);
+  assert.equal(w.isSolid(5, 1, 5), true, '关着的门挡路');
+  const open = toggleDoor(w, 5, 2, 5); // 点上半也行
+  assert.deepEqual(open, [[5, 1, 5, doorId(0, true, 0)], [5, 2, 5, doorId(1, true, 0)]]);
+  for (const [x, y, z, id] of open) w.set(x, y, z, id);
+  assert.equal(w.isSolid(5, 1, 5), false, '开着能过');
+  assert.equal(toggleDoor(w, 7, 1, 7), null);
+  const [min, max] = panelBox(doorId(0, false, 0));
+  assert.deepEqual([min, max], [[0, 0, 0], [1, 1, 3 / 16]], '关着：贴在北边');
+  const [omin, omax] = panelBox(doorId(0, true, 0));
+  assert.deepEqual([omin, omax], [[1 - 3 / 16, 0, 0], [1, 1, 1]], '开着：转到东边');
+  assert.equal(dropFor(doorId(1, true, 2)), DOOR_ITEM);
+  assert.ok(isDoor(DOOR_BASE + 15) && !isDoor(DOOR_BASE + 16));
+});
+
+test('门：拆掉一半另一半也没了，只掉一扇；脚下挖空门会掉；夜影进不了关着的门', () => {
+  const w = floorWorld();
+  const sim = new Sim(w);
+  for (const [x, y, z, id] of doorPlacement(w, 5, 1, 5, 0).cells) sim.edit(x, y, z, id);
+  sim.edit(5, 2, 5, AIR); // 拆上半
+  assert.equal(w.get(5, 1, 5), AIR);
+  assert.deepEqual(sim.lastRemoved, [], '另一半不算掉落（挖的那一半自己掉一扇门）');
+
+  for (const [x, y, z, id] of doorPlacement(w, 8, 1, 8, 0).cells) sim.edit(x, y, z, id);
+  sim.edit(8, 0, 8, AIR); // 挖掉脚下
+  assert.equal(w.get(8, 1, 8), AIR);
+  assert.equal(w.get(8, 2, 8), AIR);
+  assert.deepEqual(sim.lastRemoved.map(dropFor), [DOOR_ITEM], '掉一扇门');
+
+  // 一堵墙中间一扇关着的门：夜影过不去
+  for (let z = 0; z < 32; z++) for (let y = 1; y <= 3; y++) w.rawSet(16, y, z, STONE);
+  w.rawSet(16, 1, 10, doorId(0, false, 1));
+  w.rawSet(16, 2, 10, doorId(1, false, 1));
+  const player = createPlayer([20.5, 1, 10.5]);
+  const m = createMonster([12.5, 1, 10.5]);
+  for (let i = 0; i < 300; i++) stepMonster(w, m, player, 1 / 30, { rand: seq(0.5) });
+  assert.ok(m.pos[0] < 16, `被门挡住：x=${m.pos[0]}`);
+});
+
+test('梯子：贴在墙的侧面，墙没了梯子掉；站在梯子上往前走会往上爬、不摔伤', () => {
+  const w = floorWorld();
+  for (let y = 1; y <= 8; y++) w.rawSet(10, y, 10, STONE); // 一根 8 格高的柱子
+  assert.ok(ladderPlacement(w, [10, 3, 10], [0, 1, 0]).error, '不能放在顶面');
+  const r = ladderPlacement(w, [10, 3, 10], [0, 0, 1]); // 点中柱子的南面
+  assert.deepEqual(r.cell, [10, 3, 11, LADDER_BASE + 0], '梯子在柱子南边一格，墙在它北边');
+  assert.deepEqual(ladderWall(r.cell[3], 10, 3, 11), [10, 3, 10]);
+  const [min, max] = panelBox(r.cell[3]);
+  assert.deepEqual(max[2], 1 / 16);
+  assert.equal(dropFor(r.cell[3]), LADDER_ITEM);
+
+  const sim = new Sim(w);
+  for (let y = 1; y <= 8; y++) sim.edit(10, y, 11, LADDER_BASE + 0);
+  assert.equal(w.isSolid(10, 4, 11), false, '梯子能穿过');
+  sim.edit(10, 5, 10, AIR); // 挖掉柱子中间一块
+  assert.equal(w.get(10, 5, 11), AIR, '那一格的梯子掉了');
+  assert.deepEqual(sim.lastRemoved.map(dropFor), [LADDER_ITEM]);
+  sim.edit(10, 5, 10, STONE);
+  sim.edit(10, 5, 11, LADDER_BASE + 0);
+
+  const p = createPlayer([10.5, 1, 11.5], 0); // 面朝北（柱子）
+  for (let i = 0; i < 5; i++) stepPlayer(w, p, {}, 1 / 30);
+  assert.equal(onLadder(w, p), true);
+  for (let i = 0; i < 60; i++) stepPlayer(w, p, { forward: 1 }, 1 / 30);
+  assert.ok(p.pos[1] > 6, `爬上去了：y=${p.pos[1]}`);
+  // 从梯子上松手慢慢滑下来，不会摔伤
+  let landed = 0;
+  for (let i = 0; i < 300; i++) landed = Math.max(landed, stepPlayer(w, p, {}, 1 / 30));
+  assert.ok(p.pos[1] < 1.1, '滑到底了');
+  assert.equal(fallDamage(landed), 0);
+  assert.ok(isLadder(LADDER_BASE + 3) && !isLadder(LADDER_BASE + 4));
+});
+
+test('门和梯子的配方；能放到快捷栏最后一格，方块选择器里有', () => {
+  const inv = {};
+  addItem(inv, PLANKS, 6);
+  addItem(inv, STICK, 7);
+  assert.equal(craft(inv, recipe('door')), 1);
+  assert.equal(craft(inv, recipe('ladder')), 1);
+  assert.equal(countOf(inv, DOOR_ITEM), 1);
+  assert.equal(countOf(inv, LADDER_ITEM), 3);
+  assert.equal(canUseCustomSlot(DOOR_ITEM), true);
+  assert.equal(canUseCustomSlot(LADDER_ITEM), true);
+  assert.equal(canUseCustomSlot(doorId(0, false, 0)), false, '单独的门方块不列出来');
+  const palette = creativePalette();
+  assert.ok(palette.includes(DOOR_ITEM) && palette.includes(LADDER_ITEM));
+  assert.ok(!palette.some((id) => isDoor(id) || isLadder(id)));
+});
+
+import { ATLAS_COLS as ATLAS_COLS_T, ATLAS_ROWS as ATLAS_ROWS_T } from '../src/game/mesher.js';
+import { TILE as TILE_T } from '../src/game/blocks.js';
+
+test('所有贴图编号都在图集范围内（超出会采到错的贴图）', () => {
+  const size = ATLAS_COLS_T * ATLAS_ROWS_T;
+  for (const [name, tile] of Object.entries(TILE_T)) assert.ok(tile < size, `${name} = ${tile}，图集只有 ${size} 格`);
+  const tiles = Object.values(TILE_T);
+  assert.equal(new Set(tiles).size, tiles.length, '没有两个贴图共用一个编号');
 });

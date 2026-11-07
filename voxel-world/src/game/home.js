@@ -1,5 +1,5 @@
 import { BED, BLOCKS, CHEST } from './blocks.js';
-import { SEEDS, addItem, countOf, itemName, sanitizeInventory, takeItem } from './items.js';
+import { DOOR_ITEM, ITEMS, LADDER_ITEM, SEEDS, addItem, countOf, itemName, sanitizeInventory, takeItem } from './items.js';
 
 // 家：床（睡觉、重生点）、箱子（存东西）、快捷栏最后一格（自选）。
 
@@ -32,15 +32,16 @@ export function respawnPoint(world, spawn) {
 
 // 快捷栏最后一格能放什么：能放的方块（不包括水和基岩）和麦种
 export function canUseCustomSlot(id) {
-  if (id === SEEDS) return true;
+  if (id === SEEDS || ITEMS[id]?.placeable) return true; // 麦种、门、梯子
   const def = BLOCKS[id];
-  return Boolean(def) && !def.liquid && !def.unbreakable && def.shape !== 'crop' && id !== 0;
+  // 门和梯子的各个朝向不单独列出来（用物品 DOOR_ITEM / LADDER_ITEM）
+  return Boolean(def) && !def.liquid && !def.unbreakable && def.shape !== 'crop' && !def.door && def.ladder === undefined && id !== 0;
 }
 
 // 创造模式的方块选择器里列出的东西
 export function creativePalette() {
   const ids = Object.keys(BLOCKS).map(Number).filter(canUseCustomSlot);
-  return [...ids.sort((a, b) => a - b), SEEDS];
+  return [...ids.sort((a, b) => a - b), SEEDS, DOOR_ITEM, LADDER_ITEM];
 }
 
 // ---------- 箱子 ----------

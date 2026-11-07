@@ -19,6 +19,12 @@ export const FARMLAND = 16;
 export const EGG = 17; // 圆圆鸭下的蛋，放在地上
 export const BED = 18;
 export const CHEST = 31;
+// 门：32–47。下半 / 上半 × 关 / 开 × 4 个朝向（见 doorId）
+export const DOOR_BASE = 32;
+// 梯子：48–51，4 个朝向（贴在哪一面墙上）
+export const LADDER_BASE = 48;
+// 朝向：0 = 北（-z），1 = 东（+x），2 = 南（+z），3 = 西（-x）
+export const SIDES = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 // 小麦：27–30，四个生长阶段（30 成熟）
 export const WHEAT_BASE = 27;
 export const WHEAT_STAGES = 4;
@@ -76,6 +82,9 @@ export const TILE = {
   bedSide: 45,
   chestTop: 46,
   chestSide: 47,
+  doorBottom: 48,
+  doorTop: 49,
+  ladder: 50,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });
@@ -107,6 +116,28 @@ export const BLOCKS = {
 };
 
 // 小麦：交叉的两片贴图，能穿过，一碰就掉，只能长在耕地上
+// 门：一块薄木板，关着挡路、开着能过；上下两半各是一个方块
+for (let half = 0; half < 2; half++) {
+  for (let open = 0; open < 2; open++) {
+    for (let facing = 0; facing < 4; facing++) {
+      BLOCKS[DOOR_BASE + half * 8 + open * 4 + facing] = {
+        name: '门',
+        tiles: all(half ? TILE.doorTop : TILE.doorBottom),
+        transparent: true,
+        passable: open === 1,
+        shape: 'door',
+        door: { half, open: open === 1, facing },
+        interact: 'door',
+      };
+    }
+  }
+}
+
+// 梯子：贴在墙上的一层，能穿过，站在上面能爬
+for (let facing = 0; facing < 4; facing++) {
+  BLOCKS[LADDER_BASE + facing] = { name: '梯子', tiles: all(TILE.ladder), transparent: true, passable: true, shape: 'ladder', ladder: facing };
+}
+
 for (let stage = 0; stage < WHEAT_STAGES; stage++) {
   BLOCKS[WHEAT_BASE + stage] = {
     name: stage === WHEAT_STAGES - 1 ? '成熟的小麦' : '小麦苗',
@@ -155,6 +186,18 @@ export function waterLevel(id) {
 }
 
 // 人能不能穿过（空气、水、火把）
+export function doorId(half, open, facing) {
+  return DOOR_BASE + half * 8 + (open ? 4 : 0) + facing;
+}
+
+export function isDoor(id) {
+  return id >= DOOR_BASE && id < DOOR_BASE + 16;
+}
+
+export function isLadder(id) {
+  return id >= LADDER_BASE && id < LADDER_BASE + 4;
+}
+
 export function isCrop(id) {
   return id >= WHEAT_BASE && id < WHEAT_BASE + WHEAT_STAGES;
 }
