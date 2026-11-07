@@ -223,13 +223,14 @@ function Highlight({ targetRef, digRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, animals, peacefulRef, chests, onOpenChest, onSleep }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef, digUiRef, hurtUiRef, onHealth, onDeath, onAir, onHunger, monsters, animals, peacefulRef, chests, onOpenChest, onSleep, map }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
   const fluidTimer = useRef(0);
   const growTimer = useRef(0);
   const animalTimer = useRef(0);
+  const mapTimer = useRef(0);
   // 音效用到的状态：脚步走了多远、上一帧在不在水里、挖方块的敲击、游泳划水
   const sfx = useRef({ walked: 0, wasInWater: false, digTick: 0, swim: 0, lastPos: null });
   const flicker = useMemo(() => ({ base: new THREE.Color('#ffc27a'), t: 0 }), []);
@@ -610,6 +611,13 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
     camera.position.set(p.pos[0], p.pos[1] + EYE_HEIGHT, p.pos[2]);
     // 远处还没建好的区块每帧建一点；离太远的区块不画
     renderer.update(p.pos[0], p.pos[2], 6);
+    // 地图：每半秒点亮走过的地方、更新改过的区块
+    mapTimer.current += dt;
+    if (map && mapTimer.current > 0.5) {
+      mapTimer.current = 0;
+      map.explore(p.pos[0], p.pos[2]);
+      map.flush();
+    }
     sound.setListener([p.pos[0], p.pos[1] + EYE_HEIGHT, p.pos[2]], p.yaw);
     camera.rotation.set(p.pitch, p.yaw, 0, 'YXZ');
 
@@ -985,6 +993,7 @@ function WorldScene(props) {
     // 先把玩家身边的区块建好，远处的在 Controller 里每帧建一些
     const p = props.playerRef.current;
     r.buildAround(p.pos[0], p.pos[2], 2);
+    r.onRebuild = (cx, cz) => props.map?.markChunk(cx, cz);
     return r;
   }, [world, materials]); // eslint-disable-line react-hooks/exhaustive-deps
   // 开发服务器里方便调试：可以手动重建区块（打包后没有）

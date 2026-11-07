@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 const RADIUS = 52;
 
 // 手机操作：左下角摇杆移动，在屏幕其他地方拖动转视角，右下角按钮挖 / 放 / 跳。
-export default function TouchControls({ input, onPause, flying, onToggleFly, onBag, onEat }) {
+export default function TouchControls({ input, onPause, flying, onToggleFly, onBag, onEat, onMap }) {
   const joyId = useRef(null);
   const joyCenter = useRef([0, 0]);
   const lookId = useRef(null);
@@ -115,6 +115,11 @@ export default function TouchControls({ input, onPause, flying, onToggleFly, onB
         {onEat && (
           <button type="button" className="chip" onTouchStart={(e) => e.stopPropagation()} onClick={onEat}>
             吃
+          </button>
+        )}
+        {onMap && (
+          <button type="button" className="chip" onTouchStart={(e) => e.stopPropagation()} onClick={onMap}>
+            地图
           </button>
         )}
         {onBag && (

@@ -1550,3 +1550,63 @@ test('区块渲染：一开始只建身边的，之后由近到远补齐；远�
   assert.ok(farKey, '有离得很远的区块');
   assert.equal(r.meshes.get(farKey).solid.visible, false);
 });
+
+// ---------- 地图 ----------
+import { columnColor, surfaceOf, MapData, packExplored, unpackExplored, EXPLORE_RADIUS } from '../src/game/map.js';
+import { SNOW as SNOW_ID } from '../src/game/blocks.js';
+
+test('地图颜色：草地绿、沙子黄、水蓝而且越深越暗、雪白；高的地方亮', () => {
+  const w = floorWorld();
+  for (let x = 0; x < 32; x++) for (let z = 0; z < 32; z++) w.rawSet(x, 1, z, GRASS_ID);
+  w.rawSet(5, 1, 5, SAND_B);
+  w.rawSet(6, 1, 6, SNOW_ID);
+  for (let y = 1; y <= 2; y++) w.rawSet(10, y, 10, WATER);
+  for (let y = 1; y <= 8; y++) w.rawSet(12, y, 12, WATER);
+  const [r, g, b] = columnColor(w, 20, 20);
+  assert.ok(g > r && g > b, '草地偏绿');
+  const sand = columnColor(w, 5, 5);
+  assert.ok(sand[0] > 180 && sand[1] > 170, '沙子浅黄');
+  assert.ok(columnColor(w, 6, 6).every((c) => c > 200), '雪白');
+  const shallow = columnColor(w, 10, 10);
+  const deep = columnColor(w, 12, 12);
+  assert.ok(shallow[2] > shallow[0] && deep[2] < shallow[2], '水是蓝的，深水更暗');
+  assert.deepEqual(surfaceOf(w, 12, 12), { id: WATER, y: 8, depth: 8 });
+  w.rawSet(25, 2, 25, GRASS_ID);
+  w.rawSet(25, 1, 25, DIRT_ID);
+  assert.ok(columnColor(w, 25, 25)[1] > columnColor(w, 20, 20)[1], '高出来的地方亮一点');
+});
+
+test('地图：只显示去过的地方；改了方块，flush 后那一列颜色跟着变', () => {
+  const w = floorWorld();
+  for (let x = 0; x < 32; x++) for (let z = 0; z < 32; z++) w.rawSet(x, 1, z, GRASS_ID);
+  const map = new MapData(w);
+  const px = (x, z) => [...map.pixels.subarray((z * w.sizeX + x) * 4, (z * w.sizeX + x) * 4 + 3)];
+  const before = px(8, 8);
+  assert.notEqual(before[1] > before[0] + 30, true, '还没去过：是底色不是草绿');
+  const lit = map.explore(8.5, 8.5, 5);
+  assert.ok(lit > 60 && lit < 100, `点亮了 ${lit} 格`);
+  assert.ok(px(8, 8)[1] > px(8, 8)[0], '去过了：显示草地');
+  assert.deepEqual(px(20, 20), before, '远处还没去过');
+  assert.equal(map.explore(8.5, 8.5, 5), 0, '再走一遍不重复点亮');
+
+  w.rawSet(8, 1, 8, SAND_B);
+  assert.ok(px(8, 8)[1] > px(8, 8)[0], 'flush 之前还是旧颜色');
+  map.markChunk(0, 0);
+  assert.equal(map.flush(), true);
+  assert.ok(px(8, 8)[0] > 180, '变成沙子的颜色');
+  assert.equal(map.flush(), false, '没有要更新的');
+  assert.ok(EXPLORE_RADIUS >= 30);
+});
+
+test('地图：探索记录打包存档后能原样读回来，坏数据返回 null', () => {
+  const size = 256 * 256;
+  const e = new Uint8Array(size);
+  for (let i = 0; i < size; i += 7) e[i] = 1;
+  e[size - 1] = 1;
+  const text = packExplored(e);
+  assert.ok(text.length < 12000, `存档大小 ${text.length} 字`);
+  assert.deepEqual(unpackExplored(text, size), e);
+  assert.equal(unpackExplored('abc', size), null);
+  assert.equal(unpackExplored(null, size), null);
+  assert.equal(unpackExplored(packExplored(new Uint8Array(64)), size), null, '大小不对');
+});

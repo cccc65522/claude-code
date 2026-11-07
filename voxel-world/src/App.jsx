@@ -5,6 +5,8 @@ import Hud from './components/Hud.jsx';
 import TouchControls from './components/TouchControls.jsx';
 import Inventory from './components/Inventory.jsx';
 import Chest from './components/Chest.jsx';
+import MapView from './components/MapView.jsx';
+import { MapData, packExplored, unpackExplored } from './game/map.js';
 import { World } from './game/world.js';
 import { createPlayer } from './game/player.js';
 import { createAtlasCanvas } from './game/atlas.js';
@@ -60,6 +62,14 @@ function writeSave(data) {
 
 // 音量设置也是玩家设置，不跟着世界走
 const VOLUME_KEY = 'voxel-world:volume';
+const MINIMAP_KEY = 'voxel-world:minimap';
+function loadMinimap() {
+  try {
+    return localStorage.getItem(MINIMAP_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 function loadVolume() {
   try {
     const raw = JSON.parse(localStorage.getItem(VOLUME_KEY) || 'null');
@@ -109,7 +119,9 @@ function buildSession(save) {
   const animals = deserializeAnimals(save?.animals, world); // 动物存档
   const chests = deserializeChests(save?.chests, world); // 箱子里的东西
   const custom = canUseCustomSlot(save?.custom) ? save.custom : SEEDS; // 快捷栏最后一格
-  return { world, sim, player, time, mode, inventory, monsters, animals, chests, custom, id: Math.random().toString(36).slice(2) };
+  const map = new MapData(world, unpackExplored(save?.explored, world.sizeX * world.sizeZ)); // 地图和探索记录
+  map.explore(player.pos[0], player.pos[2]);
+  return { world, sim, player, time, mode, inventory, monsters, animals, chests, custom, map, id: Math.random().toString(36).slice(2) };
 }
 
 export default function App() {
@@ -128,8 +140,10 @@ export default function App() {
   const [custom, setCustom] = useState(session.custom);
   const [sleeping, setSleeping] = useState(false);
   const [audio, setAudio] = useState(loadVolume);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [minimap, setMinimap] = useState(loadMinimap);
   const [, setTimeTick] = useState(0);
-  const panelOpen = bagOpen || chestOpen !== null;
+  const panelOpen = bagOpen || chestOpen !== null || mapOpen;
   const [health, setHealth] = useState(session.player.health);
   const [dead, setDead] = useState(null); // 死了的话是死因
   const [air, setAir] = useState(MAX_AIR);
@@ -220,6 +234,7 @@ export default function App() {
       inventory: session.inventory,
       animals: serializeAnimals(session.animals),
       chests: serializeChests(session.chests),
+      explored: packExplored(session.map.explored),
       custom: session.custom,
     });
   }, [session]);
@@ -299,10 +314,16 @@ export default function App() {
     [session, showToast],
   );
 
+  const openMap = useCallback(() => {
+    setMapOpen(true);
+    if (!isTouch && document.pointerLockElement) document.exitPointerLock();
+  }, []);
+
   const closeBag = useCallback(
     (resume = true) => {
       setBagOpen(false);
       setChestOpen(null);
+      setMapOpen(false);
       if (resume) lockPointer();
       else setPaused(true);
     },
@@ -422,13 +443,17 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e) => {
       if (bagOpenRef.current) {
-        if (e.code === 'KeyE') closeBag(true);
+        if (e.code === 'KeyE' || e.code === 'KeyM') closeBag(true);
         else if (e.code === 'Escape') closeBag(false);
         return;
       }
       if (!activeRef.current) return;
       if (e.code === 'KeyE' && !e.repeat) {
         openBag();
+        return;
+      }
+      if (e.code === 'KeyM' && !e.repeat) {
+        openMap();
         return;
       }
       const key = e.code.startsWith('Digit') ? e.code.slice(5) : e.code === 'Minus' ? '-' : e.code === 'Equal' ? '=' : null;
@@ -487,7 +512,7 @@ export default function App() {
       window.removeEventListener('wheel', onWheel);
       document.removeEventListener('pointerlockchange', onLockChange);
     };
-  }, [input, selectSlot, toggleFly, openBag, closeBag, eatFood]);
+  }, [input, selectSlot, toggleFly, openBag, closeBag, eatFood, openMap]);
 
   useEffect(() => {
     sound.setVolume(audio.volume);
@@ -573,6 +598,7 @@ export default function App() {
         chests={session.chests}
         onOpenChest={openChest}
         onSleep={onSleep}
+        map={session.map}
         monsters={session.monsters}
         animals={session.animals}
         onEdit={onEdit}
@@ -605,6 +631,7 @@ export default function App() {
           onToggleFly={toggleFly}
           onPause={() => setPaused(true)}
           onBag={openBag}
+          onMap={openMap}
           onEat={mode === 'survival' ? () => eatFood() : null}
         />
       )}
@@ -635,6 +662,9 @@ export default function App() {
           isTouch={isTouch}
         />
       )}
+
+      {mapOpen && <MapView map={session.map} playerRef={playerRef} mode="full" onClose={() => closeBag(true)} isTouch={isTouch} />}
+      {minimap && started && !panelOpen && !dead && <MapView map={session.map} playerRef={playerRef} mode="mini" />}
 
       {sleeping && <div className="sleep-fade" aria-label="正在睡觉" />}
 
@@ -676,7 +706,7 @@ export default function App() {
                 <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块；<kbd>0</kbd>、<kbd>-</kbd>：生存模式是空桶、水桶，创造模式是火把、水；<kbd>=</kbd> 麦种</li>
                 <li>选麦种对着草地或泥土右键种地（生存模式要有石锄），附近有水长得快</li>
                 <li>拿着麦种，绒耳兔会跟着你；对着它右键喂麦种，两只喂过的靠在一起会生小兔</li>
-                <li><kbd>E</kbd> 打开背包和合成（创造模式是方块选择器），<kbd>R</kbd> 吃东西</li>
+                <li><kbd>E</kbd> 打开背包和合成（创造模式是方块选择器），<kbd>R</kbd> 吃东西，<kbd>M</kbd> 大地图</li>
                 <li>对着床右键睡觉（晚上睡到天亮，也是重生点），对着箱子右键存东西</li>
                 <li>快捷栏最后一格（<kbd>=</kbd>）可以在背包里换成别的东西</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
@@ -730,6 +760,27 @@ export default function App() {
               <button type="button" className={audio.muted ? 'on' : ''} aria-pressed={audio.muted} onClick={() => setAudio((a) => ({ ...a, muted: !a.muted }))}>
                 {audio.muted ? '已静音' : '静音'}
               </button>
+            </div>
+            <div className="row mode-row">
+              <span className="clock">小地图</span>
+              <button
+                type="button"
+                className={minimap ? 'on' : ''}
+                aria-pressed={minimap}
+                onClick={() => {
+                  setMinimap((m) => {
+                    try {
+                      localStorage.setItem(MINIMAP_KEY, m ? '0' : '1');
+                    } catch {
+                      // 存不了也没关系
+                    }
+                    return !m;
+                  });
+                }}
+              >
+                {minimap ? '显示' : '隐藏'}
+              </button>
+              <button type="button" onClick={openMap}>看大地图</button>
             </div>
             <div className="row time-row">
               <span className="clock">游戏时间 {clockText(timeRef.current)}</span>

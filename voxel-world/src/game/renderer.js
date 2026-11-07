@@ -100,6 +100,7 @@ export class ChunkRenderer {
 
     const old = this.meshes.get(key);
     if (old) {
+      this.onRebuild?.(cx, cz); // 已经建过的区块变了（比如改了方块）：通知地图
       old.solid.geometry.dispose();
       old.water.geometry.dispose();
       old.solid.geometry = solid;
