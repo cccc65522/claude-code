@@ -1,4 +1,4 @@
-import { BLOCKS, HOTBAR } from '../game/blocks.js';
+import { BLOCKS, HOTBAR, HOTBAR_KEYS } from '../game/blocks.js';
 import { ATLAS_COLS, ATLAS_ROWS } from '../game/mesher.js';
 
 // 用图集里的贴图显示快捷栏图标
@@ -32,11 +32,11 @@ export default function Hud({ selected, onSelect, atlasUrl, statsRef, toast }) {
             className={'slot' + (i === selected ? ' active' : '')}
             onClick={() => onSelect(i)}
             onTouchStart={(e) => e.stopPropagation()}
-            aria-label={`${(i + 1) % 10} ${BLOCKS[id].name}`}
+            aria-label={`${HOTBAR_KEYS[i]} ${BLOCKS[id].name}`}
             aria-pressed={i === selected}
           >
             <BlockIcon id={id} atlasUrl={atlasUrl} />
-            <span className="slot-key">{(i + 1) % 10}</span>
+            <span className="slot-key">{HOTBAR_KEYS[i]}</span>
           </button>
         ))}
       </div>

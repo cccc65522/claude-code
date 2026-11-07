@@ -289,6 +289,6 @@ kbd {
 .clock { font-size: 14px; color: var(--muted); margin-right: 4px; }
 
 @media (max-width: 480px) {
-  .slot { width: 33px; height: 33px; padding: 3px; }
+  .slot { width: 30px; height: 30px; padding: 3px; }
   .hotbar { gap: 2px; padding: 3px; }
 }

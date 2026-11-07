@@ -1,4 +1,4 @@
-import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER } from './blocks.js';
+import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER, isPassable } from './blocks.js';
 import { fbm2, hash2, mulberry32 } from './noise.js';
 
 export const CHUNK = 16;
@@ -19,6 +19,8 @@ export class World {
     this.sizeZ = chunks * CHUNK;
     this.sizeY = HEIGHT;
     this.data = new Uint8Array(this.sizeX * this.sizeY * this.sizeZ);
+    // 火把的光照等级 0–15（见 light.js）
+    this.light = new Uint8Array(this.data.length);
     // 玩家改动过的方块："x,y,z" -> id。只存改动，存档很小。
     this.edits = new Map();
     if (generate) this.generate();
@@ -30,6 +32,18 @@ export class World {
 
   index(x, y, z) {
     return (y * this.sizeZ + z) * this.sizeX + x;
+  }
+
+  coords(i) {
+    const x = i % this.sizeX;
+    const z = Math.floor(i / this.sizeX) % this.sizeZ;
+    const y = Math.floor(i / (this.sizeX * this.sizeZ));
+    return [x, y, z];
+  }
+
+  lightAt(x, y, z) {
+    if (!this.inBounds(x, y, z)) return 0;
+    return this.light[this.index(x, y, z)];
   }
 
   get(x, y, z) {
@@ -53,13 +67,17 @@ export class World {
     return true;
   }
 
-  // 物理碰撞用：世界边界外面当作墙，脚下当作地板；水可以穿过
+  // 物理碰撞用：世界边界外面当作墙，脚下当作地板；水和火把可以穿过
   isSolid(x, y, z) {
     if (y < 0) return true;
     if (y >= this.sizeY) return false;
     if (x < 0 || z < 0 || x >= this.sizeX || z >= this.sizeZ) return true;
-    const id = this.data[this.index(x, y, z)];
-    return id !== AIR && id !== WATER;
+    return !isPassable(this.data[this.index(x, y, z)]);
+  }
+
+  // 世界里真实存在的实心方块（火把要立在这种方块上）
+  isSolidBlock(x, y, z) {
+    return this.inBounds(x, y, z) && !isPassable(this.get(x, y, z));
   }
 
   heightAt(x, z) {

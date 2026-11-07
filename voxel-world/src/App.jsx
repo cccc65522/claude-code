@@ -6,7 +6,8 @@ import TouchControls from './components/TouchControls.jsx';
 import { World } from './game/world.js';
 import { createPlayer } from './game/player.js';
 import { createAtlasCanvas } from './game/atlas.js';
-import { BLOCKS, HOTBAR } from './game/blocks.js';
+import { BLOCKS, HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
+import { Sim } from './game/sim.js';
 import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
 
 const SAVE_KEY = 'voxel-world:v1';
@@ -50,7 +51,8 @@ function buildSession(save) {
     player = createPlayer(world.spawnPoint(), Math.PI / 4, -0.2);
   }
   const time = Number.isFinite(save?.time) ? wrapTime(save.time) : MORNING;
-  return { world, player, time, id: Math.random().toString(36).slice(2) };
+  const sim = new Sim(world); // 算好火把光照，继续流没流完的水
+  return { world, sim, player, time, id: Math.random().toString(36).slice(2) };
 }
 
 export default function App() {
@@ -159,11 +161,9 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!activeRef.current) return;
-      if (e.code.startsWith('Digit')) {
-        const d = Number(e.code.slice(5));
-        const n = d === 0 ? 10 : d; // 0 键是第 10 格
-        if (n >= 1 && n <= HOTBAR.length) selectSlot(n - 1);
-      }
+      const key = e.code.startsWith('Digit') ? e.code.slice(5) : e.code === 'Minus' ? '-' : null;
+      const slot = key === null ? -1 : HOTBAR_KEYS.indexOf(key);
+      if (slot >= 0 && slot < HOTBAR.length) selectSlot(slot);
       if (e.code === 'KeyF' && !e.repeat) toggleFly();
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       input.keys.add(e.code);
@@ -269,6 +269,8 @@ export default function App() {
       <Game
         key={session.id}
         world={session.world}
+        sim={session.sim}
+        onMessage={showToast}
         texture={atlas.texture}
         input={input}
         playerRef={playerRef}
@@ -304,15 +306,17 @@ export default function App() {
                 <li>在屏幕上拖动：转视角</li>
                 <li>右下角：挖 / 放 / 跳，按住可以连续</li>
                 <li>水里按“跳”往上游，贴着岸按“跳”上岸</li>
+                <li>火把要立在方块上，晚上能照亮周围；水会往低处和四周流</li>
                 <li>底部快捷栏：选方块</li>
               </ul>
             ) : (
               <ul className="help">
                 <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动，<kbd>Shift</kbd> 跑，<kbd>空格</kbd> 跳</li>
                 <li>鼠标转视角，左键挖，右键放，按住可以连续</li>
-                <li><kbd>1</kbd>–<kbd>9</kbd>、<kbd>0</kbd> 或滚轮选方块</li>
+                <li><kbd>1</kbd>–<kbd>9</kbd>、<kbd>0</kbd>、<kbd>-</kbd> 或滚轮选方块（<kbd>0</kbd> 火把，<kbd>-</kbd> 水）</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
                 <li>水里按 <kbd>空格</kbd> 往上游、<kbd>C</kbd> 往下潜，贴着岸按 <kbd>空格</kbd> 上岸</li>
+                <li>火把要立在方块上，晚上能照亮周围；水会往低处和四周流</li>
                 <li><kbd>Esc</kbd> 暂停</li>
               </ul>
             )}

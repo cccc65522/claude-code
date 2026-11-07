@@ -7,6 +7,7 @@ function toGeometry(g) {
   geometry.setAttribute('normal', new THREE.BufferAttribute(g.normals, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(g.uvs, 2));
   geometry.setAttribute('color', new THREE.BufferAttribute(g.colors, 3));
+  geometry.setAttribute('blockLight', new THREE.BufferAttribute(g.light, 1));
   geometry.setIndex(new THREE.BufferAttribute(g.indices, 1));
   geometry.computeBoundingSphere();
   return geometry;
@@ -51,8 +52,13 @@ export class ChunkRenderer {
     this.meshes.set(key, pair);
   }
 
-  rebuildAround(x, z) {
-    for (const [cx, cz] of this.world.affectedChunks(x, z)) this.rebuild(cx, cz);
+  // keys: "cx,cz" 的集合（Sim.edit / Sim.tick 的返回值）
+  rebuildKeys(keys) {
+    if (!keys) return;
+    for (const key of keys) {
+      const [cx, cz] = key.split(',').map(Number);
+      this.rebuild(cx, cz);
+    }
   }
 
   dispose() {

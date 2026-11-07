@@ -1,4 +1,4 @@
-import { AIR, WATER } from './blocks.js';
+import { AIR, isLiquid } from './blocks.js';
 
 /**
  * 体素射线检测（逐格步进）。
@@ -30,7 +30,7 @@ export function raycast(world, origin, dir, maxDist = 6) {
   let t = 0;
   while (t <= maxDist) {
     const id = world.get(pos[0], pos[1], pos[2]);
-    if (id !== AIR && id !== WATER) {
+    if (id !== AIR && !isLiquid(id)) {
       return { hit: [...pos], normal: [...normal], block: id, distance: t };
     }
     let axis = 0;

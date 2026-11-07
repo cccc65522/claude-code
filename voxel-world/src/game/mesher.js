@@ -1,4 +1,5 @@
-import { AIR, BLOCKS, isLiquid, isOpaque, isTransparent } from './blocks.js';
+import { AIR, BLOCKS, isLiquid, isOpaque, isTransparent, waterLevel } from './blocks.js';
+import { lightBrightness } from './light.js';
 import { CHUNK } from './world.js';
 
 export const ATLAS_COLS = 4;
@@ -25,16 +26,48 @@ export function faceVisible(block, neighbor) {
   return neighbor !== block; // 玻璃挨着玻璃、树叶挨着树叶时不画中间那层
 }
 
-// 水面：只在挨着空气、玻璃、树叶这类非水的透明方块时画
-export function waterFaceVisible(neighbor) {
-  return !isLiquid(neighbor) && !isOpaque(neighbor);
-}
-
-// 水面比方块顶低一点，看起来更像水
+// 水面比方块顶低一点，看起来更像水；流动的水越远越浅
 export const WATER_SURFACE = 0.88;
 
+// 一格水的高度（0–1）。上面还有水时是满的。
+export function liquidHeight(id, above) {
+  if (isLiquid(above)) return 1;
+  const level = waterLevel(id);
+  if (level >= 8) return WATER_SURFACE;
+  return 0.1 + level * 0.1;
+}
+
 function makeBuffers() {
-  return { positions: [], normals: [], uvs: [], colors: [], indices: [] };
+  return { positions: [], normals: [], uvs: [], colors: [], light: [], indices: [] };
+}
+
+// 火把：一根 2/16 粗、10/16 高的小棍，贴图只取图集格子里对应的那一小块
+const TORCH_MIN = 7 / 16;
+const TORCH_MAX = 9 / 16;
+const TORCH_TOP = 10 / 16;
+
+function addTorch(b, tile, x, y, z) {
+  for (const face of FACES) {
+    const [dx, dy, dz] = face.dir;
+    if (dy < 0) continue; // 底面看不到
+    const start = b.positions.length / 3;
+    for (const [px, py, pz, u, v] of face.corners) {
+      const fx = px ? TORCH_MAX : TORCH_MIN;
+      const fz = pz ? TORCH_MAX : TORCH_MIN;
+      const fy = py ? TORCH_TOP : 0;
+      b.positions.push(x + fx, y + fy, z + fz);
+      b.normals.push(dx, dy, dz);
+      const col = tile % ATLAS_COLS;
+      const row = Math.floor(tile / ATLAS_COLS);
+      // 侧面：小棍那两列像素，从底到 10/16；顶面：火苗那一块
+      const tu = TORCH_MIN + (u ? 2 / 16 : 0);
+      const tv = dy > 0 ? 8 / 16 + (v ? 2 / 16 : 0) : v ? TORCH_TOP : 0;
+      b.uvs.push((col + tu) / ATLAS_COLS, 1 - (row + 1 - tv) / ATLAS_ROWS);
+      b.colors.push(1, 1, 1);
+      b.light.push(1); // 火把自己永远是亮的
+    }
+    b.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
+  }
 }
 
 function finish(b) {
@@ -43,6 +76,7 @@ function finish(b) {
     normals: new Float32Array(b.normals),
     uvs: new Float32Array(b.uvs),
     colors: new Float32Array(b.colors),
+    light: new Float32Array(b.light),
     indices: new Uint32Array(b.indices),
   };
 }
@@ -75,20 +109,41 @@ export function buildChunkGeometry(world, cx, cz) {
         if (!def) continue;
 
         if (def.liquid) {
-          const lowered = !isLiquid(world.get(x, y + 1, z));
+          const above = world.get(x, y + 1, z);
+          const h = liquidHeight(block, above);
+          const lit = lightBrightness(world.lightAt(x, y, z));
           for (const face of FACES) {
             const [dx, dy, dz] = face.dir;
-            if (!waterFaceVisible(world.get(x + dx, y + dy, z + dz))) continue;
+            const nx = x + dx;
+            const ny = y + dy;
+            const nz = z + dz;
+            const neighbor = world.get(nx, ny, nz);
+            if (isOpaque(neighbor)) continue;
+            let bottom = 0;
+            if (dy > 0) {
+              if (isLiquid(neighbor)) continue;
+            } else if (dy < 0) {
+              if (isLiquid(neighbor)) continue;
+            } else if (isLiquid(neighbor)) {
+              // 旁边的水更低时，只画高出来的那一截
+              bottom = liquidHeight(neighbor, world.get(nx, ny + 1, nz));
+              if (bottom >= h) continue;
+            }
             const start = water.positions.length / 3;
             for (const [px, py, pz, u, v] of face.corners) {
-              const top = py === 1 && lowered ? WATER_SURFACE : py;
-              water.positions.push(x + px, y + top, z + pz);
+              water.positions.push(x + px, y + (py ? h : bottom), z + pz);
               water.normals.push(dx, dy, dz);
               pushUv(water, def.tiles[face.side], u, v);
               water.colors.push(1, 1, 1);
+              water.light.push(lit);
             }
             water.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
           }
+          continue;
+        }
+
+        if (def.shape === 'torch') {
+          addTorch(solid, def.tiles.side, x, y, z);
           continue;
         }
 
@@ -124,6 +179,23 @@ export function buildChunkGeometry(world, cx, cz) {
             ao[i] = s1 && s2 ? 0 : 3 - (s1 + s2 + c);
             const b = AO_LEVELS[ao[i]];
             solid.colors.push(b, b, b);
+
+            // 火把光：取这个角周围（不被挡住的）几格的平均，光照边缘更柔和
+            let sum = lightBrightness(world.lightAt(nx, ny, nz));
+            let count = 1;
+            if (!s1) {
+              sum += lightBrightness(world.lightAt(nx + o1[0], ny + o1[1], nz + o1[2]));
+              count++;
+            }
+            if (!s2) {
+              sum += lightBrightness(world.lightAt(nx + o2[0], ny + o2[1], nz + o2[2]));
+              count++;
+            }
+            if (!c && !(s1 && s2)) {
+              sum += lightBrightness(world.lightAt(nx + o1[0] + o2[0], ny + o1[1] + o2[1], nz + o1[2] + o2[2]));
+              count++;
+            }
+            solid.light.push(sum / count);
           }
 
           // 沿亮度差更小的对角线切开，避免奇怪的明暗条纹

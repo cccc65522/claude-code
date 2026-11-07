@@ -235,3 +235,151 @@ test('昼夜：正午最亮，午夜有星星，时间显示正确', () => {
   assert.equal(wrapTime(1.25), 0.25);
   assert.equal(wrapTime(-0.25), 0.75);
 });
+
+// ---------- 火把和光照 ----------
+import { TORCH, flowId, isFlowing } from '../src/game/blocks.js';
+import { computeLight, lightBrightness } from '../src/game/light.js';
+import { Sim } from '../src/game/sim.js';
+import { desiredFluid, Fluids } from '../src/game/fluid.js';
+
+function floorWorld(chunks = 2) {
+  const w = new World({ seed: 1, chunks, generate: false });
+  for (let x = 0; x < w.sizeX; x++) for (let z = 0; z < w.sizeZ; z++) w.rawSet(x, 0, z, STONE);
+  return w;
+}
+
+test('火把发光：离得越远越暗，墙会挡光', () => {
+  const w = floorWorld();
+  w.set(10, 1, 10, TORCH);
+  computeLight(w);
+  assert.equal(w.lightAt(10, 1, 10), 14);
+  assert.equal(w.lightAt(11, 1, 10), 13);
+  assert.equal(w.lightAt(15, 1, 10), 9);
+  assert.equal(w.lightAt(10, 0, 10), 0, '石头里面没有光');
+  assert.ok(lightBrightness(14) === 1 && lightBrightness(7) < lightBrightness(10) && lightBrightness(0) === 0);
+  // 用一堵墙把 x>=12 的一边整个挡住（墙够高，绕不过去）
+  for (let y = 1; y < w.sizeY; y++) for (let z = 0; z < w.sizeZ; z++) w.set(12, y, z, STONE);
+  computeLight(w);
+  assert.equal(w.lightAt(13, 1, 10), 0);
+  assert.equal(w.lightAt(11, 1, 10), 13);
+});
+
+test('Sim：放火把会照亮周围的区块；脚下方块挖掉后火把掉落、光消失', () => {
+  const w = floorWorld();
+  const sim = new Sim(w);
+  const dirty = sim.edit(15, 1, 15, TORCH); // 区块角上，光会照进 4 个区块
+  assert.ok(dirty.has('0,0') && dirty.has('1,1') && dirty.has('1,0') && dirty.has('0,1'));
+  assert.ok(w.lightAt(17, 1, 15) > 0);
+  sim.edit(15, 0, 15, AIR);
+  assert.equal(w.get(15, 1, 15), AIR, '火把掉了');
+  assert.equal(w.lightAt(17, 1, 15), 0);
+});
+
+test('网格：火把是一根小棍，自己是亮的；被照到的地面顶点更亮', () => {
+  const w = floorWorld(1);
+  const sim = new Sim(w);
+  sim.edit(8, 1, 8, TORCH);
+  const g = buildChunkGeometry(w, 0, 0);
+  // 找火把的顶点：x 在 7/16..9/16 之间、高度 1..1.625
+  let torchVerts = 0;
+  for (let i = 0; i < g.positions.length; i += 3) {
+    const [x, y] = [g.positions[i], g.positions[i + 1]];
+    if (x > 8.4 && x < 8.6 && y >= 1 && y <= 1 + 10 / 16 + 1e-6 && g.light[i / 3] === 1) torchVerts++;
+  }
+  assert.equal(torchVerts, 20, '5 个面 × 4 个顶点');
+  // 地面顶面（y=1）：靠近火把的顶点比远处的亮
+  let near = 0;
+  let far = 1;
+  for (let i = 0; i < g.positions.length; i += 3) {
+    if (g.positions[i + 1] !== 1 || g.normals[i + 1] !== 1) continue;
+    const d = Math.hypot(g.positions[i] - 8.5, g.positions[i + 2] - 8.5);
+    if (d < 1) near = Math.max(near, g.light[i / 3]);
+    if (d > 7) far = Math.min(far, g.light[i / 3]);
+  }
+  assert.ok(near > 0.7 && far < near, `near=${near} far=${far}`);
+});
+
+// ---------- 流动的水 ----------
+function runFluids(sim, steps = 200) {
+  for (let i = 0; i < steps && sim.fluids.busy; i++) sim.tick();
+  return sim;
+}
+
+test('水在平地上往四周流 7 格，越远越浅', () => {
+  const w = floorWorld();
+  const sim = new Sim(w);
+  sim.edit(16, 1, 16, WATER);
+  runFluids(sim);
+  assert.equal(w.get(16, 1, 16), WATER);
+  assert.equal(w.get(17, 1, 16), flowId(7));
+  assert.equal(w.get(22, 1, 16), flowId(2));
+  assert.equal(w.get(23, 1, 16), flowId(1));
+  assert.equal(w.get(24, 1, 16), AIR, '流不到第 8 格');
+  assert.equal(w.get(19, 1, 19), flowId(2), '斜着走要多绕几格');
+  assert.equal(w.get(16, 2, 16), AIR, '不会往上流');
+});
+
+test('水会先往下流，流到底再散开；挖掉水源后流水会退掉', () => {
+  const w = floorWorld();
+  // 一个台子：x<16 的地面在 y=5，水源放在台子边上
+  for (let x = 0; x < 16; x++) for (let z = 0; z < w.sizeZ; z++) for (let y = 1; y <= 5; y++) w.rawSet(x, y, z, STONE);
+  const sim = new Sim(w);
+  sim.edit(15, 6, 10, WATER);
+  runFluids(sim);
+  assert.equal(w.get(16, 6, 10), flowId(7), '流出台子边');
+  for (let y = 1; y <= 5; y++) assert.ok(isFlowing(w.get(16, y, 10)), `y=${y} 是往下落的水`);
+  assert.equal(w.get(16, 5, 10), flowId(7));
+  assert.equal(w.get(17, 6, 10), AIR, '悬空的水不往旁边流');
+  assert.equal(w.get(17, 1, 10), flowId(6), '落地后散开');
+
+  sim.edit(15, 6, 10, AIR);
+  runFluids(sim, 400);
+  let left = 0;
+  for (const v of w.data) if (v === WATER || isFlowing(v)) left++;
+  assert.equal(left, 0, '水全部退掉了');
+});
+
+test('两个水源中间托得住的空格会变成新水源；水会冲掉火把', () => {
+  const w = floorWorld();
+  const sim = new Sim(w);
+  sim.edit(10, 1, 10, WATER);
+  sim.edit(12, 1, 10, WATER);
+  runFluids(sim);
+  assert.equal(w.get(11, 1, 10), WATER);
+
+  const w2 = floorWorld();
+  const sim2 = new Sim(w2);
+  sim2.edit(5, 1, 5, TORCH);
+  assert.ok(w2.lightAt(5, 1, 5) > 0);
+  sim2.edit(3, 1, 5, WATER);
+  runFluids(sim2);
+  assert.ok(isFlowing(w2.get(5, 1, 5)), '火把被冲掉了');
+  assert.equal(w2.lightAt(5, 1, 5), 0);
+});
+
+test('湖岸是封闭的：刚生成的世界里水不会自己流动', () => {
+  const w = new World({ seed: 1, chunks: 4 });
+  const fl = new Fluids(w);
+  let changes = 0;
+  for (let i = 0; i < w.data.length; i++) {
+    if (w.data[i] !== WATER) continue;
+    const [x, y, z] = w.coords(i);
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]]) {
+      const nx = x + dx, ny = y + dy, nz = z + dz;
+      if (!w.inBounds(nx, ny, nz)) continue;
+      if (desiredFluid(w, nx, ny, nz) !== w.get(nx, ny, nz)) changes++;
+    }
+  }
+  assert.equal(changes, 0);
+  assert.equal(fl.busy, false);
+});
+
+test('流动的水也能游泳，网格高度跟着水位变', () => {
+  const w = floorWorld(1);
+  w.set(5, 1, 5, flowId(3));
+  const g = buildChunkGeometry(w, 0, 0);
+  const maxY = Math.max(...g.water.positions.filter((_, i) => i % 3 === 1));
+  assert.ok(Math.abs(maxY - (1 + 0.1 + 0.3)) < 1e-6);
+  assert.equal(bodyInWater(w, createPlayer([5.5, 0.8, 5.5])), true);
+  assert.equal(w.isSolid(5, 1, 5), false);
+});

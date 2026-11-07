@@ -1,4 +1,4 @@
-import { WATER } from './blocks.js';
+import { isLiquid } from './blocks.js';
 
 // 玩家物理：一个 0.6 x 1.8 x 0.6 的盒子，分轴移动并和方块做碰撞。
 
@@ -29,12 +29,12 @@ export function createPlayer(position, yaw = 0, pitch = 0) {
 
 // 身体（腰部）是否在水里
 export function bodyInWater(world, p) {
-  return world.get(Math.floor(p.pos[0]), Math.floor(p.pos[1] + 0.6), Math.floor(p.pos[2])) === WATER;
+  return isLiquid(world.get(Math.floor(p.pos[0]), Math.floor(p.pos[1] + 0.6), Math.floor(p.pos[2])));
 }
 
 // 眼睛是否在水下（用来切换水下的画面）
 export function eyeInWater(world, p) {
-  return world.get(Math.floor(p.pos[0]), Math.floor(p.pos[1] + EYE_HEIGHT), Math.floor(p.pos[2])) === WATER;
+  return isLiquid(world.get(Math.floor(p.pos[0]), Math.floor(p.pos[1] + EYE_HEIGHT), Math.floor(p.pos[2])));
 }
 
 // 玩家盒子和某个方块格子是否重叠（放方块时用来防止把自己埋住）

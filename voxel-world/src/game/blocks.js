@@ -11,7 +11,11 @@ export const GLASS = 8;
 export const BRICK = 9;
 export const SNOW = 10;
 export const BEDROCK = 11;
-export const WATER = 12;
+export const WATER = 12; // 水源
+export const TORCH = 13;
+// 流动的水：20–26，水位 1–7（7 最满，离水源最近）
+export const FLOW_BASE = 19;
+export const FLOW_MAX = 7;
 
 // 图集格子编号
 export const TILE = {
@@ -30,6 +34,7 @@ export const TILE = {
   snowSide: 12,
   bedrock: 13,
   water: 14,
+  torch: 15,
 };
 
 const all = (t) => ({ top: t, side: t, bottom: t });
@@ -46,15 +51,50 @@ export const BLOCKS = {
   [BRICK]: { name: '砖块', tiles: all(TILE.brick) },
   [SNOW]: { name: '雪地', tiles: { top: TILE.snowTop, side: TILE.snowSide, bottom: TILE.dirt } },
   [BEDROCK]: { name: '基岩', tiles: all(TILE.bedrock), unbreakable: true },
-  // 水：半透明、能穿过、能游泳；不会流动
-  [WATER]: { name: '水', tiles: all(TILE.water), transparent: true, liquid: true },
+  // 水源：半透明、能穿过、能游泳；会往低处和四周流
+  [WATER]: { name: '水', tiles: all(TILE.water), transparent: true, liquid: true, passable: true },
+  // 火把：只能立在实心方块上，会发光
+  [TORCH]: { name: '火把', tiles: all(TILE.torch), transparent: true, passable: true, shape: 'torch', light: 14 },
 };
 
+for (let level = 1; level <= FLOW_MAX; level++) {
+  BLOCKS[FLOW_BASE + level] = {
+    name: '流动的水',
+    tiles: all(TILE.water),
+    transparent: true,
+    liquid: true,
+    passable: true,
+    level,
+  };
+}
+
 // 快捷栏里能放的方块（按 1-9、0 选择）
-export const HOTBAR = [GRASS, DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, BRICK, WATER];
+export const HOTBAR = [GRASS, DIRT, STONE, SAND, LOG, PLANKS, LEAVES, GLASS, BRICK, TORCH, WATER];
+
+// 快捷栏每格对应的按键
+export const HOTBAR_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-'];
 
 export function isLiquid(id) {
   return BLOCKS[id]?.liquid === true;
+}
+
+export function isFlowing(id) {
+  return id > FLOW_BASE && id <= FLOW_BASE + FLOW_MAX;
+}
+
+export function flowId(level) {
+  return FLOW_BASE + level;
+}
+
+// 水位：水源 8，流动的水 1–7，其它 0
+export function waterLevel(id) {
+  if (id === WATER) return 8;
+  return isFlowing(id) ? id - FLOW_BASE : 0;
+}
+
+// 人能不能穿过（空气、水、火把）
+export function isPassable(id) {
+  return id === AIR || BLOCKS[id]?.passable === true;
 }
 
 export function isTransparent(id) {

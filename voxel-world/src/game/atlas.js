@@ -154,6 +154,22 @@ painters[TILE.water] = (put, rand) => {
   }
 };
 
+// 火把：只有中间两列像素有颜色，下面是木棍，上面三行是火苗；其它地方透明
+painters[TILE.torch] = (put, rand) => {
+  for (let y = 0; y < TILE_PX; y++) {
+    for (let x = 0; x < TILE_PX; x++) put(x, y, 0, 0, 0, 0);
+  }
+  for (let y = 6; y < TILE_PX; y++) {
+    for (const x of [7, 8]) {
+      const k = 1 + (rand() - 0.5) * 0.15;
+      if (y === 6) put(x, y, 255, 236, 140);
+      else if (y === 7) put(x, y, 255, 196 * k, 70);
+      else if (y === 8) put(x, y, 240, 130 * k, 40);
+      else put(x, y, 120 * k, 84 * k, 48 * k);
+    }
+  }
+};
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;

@@ -4,12 +4,33 @@ import * as THREE from 'three';
 import { ChunkRenderer } from '../game/renderer.js';
 import { raycast } from '../game/raycast.js';
 import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer } from '../game/player.js';
-import { AIR, BLOCKS, WATER } from '../game/blocks.js';
+import { AIR, BLOCKS, TORCH, isLiquid } from '../game/blocks.js';
 import { DAY_SECONDS, clockText, skyAt, wrapTime } from '../game/daynight.js';
 
 const REACH = 6;
 const REPEAT_SECONDS = 0.22;
 const SKY_DISTANCE = 200;
+const FLUID_STEP = 0.25; // 水每 0.25 秒流一格
+
+// 给 Lambert 材质加上火把光：每个顶点带一个 blockLight（0–1），
+// 片元颜色取“日光/月光照明”和“火把照明”里较亮的那个，所以白天火把不会把东西照得过曝。
+function withBlockLight(material) {
+  const torch = { value: new THREE.Color('#ffc27a') };
+  material.userData.torch = torch;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTorchColor = torch;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float blockLight;\nvarying float vBlockLight;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBlockLight = blockLight;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uTorchColor;\nvarying float vBlockLight;')
+      .replace(
+        '#include <opaque_fragment>',
+        'outgoingLight = max(outgoingLight, diffuseColor.rgb * vBlockLight * uTorchColor);\n#include <opaque_fragment>',
+      );
+  };
+  return material;
+}
 
 // ---------- 天空：颜色、光照、太阳、月亮、星星、雾、水下 ----------
 function Environment({ world, playerRef, timeRef, activeRef, cloudMaterial }) {
@@ -167,10 +188,12 @@ function Highlight({ targetRef }) {
   );
 }
 
-function Controller({ world, renderer, input, playerRef, selectedRef, onEdit, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
+  const fluidTimer = useRef(0);
+  const flicker = useMemo(() => ({ base: new THREE.Color('#ffc27a'), t: 0 }), []);
   const lastFlying = useRef(playerRef.current.flying);
 
   const doAction = (kind) => {
@@ -179,8 +202,9 @@ function Controller({ world, renderer, input, playerRef, selectedRef, onEdit, st
     if (kind === 'dig') {
       if (BLOCKS[t.block]?.unbreakable) return;
       const [x, y, z] = t.hit;
-      if (world.set(x, y, z, AIR)) {
-        renderer.rebuildAround(x, z);
+      const dirty = sim.edit(x, y, z, AIR);
+      if (dirty) {
+        renderer.rebuildKeys(dirty);
         onEdit();
       }
     } else {
@@ -189,11 +213,17 @@ function Controller({ world, renderer, input, playerRef, selectedRef, onEdit, st
       const z = t.hit[2] + t.normal[2];
       const here = world.get(x, y, z);
       // 空气和水的位置都能放方块（放进水里就把水换掉）
-      if (!world.inBounds(x, y, z) || (here !== AIR && here !== WATER)) return;
+      if (!world.inBounds(x, y, z) || (here !== AIR && !isLiquid(here))) return;
       const id = selectedRef.current;
-      if (id !== WATER && overlapsBlock(playerRef.current, x, y, z)) return;
-      if (world.set(x, y, z, id)) {
-        renderer.rebuildAround(x, z);
+      if (id === TORCH) {
+        if (here !== AIR) return onMessage('火把不能放在水里');
+        if (!world.isSolidBlock(x, y - 1, z)) return onMessage('火把要立在方块上面');
+      } else if (!BLOCKS[id]?.passable && overlapsBlock(playerRef.current, x, y, z)) {
+        return;
+      }
+      const dirty = sim.edit(x, y, z, id);
+      if (dirty) {
+        renderer.rebuildKeys(dirty);
         onEdit();
       }
     }
@@ -244,6 +274,25 @@ function Controller({ world, renderer, input, playerRef, selectedRef, onEdit, st
       }
     }
 
+    // 水流
+    if (active) {
+      fluidTimer.current += dt;
+      if (fluidTimer.current >= FLUID_STEP) {
+        fluidTimer.current = 0;
+        const dirty = sim.tick();
+        if (dirty) {
+          renderer.rebuildKeys(dirty);
+          onEdit();
+        }
+      }
+    }
+
+    // 火光轻轻闪烁
+    flicker.t += dt;
+    const f = 1 + Math.sin(flicker.t * 9) * 0.03 + Math.sin(flicker.t * 23.7) * 0.025;
+    materials.solid.userData.torch.value.copy(flicker.base).multiplyScalar(f);
+    materials.water.userData.torch.value.copy(flicker.base).multiplyScalar(f);
+
     if (underwaterRef.current) {
       underwaterRef.current.classList.toggle('on', eyeInWater(world, p));
     }
@@ -266,14 +315,16 @@ function WorldScene(props) {
   const { world, texture } = props;
   const materials = useMemo(
     () => ({
-      solid: new THREE.MeshLambertMaterial({ map: texture, vertexColors: true, alphaTest: 0.5 }),
-      water: new THREE.MeshLambertMaterial({
-        map: texture,
-        transparent: true,
-        opacity: 0.72,
-        depthWrite: false,
-        side: THREE.DoubleSide, // 在水下也能看到水面
-      }),
+      solid: withBlockLight(new THREE.MeshLambertMaterial({ map: texture, vertexColors: true, alphaTest: 0.5 })),
+      water: withBlockLight(
+        new THREE.MeshLambertMaterial({
+          map: texture,
+          transparent: true,
+          opacity: 0.72,
+          depthWrite: false,
+          side: THREE.DoubleSide, // 在水下也能看到水面
+        }),
+      ),
       cloud: new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.82, fog: false }),
     }),
     [texture],
@@ -289,7 +340,7 @@ function WorldScene(props) {
       <Environment {...props} cloudMaterial={materials.cloud} />
       <primitive object={renderer.group} />
       <Clouds world={world} material={materials.cloud} />
-      <Controller {...props} renderer={renderer} />
+      <Controller {...props} renderer={renderer} materials={materials} />
     </>
   );
 }
