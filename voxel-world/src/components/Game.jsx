@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { ChunkRenderer } from '../game/renderer.js';
+import { lightBrightness } from '../game/light.js';
 import { raycast } from '../game/raycast.js';
 import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer } from '../game/player.js';
 import { AIR, BLOCKS, CHEST, EGG, FARMLAND, TORCH, WATER, WHEAT_BASE, isCrop, isLiquid } from '../game/blocks.js';
@@ -15,7 +16,7 @@ import { EXHAUSTION, addExhaustion, fallDamage, hurt, regenerate, updateAir, upd
 import { attackDamage } from '../game/tools.js';
 import { COAL, SEEDS, STONE_HOE, bonusDrop } from '../game/items.js';
 import {
-  damageMonster, rayHitMonster, shouldRemove, stepMonster, trySpawn, DISSOLVE_SECONDS,
+  damageMonster, rayHitMonster, shouldRemove, stepMonster, trySpawn, DISSOLVE_SECONDS, SUNLIT,
 } from '../game/monsters.js';
 import {
   BABY_SCALE, SPECIES, animalDrops, animalName, breed, damageAnimal, feedAnimal, foodFor, shouldRemoveAnimal,
@@ -28,21 +29,22 @@ const REPEAT_SECONDS = 0.22;
 const SKY_DISTANCE = 200;
 const FLUID_STEP = 0.25; // 水每 0.25 秒流一格
 
-// 给 Lambert 材质加上火把光：每个顶点带一个 blockLight（0–1），
-// 片元颜色取“日光/月光照明”和“火把照明”里较亮的那个，所以白天火把不会把东西照得过曝。
+// 给 Lambert 材质加上天光和火把光：每个顶点带 skyLight 和 blockLight（0–1）。
+// 日光/月光照明先乘上天光（洞里、屋里是暗的），再和火把照明取较亮的那个，
+// 所以白天火把不会把东西照得过曝，洞里只有火把能照亮。
 function withBlockLight(material) {
   const torch = { value: new THREE.Color('#ffc27a') };
   material.userData.torch = torch;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTorchColor = torch;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float blockLight;\nvarying float vBlockLight;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBlockLight = blockLight;');
+      .replace('#include <common>', '#include <common>\nattribute float blockLight;\nattribute float skyLight;\nvarying float vBlockLight;\nvarying float vSkyLight;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBlockLight = blockLight;\nvSkyLight = skyLight;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uTorchColor;\nvarying float vBlockLight;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uTorchColor;\nvarying float vBlockLight;\nvarying float vSkyLight;')
       .replace(
         '#include <opaque_fragment>',
-        'outgoingLight = max(outgoingLight, diffuseColor.rgb * vBlockLight * uTorchColor);\n#include <opaque_fragment>',
+        'outgoingLight *= max(vSkyLight, 0.035);\noutgoingLight = max(outgoingLight, diffuseColor.rgb * vBlockLight * uTorchColor);\n#include <opaque_fragment>',
       );
   };
   return material;
@@ -523,12 +525,14 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
         if (peacefulRef.current) monsters.length = 0;
         const day = skyAt(timeRef.current).day > 0.5;
         spawnTimer.current += dt;
-        if (!day && !peacefulRef.current && spawnTimer.current > 2) {
+        if (!peacefulRef.current && spawnTimer.current > 2) {
           spawnTimer.current = 0;
-          trySpawn(world, monsters, p);
+          trySpawn(world, monsters, p, Math.random, { night: !day }); // 洞里白天也会有
         }
         for (const m of monsters) {
-          const bite = stepMonster(world, m, p, dt, { day });
+          // 只有晒得到太阳的才会消散（洞里的不会）
+          const sunlit = day && world.skyAt(Math.floor(m.pos[0]), Math.floor(m.pos[1] + 0.4), Math.floor(m.pos[2])) >= SUNLIT;
+          const bite = stepMonster(world, m, p, dt, { day: sunlit });
           if (bite) {
             // 被咬到往后弹一下
             const dx = p.pos[0] - m.pos[0];
@@ -676,8 +680,16 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   return <Highlight targetRef={targetRef} digRef={digRef} />;
 }
 
+// 怪物和动物站的地方有多亮：天光和火把光取亮的那个（洞里很暗）
+function entityBrightness(world, pos, height) {
+  const x = Math.floor(pos[0]);
+  const y = Math.floor(pos[1] + height * 0.5);
+  const z = Math.floor(pos[2]);
+  return Math.max(0.06, lightBrightness(world.skyAt(x, y, z)), lightBrightness(world.lightAt(x, y, z)));
+}
+
 // 夜影的样子：深紫色的方块身体，两只发黄光的眼睛，跳的时候会被拉长、压扁
-function Monsters({ monsters }) {
+function Monsters({ monsters, world }) {
   const group = useRef();
   const shared = useMemo(
     () => ({
@@ -728,7 +740,7 @@ function Monsters({ monsters }) {
       const fade = 1 - Math.min(1, m.dissolve / DISSOLVE_SECONDS);
       obj.scale.set(fade / Math.sqrt(sy), sy * fade, fade / Math.sqrt(sy));
       const mat = obj.userData.mat;
-      mat.color.copy(shared.base).lerp(shared.red, m.hurtFlash > 0 ? 0.8 : 0);
+      mat.color.copy(shared.base).lerp(shared.red, m.hurtFlash > 0 ? 0.8 : 0).multiplyScalar(entityBrightness(world, m.pos, m.height));
       mat.opacity = fade;
     }
     for (const [id, obj] of meshes.current) {
@@ -808,7 +820,7 @@ const MODELS = {
 
 const BASE_COLOR = { rabbit: '#d8bf98', boar: '#6e4b33', duck: '#f1e8cf' };
 
-function Animals({ animals }) {
+function Animals({ animals, world }) {
   const group = useRef();
   const shared = useMemo(
     () => ({
@@ -873,7 +885,7 @@ function Animals({ animals }) {
       const { mat, base, heart, heartY, flop } = obj.userData;
       // 被打闪红；生气的野猪一直带点红
       const redness = a.hurtFlash > 0 ? 0.7 : a.anger > 0 ? 0.25 : 0;
-      mat.color.copy(base).lerp(shared.red, redness);
+      mat.color.copy(base).lerp(shared.red, redness).multiplyScalar(entityBrightness(world, a.pos, a.height));
       mat.opacity = fade;
       heart.visible = a.love > 0;
       heart.position.y = heartY + Math.sin(state.clock.elapsedTime * 4) * 0.05;
@@ -921,8 +933,8 @@ function WorldScene(props) {
       <Environment {...props} cloudMaterial={materials.cloud} />
       <primitive object={renderer.group} />
       <Clouds world={world} material={materials.cloud} />
-      <Monsters monsters={props.monsters} />
-      <Animals animals={props.animals} />
+      <Monsters monsters={props.monsters} world={world} />
+      <Animals animals={props.animals} world={world} />
       <Controller {...props} renderer={renderer} materials={materials} />
     </>
   );

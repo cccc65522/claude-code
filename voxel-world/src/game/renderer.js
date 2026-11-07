@@ -8,6 +8,7 @@ function toGeometry(g) {
   geometry.setAttribute('uv', new THREE.BufferAttribute(g.uvs, 2));
   geometry.setAttribute('color', new THREE.BufferAttribute(g.colors, 3));
   geometry.setAttribute('blockLight', new THREE.BufferAttribute(g.light, 1));
+  geometry.setAttribute('skyLight', new THREE.BufferAttribute(g.sky, 1));
   geometry.setIndex(new THREE.BufferAttribute(g.indices, 1));
   geometry.computeBoundingSphere();
   return geometry;

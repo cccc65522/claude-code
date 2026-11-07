@@ -38,7 +38,7 @@ export function liquidHeight(id, above) {
 }
 
 function makeBuffers() {
-  return { positions: [], normals: [], uvs: [], colors: [], light: [], indices: [] };
+  return { positions: [], normals: [], uvs: [], colors: [], light: [], sky: [], indices: [] };
 }
 
 // 火把：一根 2/16 粗、10/16 高的小棍，贴图只取图集格子里对应的那一小块
@@ -51,7 +51,7 @@ const CROSS = [
   [[0.1, 0.1], [0.9, 0.9]],
   [[0.1, 0.9], [0.9, 0.1]],
 ];
-function addCross(b, tile, x, y, z, light) {
+function addCross(b, tile, x, y, z, light, sky = 1) {
   for (const [[ax, az], [bx, bz]] of CROSS) {
     for (const back of [false, true]) {
       const start = b.positions.length / 3;
@@ -67,6 +67,7 @@ function addCross(b, tile, x, y, z, light) {
         pushUv(b, tile, u, v);
         b.colors.push(1, 1, 1);
         b.light.push(light);
+        b.sky.push(sky);
       }
       if (back) b.indices.push(start, start + 2, start + 1, start + 1, start + 2, start + 3);
       else b.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
@@ -75,7 +76,7 @@ function addCross(b, tile, x, y, z, light) {
 }
 
 export const BED_HEIGHT = 0.56;
-function addBedBox(b, tiles, x, y, z, light) {
+function addBedBox(b, tiles, x, y, z, light, sky = 1) {
   for (const face of FACES) {
     const [dx, dy, dz] = face.dir;
     const tile = tiles[face.side];
@@ -87,13 +88,14 @@ function addBedBox(b, tiles, x, y, z, light) {
       pushUv(b, tile, u, dy === 0 && v ? BED_HEIGHT : v);
       b.colors.push(1, 1, 1);
       b.light.push(light);
+      b.sky.push(sky);
     }
     b.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
   }
 }
 
 // 一个小盒子（鸭蛋）：整张贴图贴在每个面上
-function addBox(b, tile, x, y, z, min, max, light) {
+function addBox(b, tile, x, y, z, min, max, light, sky = 1) {
   for (const face of FACES) {
     const [dx, dy, dz] = face.dir;
     const start = b.positions.length / 3;
@@ -103,12 +105,13 @@ function addBox(b, tile, x, y, z, min, max, light) {
       pushUv(b, tile, u, v);
       b.colors.push(1, 1, 1);
       b.light.push(light);
+      b.sky.push(sky);
     }
     b.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
   }
 }
 
-function addTorch(b, tile, x, y, z) {
+function addTorch(b, tile, x, y, z, sky = 1) {
   for (const face of FACES) {
     const [dx, dy, dz] = face.dir;
     if (dy < 0) continue; // 底面看不到
@@ -127,6 +130,7 @@ function addTorch(b, tile, x, y, z) {
       b.uvs.push((col + tu) / ATLAS_COLS, 1 - (row + 1 - tv) / ATLAS_ROWS);
       b.colors.push(1, 1, 1);
       b.light.push(1); // 火把自己永远是亮的
+      b.sky.push(sky);
     }
     b.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
   }
@@ -139,6 +143,7 @@ function finish(b) {
     uvs: new Float32Array(b.uvs),
     colors: new Float32Array(b.colors),
     light: new Float32Array(b.light),
+    sky: new Float32Array(b.sky),
     indices: new Uint32Array(b.indices),
   };
 }
@@ -177,6 +182,7 @@ export function buildChunkGeometry(world, cx, cz) {
           const above = world.get(x, y + 1, z);
           const h = liquidHeight(block, above);
           const lit = lightBrightness(world.lightAt(x, y, z));
+          const litSky = lightBrightness(world.skyAt(x, y, z));
           for (const face of FACES) {
             const [dx, dy, dz] = face.dir;
             const nx = x + dx;
@@ -201,6 +207,7 @@ export function buildChunkGeometry(world, cx, cz) {
               pushUv(water, def.tiles[face.side], u, v);
               water.colors.push(1, 1, 1);
               water.light.push(lit);
+              water.sky.push(litSky);
             }
             water.indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
           }
@@ -208,26 +215,27 @@ export function buildChunkGeometry(world, cx, cz) {
         }
 
         if (def.shape === 'crop') {
-          addCross(solid, def.tiles.side, x, y, z, lightBrightness(world.lightAt(x, y, z)));
+          addCross(solid, def.tiles.side, x, y, z, lightBrightness(world.lightAt(x, y, z)), lightBrightness(world.skyAt(x, y, z)));
           continue;
         }
 
         if (def.shape === 'bed') {
           // 矮矮的一格：顶面是被子，侧面是木框
-          addBedBox(solid, def.tiles, x, y, z, lightBrightness(world.lightAt(x, y + 1, z)));
+          addBedBox(solid, def.tiles, x, y, z, lightBrightness(world.lightAt(x, y + 1, z)), lightBrightness(world.skyAt(x, y + 1, z)));
           continue;
         }
 
         if (def.shape === 'egg') {
           // 下面宽、上面窄的两块，看起来像个蛋
           const eggLight = lightBrightness(world.lightAt(x, y, z));
-          addBox(solid, def.tiles.side, x, y, z, [0.35, 0, 0.35], [0.65, 0.24, 0.65], eggLight);
-          addBox(solid, def.tiles.side, x, y, z, [0.39, 0.24, 0.39], [0.61, 0.4, 0.61], eggLight);
+          const eggSky = lightBrightness(world.skyAt(x, y, z));
+          addBox(solid, def.tiles.side, x, y, z, [0.35, 0, 0.35], [0.65, 0.24, 0.65], eggLight, eggSky);
+          addBox(solid, def.tiles.side, x, y, z, [0.39, 0.24, 0.39], [0.61, 0.4, 0.61], eggLight, eggSky);
           continue;
         }
 
         if (def.shape === 'torch') {
-          addTorch(solid, def.tiles.side, x, y, z);
+          addTorch(solid, def.tiles.side, x, y, z, lightBrightness(world.skyAt(x, y, z)));
           continue;
         }
 
@@ -264,22 +272,20 @@ export function buildChunkGeometry(world, cx, cz) {
             const b = AO_LEVELS[ao[i]];
             solid.colors.push(b, b, b);
 
-            // 火把光：取这个角周围（不被挡住的）几格的平均，光照边缘更柔和
+            // 火把光和天光：取这个角周围（不被挡住的）几格的平均，光照边缘更柔和
             let sum = lightBrightness(world.lightAt(nx, ny, nz));
+            let skySum = lightBrightness(world.skyAt(nx, ny, nz));
             let count = 1;
-            if (!s1) {
-              sum += lightBrightness(world.lightAt(nx + o1[0], ny + o1[1], nz + o1[2]));
+            const sample = (ax, ay, az) => {
+              sum += lightBrightness(world.lightAt(ax, ay, az));
+              skySum += lightBrightness(world.skyAt(ax, ay, az));
               count++;
-            }
-            if (!s2) {
-              sum += lightBrightness(world.lightAt(nx + o2[0], ny + o2[1], nz + o2[2]));
-              count++;
-            }
-            if (!c && !(s1 && s2)) {
-              sum += lightBrightness(world.lightAt(nx + o1[0] + o2[0], ny + o1[1] + o2[1], nz + o1[2] + o2[2]));
-              count++;
-            }
+            };
+            if (!s1) sample(nx + o1[0], ny + o1[1], nz + o1[2]);
+            if (!s2) sample(nx + o2[0], ny + o2[1], nz + o2[2]);
+            if (!c && !(s1 && s2)) sample(nx + o1[0] + o2[0], ny + o1[1] + o2[1], nz + o1[2] + o2[2]);
             solid.light.push(sum / count);
+            solid.sky.push(skySum / count);
           }
 
           // 沿亮度差更小的对角线切开，避免奇怪的明暗条纹

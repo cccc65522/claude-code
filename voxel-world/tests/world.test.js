@@ -408,7 +408,7 @@ test('地下的石头里有煤矿石，地表没有', () => {
     if (w.data[i] !== COAL_ORE) continue;
     ore++;
     const [x, y, z] = w.coords(i);
-    assert.ok(y <= w.topY(x, z) - 4, '煤矿石埋在地下');
+    assert.ok(y <= Math.min(w.heightAt(x, z), w.sizeY - 10) - 4, '煤矿石埋在地下（按原来的地面算，洞穴可能把地面挖开）');
   }
   assert.ok(ore > 50, `有一些煤矿石：${ore}`);
 });
@@ -498,7 +498,7 @@ test('铁矿石只能用镐挖；铁矿石埋得比煤更深', () => {
     if (w.data[i] !== IRON_ORE) continue;
     iron++;
     const [x, y, z] = w.coords(i);
-    assert.ok(y <= w.topY(x, z) - 6);
+    assert.ok(y <= Math.min(w.heightAt(x, z), w.sizeY - 10) - 6);
   }
   assert.ok(iron > 20, `有一些铁矿石：${iron}`);
   assert.equal(dropFor(IRON_ORE), IRON_ORE);
@@ -1330,4 +1330,115 @@ test('箱子：存取东西、挖掉后东西倒进背包、存档只留还在�
   assert.equal(countOf(inv, STONE_B), 10);
   assert.equal(back.size, 0);
   assert.equal(emptyChestInto(back, '7,7,7', inv), 0);
+});
+
+// ---------- 洞穴和天光 ----------
+import { computeSkyLight, updateSkyLight } from '../src/game/light.js';
+import { CAVE_DARK } from '../src/game/monsters.js';
+
+test('洞穴：地下有挖空的隧道，湖底不会被挖穿，基岩不动', () => {
+  const w = new World({ seed: 1 });
+  let caveAir = 0;
+  for (let z = 0; z < w.sizeZ; z++) for (let x = 0; x < w.sizeX; x++) {
+    assert.equal(w.get(x, 0, z), BEDROCK_ID);
+    const h = Math.min(w.heightAt(x, z), w.sizeY - 10);
+    for (let y = 1; y < h - 3; y++) if (w.get(x, y, z) === AIR) caveAir++;
+    if (h <= SEA_LEVEL + 1) {
+      for (let y = Math.max(1, h - 2); y <= h; y++) assert.notEqual(w.get(x, y, z), AIR, `湖底 ${x},${y},${z}`);
+    }
+  }
+  assert.ok(caveAir > 3000, `洞穴里的空格子：${caveAir}`);
+  assert.deepEqual(new World({ seed: 1 }).data, w.data, '同一个种子洞穴一样');
+});
+
+test('天光：露天是 15，屋顶下面暗下去，封死的洞里是 0', () => {
+  const w = floorWorld();
+  // 一个 9×9 的平顶棚，下面四面敞开
+  for (let x = 4; x <= 12; x++) for (let z = 4; z <= 12; z++) w.rawSet(x, 5, z, STONE);
+  // 一个封死的小屋子
+  for (let x = 20; x <= 24; x++) for (let y = 1; y <= 5; y++) for (let z = 20; z <= 24; z++) {
+    const wall = x === 20 || x === 24 || y === 1 || y === 5 || z === 20 || z === 24;
+    if (wall) w.rawSet(x, y, z, STONE);
+  }
+  computeSkyLight(w);
+  assert.equal(w.skyAt(2, 1, 2), 15);
+  assert.equal(w.skyAt(8, 6, 8), 15, '屋顶上面');
+  assert.equal(w.skyAt(8, 1, 8), 15 - 5, '棚子正中间离边 5 格');
+  assert.equal(w.skyAt(4, 1, 8), 15 - 1);
+  assert.equal(w.skyAt(22, 3, 22), 0, '封死的屋子里一点天光都没有');
+  w.rawSet(22, 5, 22, GLASS);
+  computeSkyLight(w);
+  assert.equal(w.skyAt(22, 4, 22), 14, '玻璃天窗挡一点点');
+});
+
+test('天光的局部更新和整个重算的结果一样', () => {
+  const w = new World({ seed: 5 });
+  computeSkyLight(w);
+  let s = 11;
+  const rand = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let k = 0; k < 25; k++) {
+    const x = Math.floor(rand() * w.sizeX);
+    const z = Math.floor(rand() * w.sizeZ);
+    const y = w.topY(x, z);
+    if (rand() < 0.5) w.rawSet(x, y, z, AIR);
+    else w.rawSet(x, y + 1, z, STONE);
+    updateSkyLight(w, x, z);
+  }
+  const partial = w.sky.slice();
+  computeSkyLight(w);
+  assert.deepEqual(partial, w.sky);
+});
+
+test('网格：洞里的面天光是暗的，露天的面是亮的；Sim 改方块时会更新天光', () => {
+  const w = floorWorld(1);
+  for (let x = 2; x <= 8; x++) for (let y = 1; y <= 5; y++) for (let z = 2; z <= 8; z++) {
+    const wall = x === 2 || x === 8 || y === 5 || z === 2 || z === 8;
+    if (wall) w.rawSet(x, y, z, STONE);
+  }
+  const sim = new Sim(w);
+  const skyOfFloor = () => {
+    const g = buildChunkGeometry(w, 0, 0);
+    let inside = -1;
+    let outside = -1;
+    for (let i = 0; i < g.positions.length; i += 3) {
+      if (g.positions[i + 1] !== 1 || g.normals[i + 1] !== 1) continue;
+      const [x, z] = [g.positions[i], g.positions[i + 2]];
+      if (x > 4 && x < 6 && z > 4 && z < 6) inside = Math.max(inside, g.sky[i / 3]);
+      if (x > 12) outside = Math.max(outside, g.sky[i / 3]);
+    }
+    return [inside, outside];
+  };
+  let [inside, outside] = skyOfFloor();
+  assert.equal(outside, 1);
+  assert.ok(inside < 0.05, `屋里 ${inside}`);
+  const dirty = sim.edit(5, 5, 5, AIR); // 屋顶开个洞
+  assert.ok(dirty.has('0,0'));
+  [inside, outside] = skyOfFloor();
+  assert.ok(inside > 0.9, `开了天窗：${inside}`);
+});
+
+test('洞里的夜影：白天在黑暗的洞里也会出现，露天的白天不会', () => {
+  const w = floorWorld(4);
+  // 地面在 y=10，下面 y=1..4 挖一个大洞（封死）
+  for (let x = 0; x < w.sizeX; x++) for (let z = 0; z < w.sizeZ; z++) for (let y = 1; y <= 10; y++) w.rawSet(x, y, z, STONE);
+  for (let x = 10; x < 54; x++) for (let z = 10; z < 54; z++) for (let y = 1; y <= 4; y++) w.rawSet(x, y, z, AIR);
+  computeSkyLight(w);
+  computeLight(w);
+  assert.ok(w.skyAt(30, 2, 30) < CAVE_DARK);
+  const player = createPlayer([32.5, 11, 32.5]);
+  const monsters = [];
+  for (let i = 0; i < 80 && monsters.length < 3; i++) trySpawn(w, monsters, player, Math.random, { night: false });
+  assert.ok(monsters.length >= 1, '洞里出现了');
+  assert.ok(monsters.every((m) => m.pos[1] < 5), '都在洞里');
+
+  const open = floorWorld(4);
+  computeSkyLight(open);
+  const none = [];
+  for (let i = 0; i < 80; i++) trySpawn(open, none, createPlayer([32.5, 1, 32.5]), Math.random, { night: false });
+  assert.equal(none.length, 0, '露天的白天没有');
+
+  // 玩家在很高的地方（离洞 12 格以上）：洞里也不生成
+  const high = [];
+  for (let i = 0; i < 80; i++) trySpawn(w, high, createPlayer([32.5, 30, 32.5]), Math.random, { night: false });
+  assert.equal(high.length, 0);
 });

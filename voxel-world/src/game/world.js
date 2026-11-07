@@ -21,6 +21,8 @@ export class World {
     this.data = new Uint8Array(this.sizeX * this.sizeY * this.sizeZ);
     // 火把的光照等级 0–15（见 light.js）
     this.light = new Uint8Array(this.data.length);
+    // 天光等级 0–15：阳光（或月光）能照到多少，洞里和屋里是暗的
+    this.sky = new Uint8Array(this.data.length);
     // 玩家改动过的方块："x,y,z" -> id。只存改动，存档很小。
     this.edits = new Map();
     if (generate) this.generate();
@@ -39,6 +41,12 @@ export class World {
     const z = Math.floor(i / this.sizeX) % this.sizeZ;
     const y = Math.floor(i / (this.sizeX * this.sizeZ));
     return [x, y, z];
+  }
+
+  skyAt(x, y, z) {
+    if (y >= this.sizeY) return 15;
+    if (!this.inBounds(x, y, z)) return 0;
+    return this.sky[this.index(x, y, z)];
   }
 
   lightAt(x, y, z) {
@@ -103,9 +111,11 @@ export class World {
 
   generate() {
     const { sizeX, sizeZ } = this;
+    const heights = new Int16Array(sizeX * sizeZ);
     for (let z = 0; z < sizeZ; z++) {
       for (let x = 0; x < sizeX; x++) {
         const h = Math.min(this.heightAt(x, z), this.sizeY - 10);
+        heights[z * sizeX + x] = h;
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === 0) id = BEDROCK;
@@ -117,11 +127,62 @@ export class World {
           else id = GRASS;
           this.rawSet(x, y, z, id);
         }
-        // 低于海平面的地方灌满水，形成湖和小海湾
-        for (let y = h + 1; y <= SEA_LEVEL; y++) this.rawSet(x, y, z, WATER);
+      }
+    }
+    this.carveCaves(heights);
+    // 低于海平面的地方灌满水，形成湖和小海湾
+    for (let z = 0; z < sizeZ; z++) {
+      for (let x = 0; x < sizeX; x++) {
+        for (let y = heights[z * sizeX + x] + 1; y <= SEA_LEVEL; y++) this.rawSet(x, y, z, WATER);
       }
     }
     this.plantTrees();
+  }
+
+  // 洞穴：一条条弯弯曲曲的“虫子”在地下钻过去，把经过的地方挖空。
+  // 碰到地面附近就成了洞口；湖底和海底下面留两层不挖，免得水漏进去。
+  carveCaves(heights) {
+    const rand = mulberry32(this.seed ^ 0x5eed);
+    const worms = Math.round(this.chunks * this.chunks * 0.5);
+    for (let w = 0; w < worms; w++) {
+      let x = rand() * this.sizeX;
+      let z = rand() * this.sizeZ;
+      const top = heights[Math.floor(z) * this.sizeX + Math.floor(x)];
+      let y = 3 + rand() * Math.max(1, top - 3);
+      let yaw = rand() * Math.PI * 2;
+      let pitch = (rand() - 0.5) * 0.4;
+      const length = 50 + Math.floor(rand() * 80);
+      const baseR = 1.2 + rand() * 1.1;
+      for (let step = 0; step < length; step++) {
+        x += Math.cos(yaw) * Math.cos(pitch);
+        z += Math.sin(yaw) * Math.cos(pitch);
+        y += Math.sin(pitch);
+        yaw += (rand() - 0.5) * 0.5;
+        pitch = Math.max(-0.5, Math.min(0.5, pitch + (rand() - 0.5) * 0.25));
+        if (y < 3) pitch = Math.abs(pitch);
+        const r = baseR + Math.sin(step * 0.3) * 0.4;
+        this.carveSphere(x, y, z, r, heights);
+      }
+    }
+  }
+
+  carveSphere(cx, cy, cz, r, heights) {
+    const r2 = r * r;
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
+      if (y < 1) continue;
+      for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++) {
+        for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+          if (!this.inBounds(x, y, z)) continue;
+          const d = (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 + (z + 0.5 - cz) ** 2;
+          if (d > r2) continue;
+          const h = heights[z * this.sizeX + x];
+          if (h <= SEA_LEVEL + 1 && y >= h - 2) continue; // 湖底、海底不挖穿
+          const id = this.get(x, y, z);
+          if (id === AIR || id === BEDROCK || id === WATER) continue;
+          this.rawSet(x, y, z, AIR);
+        }
+      }
+    }
   }
 
   plantTrees() {

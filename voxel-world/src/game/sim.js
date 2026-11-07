@@ -1,7 +1,7 @@
 import { AIR, EGG, TORCH, isCrop } from './blocks.js';
 import { growCrops, supportedBy } from './farming.js';
 import { Fluids } from './fluid.js';
-import { computeLight, relight } from './light.js';
+import { computeLight, computeSkyLight, relight, updateSkyLight } from './light.js';
 
 // 把“改方块”串起来：改数据、火把失去支撑会掉、通知水流、重算光照，
 // 最后告诉调用的人哪些区块需要重建网格。
@@ -13,6 +13,7 @@ export class Sim {
     this.crops = new Set();
     for (let i = 0; i < world.data.length; i++) if (isCrop(world.data[i])) this.crops.add(i);
     computeLight(world);
+    computeSkyLight(world);
     // 读档后，改过的地方可能还有没流完的水
     for (const key of world.edits.keys()) {
       const [x, y, z] = key.split(',').map(Number);
@@ -53,6 +54,7 @@ export class Sim {
     const dirty = this.chunkKeysFor(changed);
     // 放下或挖掉不透明的方块也会改变光的走向，所以每次都重算（只有光变了的区块才重建）
     this.chunkKeysFor(relight(world), dirty);
+    this.chunkKeysFor(updateSkyLight(world, x, z), dirty);
     return dirty;
   }
 

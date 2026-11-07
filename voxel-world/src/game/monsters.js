@@ -2,7 +2,7 @@ import { AIR } from './blocks.js';
 import { moveBody } from './player.js';
 
 // 夜影：夜里在黑暗的地方出现的怪物，一跳一跳地朝玩家扑过来。
-// 火把照亮的地方不会出现，天亮以后会慢慢消散。
+// 火把照亮的地方不会出现。洞穴里够黑的话白天也会有；晒到太阳会慢慢消散。
 
 export const MONSTER_HALF = 0.4;
 export const MONSTER_HEIGHT = 0.8;
@@ -14,6 +14,9 @@ export const SPAWN_MAX = 30;
 export const DESPAWN_DISTANCE = 56;
 export const CHASE_DISTANCE = 28;
 export const DARK_ENOUGH = 7; // 火把光照低于这个才会出现
+export const CAVE_DARK = 4; // 天光低于这个算“洞里”，白天也会出现
+export const SUNLIT = 8; // 天光不低于这个算晒得到太阳
+export const CAVE_RANGE = 12; // 洞里的只在玩家上下这么多格内生成
 export const DISSOLVE_SECONDS = 1.5;
 const HOP_SPEED = 8.6;
 const MOVE_SPEED = 3.4;
@@ -47,9 +50,29 @@ export function canSpawnAt(world, x, y, z) {
   return world.lightAt(x, y, z) < DARK_ENOUGH;
 }
 
-// 在玩家周围一圈随便找个地方生成一只。返回新怪物或 null。
-export function trySpawn(world, monsters, player, rand = Math.random) {
+// 在玩家周围找个地方生成一只：夜里在地面上，任何时候都可能在黑暗的洞穴里。返回新怪物或 null。
+export function trySpawn(world, monsters, player, rand = Math.random, { night = true } = {}) {
   if (monsters.length >= MAX_MONSTERS) return null;
+  // 洞穴：随便挑一列，在玩家上下 CAVE_RANGE 格内找黑暗的洞穴地面（离玩家太远的洞里不生成，免得攒在脚底下）
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const angle = rand() * Math.PI * 2;
+    const r = 8 + rand() * 16;
+    const x = Math.floor(player.pos[0] + Math.cos(angle) * r);
+    const z = Math.floor(player.pos[2] + Math.sin(angle) * r);
+    if (!world.inBounds(x, 0, z)) continue;
+    const top = world.topY(x, z);
+    const py = Math.floor(player.pos[1]);
+    const candidates = [];
+    for (let y = Math.max(1, py - CAVE_RANGE); y <= Math.min(top - 1, py + CAVE_RANGE); y++) {
+      if (canSpawnAt(world, x, y, z) && world.skyAt(x, y, z) < CAVE_DARK) candidates.push(y);
+    }
+    if (!candidates.length) continue;
+    const y = candidates[Math.floor(rand() * candidates.length)];
+    const m = createMonster([x + 0.5, y, z + 0.5]);
+    monsters.push(m);
+    return m;
+  }
+  if (!night) return null;
   for (let attempt = 0; attempt < 6; attempt++) {
     const angle = rand() * Math.PI * 2;
     const r = SPAWN_MIN + rand() * (SPAWN_MAX - SPAWN_MIN);
