@@ -5,6 +5,7 @@ import { ChunkRenderer } from '../game/renderer.js';
 import { raycast } from '../game/raycast.js';
 import { EYE_HEIGHT, eyeInWater, overlapsBlock, stepPlayer } from '../game/player.js';
 import { AIR, BLOCKS, TORCH, isLiquid } from '../game/blocks.js';
+import { SURVIVAL_HOTBAR, addItem, countOf, dropFor, itemName, takeItem } from '../game/items.js';
 import { DAY_SECONDS, clockText, skyAt, wrapTime } from '../game/daynight.js';
 
 const REACH = 6;
@@ -188,7 +189,7 @@ function Highlight({ targetRef }) {
   );
 }
 
-function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef }) {
+function Controller({ world, sim, renderer, materials, input, playerRef, selectedRef, modeRef, inventory, onInventory, onEdit, onMessage, statsRef, activeRef, onFlyingChange, timeRef, underwaterRef }) {
   const { camera } = useThree();
   const targetRef = useRef(null);
   const statsTimer = useRef(0);
@@ -196,15 +197,29 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
   const flicker = useMemo(() => ({ base: new THREE.Color('#ffc27a'), t: 0 }), []);
   const lastFlying = useRef(playerRef.current.flying);
 
+  // 生存模式：挖到的东西放进背包
+  const pickUp = (id) => {
+    if (id === null) return;
+    addItem(inventory, id);
+    if (!SURVIVAL_HOTBAR.includes(id)) onMessage(`+1 ${itemName(id)}`);
+  };
+
   const doAction = (kind) => {
     const t = targetRef.current;
     if (!t) return;
+    const survival = modeRef.current === 'survival';
     if (kind === 'dig') {
       if (BLOCKS[t.block]?.unbreakable) return;
       const [x, y, z] = t.hit;
+      const torchAbove = world.get(x, y + 1, z) === TORCH;
       const dirty = sim.edit(x, y, z, AIR);
       if (dirty) {
         renderer.rebuildKeys(dirty);
+        if (survival) {
+          pickUp(dropFor(t.block));
+          if (torchAbove && world.get(x, y + 1, z) !== TORCH) pickUp(TORCH); // 掉下来的火把也捡起来
+          onInventory();
+        }
         onEdit();
       }
     } else {
@@ -215,6 +230,9 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       // 空气和水的位置都能放方块（放进水里就把水换掉）
       if (!world.inBounds(x, y, z) || (here !== AIR && !isLiquid(here))) return;
       const id = selectedRef.current;
+      if (survival && countOf(inventory, id) <= 0) {
+        return onMessage(`没有${itemName(id)}了，去背包里合成或者挖一些`);
+      }
       if (id === TORCH) {
         if (here !== AIR) return onMessage('火把不能放在水里');
         if (!world.isSolidBlock(x, y - 1, z)) return onMessage('火把要立在方块上面');
@@ -224,6 +242,10 @@ function Controller({ world, sim, renderer, materials, input, playerRef, selecte
       const dirty = sim.edit(x, y, z, id);
       if (dirty) {
         renderer.rebuildKeys(dirty);
+        if (survival) {
+          takeItem(inventory, id);
+          onInventory();
+        }
         onEdit();
       }
     }

@@ -3,10 +3,13 @@ import * as THREE from 'three';
 import Game from './components/Game.jsx';
 import Hud from './components/Hud.jsx';
 import TouchControls from './components/TouchControls.jsx';
+import Inventory from './components/Inventory.jsx';
 import { World } from './game/world.js';
 import { createPlayer } from './game/player.js';
 import { createAtlasCanvas } from './game/atlas.js';
-import { BLOCKS, HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
+import { HOTBAR, HOTBAR_KEYS } from './game/blocks.js';
+import { SURVIVAL_HOTBAR, itemName, sanitizeInventory } from './game/items.js';
+import { craft } from './game/crafting.js';
 import { Sim } from './game/sim.js';
 import { MORNING, NIGHT, clockText, wrapTime } from './game/daynight.js';
 
@@ -52,7 +55,10 @@ function buildSession(save) {
   }
   const time = Number.isFinite(save?.time) ? wrapTime(save.time) : MORNING;
   const sim = new Sim(world); // 算好火把光照，继续流没流完的水
-  return { world, sim, player, time, id: Math.random().toString(36).slice(2) };
+  // 新世界默认生存模式；加合成之前的老存档没有 mode，保持原来的创造模式
+  const mode = save ? (save.mode === 'survival' ? 'survival' : 'creative') : 'survival';
+  const inventory = sanitizeInventory(save?.inventory);
+  return { world, sim, player, time, mode, inventory, id: Math.random().toString(36).slice(2) };
 }
 
 export default function App() {
@@ -62,9 +68,20 @@ export default function App() {
   const [selected, setSelected] = useState(0);
   const [flying, setFlying] = useState(session.player.flying);
   const [toast, setToast] = useState(null);
+  const [mode, setMode] = useState(session.mode);
+  const [bagOpen, setBagOpen] = useState(false);
+  const [, setInvVersion] = useState(0); // 背包变化时刷新界面
+
+  const hotbar = mode === 'creative' ? HOTBAR : SURVIVAL_HOTBAR;
+  const hotbarRef = useRef(hotbar);
+  hotbarRef.current = hotbar;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const bagOpenRef = useRef(false);
+  bagOpenRef.current = bagOpen;
 
   const input = useMemo(makeInput, []);
-  const selectedRef = useRef(HOTBAR[0]);
+  const selectedRef = useRef(hotbar[0]);
   const activeRef = useRef(false);
   const statsRef = useRef(null);
   const underwaterRef = useRef(null);
@@ -90,21 +107,22 @@ export default function App() {
 
   useEffect(() => {
     setFlying(session.player.flying);
+    setMode(session.mode);
     timeRef.current = session.time;
   }, [session]);
 
-  useEffect(() => {
-    selectedRef.current = HOTBAR[selected];
-  }, [selected]);
+  // 换模式时快捷栏也换了，选中的格子要在范围内
+  const slot = Math.min(selected, hotbar.length - 1);
+  selectedRef.current = hotbar[slot];
 
   useEffect(() => {
-    activeRef.current = started && !paused;
+    activeRef.current = started && !paused && !bagOpen;
     if (!activeRef.current) {
       input.keys.clear();
       input.held = {};
       input.move = { x: 0, y: 0 };
     }
-  }, [started, paused, input]);
+  }, [started, paused, bagOpen, input]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -119,6 +137,8 @@ export default function App() {
       edits: session.world.exportEdits(),
       player: { pos: p.pos, yaw: p.yaw, pitch: p.pitch, flying: p.flying },
       time: timeRef.current,
+      mode: modeRef.current,
+      inventory: session.inventory,
     });
   }, [session]);
 
@@ -142,12 +162,58 @@ export default function App() {
 
   const selectSlot = useCallback(
     (i) => {
-      const n = (i + HOTBAR.length) % HOTBAR.length;
+      const bar = hotbarRef.current;
+      const n = (i + bar.length) % bar.length;
       setSelected(n);
-      showToast(BLOCKS[HOTBAR[n]].name);
+      showToast(itemName(bar[n]));
     },
     [showToast],
   );
+
+  const onInventory = useCallback(() => setInvVersion((v) => v + 1), []);
+
+  const lockPointer = useCallback(() => {
+    if (isTouch) {
+      setPaused(false);
+      return;
+    }
+    const canvas = canvasRef.current;
+    try {
+      const r = canvas?.requestPointerLock?.();
+      // 有的浏览器拒绝锁定鼠标时返回被拒绝的 Promise
+      if (r && typeof r.catch === 'function') r.catch(() => setPaused(false));
+      if (!canvas?.requestPointerLock) setPaused(false);
+    } catch {
+      setPaused(false);
+    }
+  }, []);
+
+  // 打开背包：松开鼠标，游戏停下；关上时回到游戏
+  const openBag = useCallback(() => {
+    if (modeRef.current !== 'survival') {
+      showToast('创造模式下方块无限，不需要合成；可以在暂停菜单切换到生存模式');
+      return;
+    }
+    setBagOpen(true);
+    if (!isTouch && document.pointerLockElement) document.exitPointerLock();
+  }, [showToast]);
+
+  const closeBag = useCallback(
+    (resume = true) => {
+      setBagOpen(false);
+      if (resume) lockPointer();
+      else setPaused(true);
+    },
+    [lockPointer],
+  );
+
+  const onCraft = (recipe, times) => {
+    const n = craft(session.inventory, recipe, times);
+    if (!n) return;
+    onInventory();
+    onEdit();
+    showToast(`合成了 ${itemName(recipe.output[0])} ×${recipe.output[1] * n}`);
+  };
 
   const toggleFly = useCallback(() => {
     const p = playerRef.current;
@@ -160,10 +226,19 @@ export default function App() {
   // 键盘和鼠标
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (bagOpenRef.current) {
+        if (e.code === 'KeyE') closeBag(true);
+        else if (e.code === 'Escape') closeBag(false);
+        return;
+      }
       if (!activeRef.current) return;
+      if (e.code === 'KeyE' && !e.repeat) {
+        openBag();
+        return;
+      }
       const key = e.code.startsWith('Digit') ? e.code.slice(5) : e.code === 'Minus' ? '-' : null;
       const slot = key === null ? -1 : HOTBAR_KEYS.indexOf(key);
-      if (slot >= 0 && slot < HOTBAR.length) selectSlot(slot);
+      if (slot >= 0 && slot < hotbarRef.current.length) selectSlot(slot);
       if (e.code === 'KeyF' && !e.repeat) toggleFly();
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       input.keys.add(e.code);
@@ -191,10 +266,8 @@ export default function App() {
     };
     const onWheel = (e) => {
       if (!activeRef.current || isTouch) return;
-      setSelected((s) => {
-        const n = (s + (e.deltaY > 0 ? 1 : -1) + HOTBAR.length) % HOTBAR.length;
-        return n;
-      });
+      const len = hotbarRef.current.length;
+      setSelected((s) => (Math.min(s, len - 1) + (e.deltaY > 0 ? 1 : -1) + len) % len);
     };
     const onLockChange = () => {
       if (isTouch) return;
@@ -218,38 +291,35 @@ export default function App() {
       window.removeEventListener('wheel', onWheel);
       document.removeEventListener('pointerlockchange', onLockChange);
     };
-  }, [input, selectSlot, toggleFly]);
+  }, [input, selectSlot, toggleFly, openBag, closeBag]);
 
   const play = () => {
     setStarted(true);
-    if (isTouch) {
-      setPaused(false);
-      return;
-    }
-    const canvas = canvasRef.current;
-    try {
-      const r = canvas?.requestPointerLock?.();
-      // 有的浏览器拒绝锁定鼠标时返回被拒绝的 Promise
-      if (r && typeof r.catch === 'function') r.catch(() => setPaused(false));
-      if (!canvas?.requestPointerLock) setPaused(false);
-    } catch {
-      setPaused(false);
-    }
+    lockPointer();
+  };
+
+  const switchMode = (next) => {
+    if (next === mode) return;
+    setMode(next);
+    modeRef.current = next;
+    save();
+    showToast(next === 'survival' ? '生存模式：挖到的方块进背包，放方块要消耗' : '创造模式：方块无限');
   };
 
   const newWorld = () => {
     if (!window.confirm('换一个新世界？当前世界的改动会被清除。')) return;
     const next = buildSession(null);
     setSession(next);
-    writeSave({ seed: next.world.seed, edits: [], player: null, time: next.time });
+    writeSave({ seed: next.world.seed, edits: [], player: null, time: next.time, mode: next.mode });
     showToast('新世界已生成');
   };
 
   const resetWorld = () => {
     if (!window.confirm('把当前世界恢复成刚生成时的样子？')) return;
-    const next = buildSession({ seed: session.world.seed, edits: [], time: timeRef.current });
+    // 重置世界会清空背包
+    const next = buildSession({ seed: session.world.seed, edits: [], time: timeRef.current, mode });
     setSession(next);
-    writeSave({ seed: next.world.seed, edits: [], player: null, time: next.time });
+    writeSave({ seed: next.world.seed, edits: [], player: null, time: next.time, mode: next.mode });
     showToast('世界已重置');
   };
 
@@ -275,6 +345,9 @@ export default function App() {
         input={input}
         playerRef={playerRef}
         selectedRef={selectedRef}
+        modeRef={modeRef}
+        inventory={session.inventory}
+        onInventory={onInventory}
         activeRef={activeRef}
         statsRef={statsRef}
         timeRef={timeRef}
@@ -286,13 +359,38 @@ export default function App() {
 
       <div className="underwater" ref={underwaterRef} />
 
-      <Hud selected={selected} onSelect={selectSlot} atlasUrl={atlas.url} statsRef={statsRef} toast={toast} />
+      <Hud
+        slots={hotbar}
+        counts={mode === 'survival' ? session.inventory : null}
+        selected={slot}
+        onSelect={selectSlot}
+        atlasUrl={atlas.url}
+        statsRef={statsRef}
+        toast={toast}
+        hideHotbar={bagOpen}
+      />
 
-      {isTouch && started && !paused && (
-        <TouchControls input={input} flying={flying} onToggleFly={toggleFly} onPause={() => setPaused(true)} />
+      {isTouch && started && !paused && !bagOpen && (
+        <TouchControls
+          input={input}
+          flying={flying}
+          onToggleFly={toggleFly}
+          onPause={() => setPaused(true)}
+          onBag={mode === 'survival' ? openBag : null}
+        />
       )}
 
-      {(!started || paused) && (
+      {bagOpen && (
+        <Inventory
+          inventory={session.inventory}
+          atlasUrl={atlas.url}
+          onCraft={onCraft}
+          onClose={() => closeBag(true)}
+          isTouch={isTouch}
+        />
+      )}
+
+      {(!started || paused) && !bagOpen && (
         <div className="overlay">
           <div className="panel">
             <h1>方块小镇</h1>
@@ -307,19 +405,34 @@ export default function App() {
                 <li>右下角：挖 / 放 / 跳，按住可以连续</li>
                 <li>水里按“跳”往上游，贴着岸按“跳”上岸</li>
                 <li>火把要立在方块上，晚上能照亮周围；水会往低处和四周流</li>
-                <li>底部快捷栏：选方块</li>
+                <li>底部快捷栏：选方块；生存模式点右上角“背包”合成</li>
               </ul>
             ) : (
               <ul className="help">
                 <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动，<kbd>Shift</kbd> 跑，<kbd>空格</kbd> 跳</li>
                 <li>鼠标转视角，左键挖，右键放，按住可以连续</li>
-                <li><kbd>1</kbd>–<kbd>9</kbd>、<kbd>0</kbd>、<kbd>-</kbd> 或滚轮选方块（<kbd>0</kbd> 火把，<kbd>-</kbd> 水）</li>
+                <li><kbd>1</kbd>–<kbd>9</kbd> 或滚轮选方块（创造模式还有 <kbd>0</kbd> 火把、<kbd>-</kbd> 水）</li>
+                <li><kbd>E</kbd> 打开背包和合成（生存模式）</li>
                 <li><kbd>F</kbd> 飞行，飞行时 <kbd>空格</kbd> 上升、<kbd>C</kbd> 下降</li>
                 <li>水里按 <kbd>空格</kbd> 往上游、<kbd>C</kbd> 往下潜，贴着岸按 <kbd>空格</kbd> 上岸</li>
                 <li>火把要立在方块上，晚上能照亮周围；水会往低处和四周流</li>
                 <li><kbd>Esc</kbd> 暂停</li>
               </ul>
             )}
+            <div className="row mode-row" role="group" aria-label="游戏模式">
+              <span className="clock">模式</span>
+              <button type="button" className={mode === 'survival' ? 'on' : ''} aria-pressed={mode === 'survival'} onClick={() => switchMode('survival')}>
+                生存
+              </button>
+              <button type="button" className={mode === 'creative' ? 'on' : ''} aria-pressed={mode === 'creative'} onClick={() => switchMode('creative')}>
+                创造
+              </button>
+            </div>
+            <p className="mode-note">
+              {mode === 'survival'
+                ? '挖到的方块进背包，放方块要消耗。原木 → 木板 → 木棍，加上地下挖到的煤炭就能做火把。'
+                : '方块无限，随便放。'}
+            </p>
             <div className="row time-row">
               <span className="clock">游戏时间 {clockText(timeRef.current)}</span>
               <button type="button" onClick={() => setTime(MORNING, '天亮了')}>白天</button>

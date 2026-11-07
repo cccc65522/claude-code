@@ -3,7 +3,7 @@ import { lightBrightness } from './light.js';
 import { CHUNK } from './world.js';
 
 export const ATLAS_COLS = 4;
-export const ATLAS_ROWS = 4;
+export const ATLAS_ROWS = 8;
 
 // 每个面的四个角。三角形用 (0,1,2)(2,1,3)，从外面看是逆时针。
 // uv 的 v=1 是贴图上方，所以侧面的草在上面。

@@ -1,4 +1,4 @@
-import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER, isPassable } from './blocks.js';
+import { AIR, GRASS, DIRT, STONE, SAND, LOG, LEAVES, SNOW, BEDROCK, WATER, COAL_ORE, isPassable } from './blocks.js';
 import { fbm2, hash2, mulberry32 } from './noise.js';
 
 export const CHUNK = 16;
@@ -103,7 +103,8 @@ export class World {
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === 0) id = BEDROCK;
-          else if (y < h - 3) id = STONE;
+          // 石头里零星夹着煤矿石
+          else if (y < h - 3) id = y < h - 4 && hash2(x * 31 + y, z * 17 - y, this.seed + 5) < 0.025 ? COAL_ORE : STONE;
           else if (y < h) id = h <= SEA_LEVEL + 1 ? SAND : DIRT;
           else if (h <= SEA_LEVEL + 1) id = SAND;
           else if (h >= 26) id = SNOW;

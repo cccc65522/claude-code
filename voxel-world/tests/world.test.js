@@ -383,3 +383,81 @@ test('流动的水也能游泳，网格高度跟着水位变', () => {
   assert.equal(bodyInWater(w, createPlayer([5.5, 0.8, 5.5])), true);
   assert.equal(w.isSolid(5, 1, 5), false);
 });
+
+// ---------- 合成 ----------
+import { COAL_ORE, LOG, PLANKS, GLASS as GLASS_ID, GRASS as GRASS_ID, DIRT as DIRT_ID, BEDROCK as BEDROCK_ID } from '../src/game/blocks.js';
+import { COAL, STICK, dropFor, addItem, takeItem, countOf, sanitizeInventory, itemName } from '../src/game/items.js';
+import { RECIPES, craft, maxCrafts } from '../src/game/crafting.js';
+const recipe = (id) => RECIPES.find((r) => r.id === id);
+
+test('挖方块掉落：草变泥土，煤矿石掉煤炭，基岩和水什么都不掉', () => {
+  assert.equal(dropFor(GRASS_ID), DIRT_ID);
+  assert.equal(dropFor(COAL_ORE), COAL);
+  assert.equal(dropFor(LOG), LOG);
+  assert.equal(dropFor(TORCH), TORCH);
+  assert.equal(dropFor(BEDROCK_ID), null);
+  assert.equal(dropFor(WATER), null);
+  assert.equal(dropFor(flowId(3)), null);
+  assert.equal(itemName(STICK), '木棍');
+});
+
+test('地下的石头里有煤矿石，地表没有', () => {
+  const w = new World({ seed: 3, chunks: 4 });
+  let ore = 0;
+  for (let i = 0; i < w.data.length; i++) {
+    if (w.data[i] !== COAL_ORE) continue;
+    ore++;
+    const [x, y, z] = w.coords(i);
+    assert.ok(y <= w.topY(x, z) - 4, '煤矿石埋在地下');
+  }
+  assert.ok(ore > 50, `有一些煤矿石：${ore}`);
+});
+
+test('背包加减物品，数量不够时不扣', () => {
+  const inv = {};
+  addItem(inv, LOG, 3);
+  assert.equal(countOf(inv, LOG), 3);
+  assert.equal(takeItem(inv, LOG, 5), false);
+  assert.equal(countOf(inv, LOG), 3);
+  assert.equal(takeItem(inv, LOG, 3), true);
+  assert.deepEqual(inv, {}, '用完的物品从背包里去掉');
+});
+
+test('合成：原木 → 木板 → 木棍，加煤炭做火把；材料不够做不了', () => {
+  const inv = {};
+  addItem(inv, LOG, 2);
+  assert.equal(maxCrafts(inv, recipe('torch')), 0);
+  assert.equal(craft(inv, recipe('torch')), 0);
+  assert.equal(craft(inv, recipe('planks'), 99), 2, '材料只够做 2 次');
+  assert.equal(countOf(inv, PLANKS), 8);
+  assert.equal(countOf(inv, LOG), 0);
+  craft(inv, recipe('sticks'));
+  assert.equal(countOf(inv, STICK), 4);
+  assert.equal(countOf(inv, PLANKS), 6);
+  addItem(inv, COAL, 1);
+  assert.equal(maxCrafts(inv, recipe('torch')), 1);
+  craft(inv, recipe('torch'));
+  assert.equal(countOf(inv, TORCH), 4);
+  assert.equal(countOf(inv, COAL), 0);
+  assert.equal(countOf(inv, STICK), 3);
+});
+
+test('每个配方的产物都能放或者能用来合成别的', () => {
+  const used = new Set(RECIPES.flatMap((r) => r.inputs.map(([id]) => id)));
+  for (const r of RECIPES) {
+    const [out, n] = r.output;
+    assert.ok(n > 0);
+    assert.ok(out < 100 || used.has(out), `${itemName(out)} 有用处`);
+  }
+  const inv = {};
+  addItem(inv, SAND_ID, 4);
+  addItem(inv, COAL, 1);
+  assert.equal(craft(inv, recipe('glass'), 5), 1, '煤炭只够 1 次');
+  assert.equal(countOf(inv, GLASS_ID), 2);
+});
+
+test('读档时背包里不认识的东西和坏数据会被丢掉', () => {
+  const inv = sanitizeInventory({ 5: 3, 100: 2, 999: 1, abc: 4, 7: -1, 8: 1.5, 101: 1e9 });
+  assert.deepEqual(inv, { 5: 3, 100: 2, 101: 9999 });
+  assert.deepEqual(sanitizeInventory(null), {});
+});

@@ -170,6 +170,41 @@ painters[TILE.torch] = (put, rand) => {
   }
 };
 
+painters[TILE.coalOre] = (put, rand) => {
+  painters[TILE.stone](put, rand);
+  for (let i = 0; i < 6; i++) {
+    const cx = 2 + Math.floor(rand() * 11);
+    const cy = 2 + Math.floor(rand() * 11);
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      if (rand() < 0.8) put(cx + dx, cy + dy, 34, 34, 38);
+    }
+  }
+};
+
+// 物品图标（不是方块，只在背包和快捷栏里显示）
+function transparent(put) {
+  for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) put(x, y, 0, 0, 0, 0);
+}
+painters[TILE.stick] = (put, rand) => {
+  transparent(put);
+  for (let i = 2; i < 14; i++) {
+    const k = 1 + (rand() - 0.5) * 0.2;
+    put(i, 15 - i, 140 * k, 100 * k, 60 * k);
+    put(i + 1, 15 - i, 104 * k, 72 * k, 42 * k);
+  }
+};
+painters[TILE.coal] = (put, rand) => {
+  transparent(put);
+  for (let y = 3; y < 13; y++) {
+    for (let x = 3; x < 13; x++) {
+      const d = Math.hypot(x - 7.5, y - 7.8);
+      if (d > 5 + rand() * 0.8) continue;
+      const v = 30 + rand() * 30 + (x + y < 13 ? 25 : 0);
+      put(x, y, v, v, v + 6);
+    }
+  }
+};
+
 export function createAtlasCanvas(seed = 2024) {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;
