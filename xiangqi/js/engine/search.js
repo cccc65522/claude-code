@@ -3,7 +3,8 @@
 //   iterative deepening → principal variation search (PVS) with a transposition table,
 //   null-move pruning, late-move reductions, check extensions, killer and history
 //   move ordering, and a capture-only quiescence search (all moves when in check).
-//   Repetitions are scored with Xiangqi rules: perpetual check loses, otherwise draw.
+//   Repetitions are scored with Xiangqi rules: perpetual check loses, then perpetual
+//   chase (长捉) loses, otherwise draw.
 //
 // Scores are from the side to move's point of view. MATE - n means "mate in n plies".
 
@@ -85,11 +86,20 @@ export class Searcher {
     return v;
   }
 
-  repValue(rep, ply) {
-    let v = 0;
-    if (rep & 2) v += ply - BAN;   // we have been checking perpetually: we lose
-    if (rep & 4) v += BAN - ply;   // the opponent has: we win
-    return v;
+  // Score a repeated position by the rules: perpetual check loses (both sides: draw);
+  // without checks, the side that kept chasing a piece (长捉) loses; otherwise a draw.
+  repValue(pos, rep, ply) {
+    if (rep & 6) {
+      let v = 0;
+      if (rep & 2) v += ply - BAN;   // we have been checking perpetually: we lose
+      if (rep & 4) v += BAN - ply;   // the opponent has: we win
+      return v;
+    }
+    const { chase } = pos.cycleStatus(pos.repCycle());
+    const self = pos.side;
+    if (chase[self] && !chase[self ^ 1]) return ply - BAN;
+    if (chase[self ^ 1] && !chase[self]) return BAN - ply;
+    return 0;
   }
 
   tick() {
@@ -131,7 +141,7 @@ export class Searcher {
     let v = ply - MATE;
     if (v >= beta) return v;
     const rep = pos.repStatus(1);
-    if (rep) return this.repValue(rep, ply);
+    if (rep) return this.repValue(pos, rep, ply);
     if (ply >= MAX_PLY) return this.evaluate(pos);
 
     const inCheck = pos.lastMoveGaveCheck();
@@ -171,7 +181,7 @@ export class Searcher {
       let v = ply - MATE;
       if (v >= beta) return v;
       const rep = pos.repStatus(1);
-      if (rep) return this.repValue(rep, ply);
+      if (rep) return this.repValue(pos, rep, ply);
     }
     if (depth <= 0 || ply >= MAX_PLY) return this.quiesce(pos, alpha, beta, ply);
     this.tick();

@@ -2,8 +2,11 @@
 //
 //   绝杀 checkmate                  → the side to move loses
 //   困毙 no legal move, not in check → the side to move also loses (unlike chess)
-//   长将 perpetual check            → the side that keeps checking loses
-//   重复局面 other threefold repetition → draw (simplified: no 长捉 chase rule)
+//   On the third occurrence of a position, the last repetition cycle is judged:
+//   长将 perpetual check            → the side that kept checking loses
+//   长捉 perpetual chase (incl. 一将一捉) → the side that kept chasing one piece loses
+//     (长将 outranks 长捉; if both sides break the same rule it is a draw)
+//   重复局面 any other repetition    → draw
 //   60 回合自然限着 120 plies without a capture → draw
 //   双方无进攻子力 no rooks/knights/cannons/pawns left → draw
 
@@ -11,6 +14,14 @@ import { Position, START_FEN, RED, BLACK, sideOf, src, dst } from './board.js';
 import { toChinese, toIccs } from './notation.js';
 
 export const SIDE_NAME = ['红方', '黑方'];
+
+// { loser, reason } for a repetition cycle, or null for a draw.
+export function judgeRepetition({ check, chase }) {
+  if (check[RED] !== check[BLACK]) return { loser: check[RED] ? RED : BLACK, reason: '长将' };
+  if (check[RED]) return null; // both kept checking
+  if (chase[RED] !== chase[BLACK]) return { loser: chase[RED] ? RED : BLACK, reason: '长捉' };
+  return null;
+}
 
 export class Game {
   constructor(fen = START_FEN) {
@@ -66,12 +77,13 @@ export class Game {
         ? { winner: side ^ 1, reason: '绝杀', text: `${SIDE_NAME[side ^ 1]}胜（绝杀）` }
         : { winner: side ^ 1, reason: '困毙', text: `${SIDE_NAME[side ^ 1]}胜（困毙：${SIDE_NAME[side]}无子可动）` };
     }
-    // Third occurrence of the position with the same side to move.
-    const rep = pos.repStatus(2);
-    if (rep) {
-      const selfPerp = (rep & 2) !== 0, oppPerp = (rep & 4) !== 0;
-      if (selfPerp && !oppPerp) return { winner: side ^ 1, reason: '长将', text: `${SIDE_NAME[side ^ 1]}胜（${SIDE_NAME[side]}长将判负）` };
-      if (oppPerp && !selfPerp) return { winner: side, reason: '长将', text: `${SIDE_NAME[side]}胜（${SIDE_NAME[side ^ 1]}长将判负）` };
+    // Third occurrence of the position with the same side to move: judge the last cycle.
+    if (pos.repStatus(2)) {
+      const verdict = judgeRepetition(pos.cycleStatus(pos.repCycle()));
+      if (verdict) {
+        const { loser, reason } = verdict;
+        return { winner: loser ^ 1, reason, text: `${SIDE_NAME[loser ^ 1]}胜（${SIDE_NAME[loser]}${reason}判负）` };
+      }
       return { winner: null, reason: '重复', text: '和棋（局面重复三次）' };
     }
     if (this.quietPlies() >= 120) return { winner: null, reason: '限着', text: '和棋（60 回合未吃子）' };
