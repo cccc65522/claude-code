@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#15171c" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="造物">
+  <meta name="description" content="造物：在浏览器里画出会动的东西。自研二维物理引擎，画图造物、铰链马达弹簧绳子、时光倒流、物理闯关。">
+  <title>造物 · 物理沙盒</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <canvas id="stage" aria-label="物理画布"></canvas>
+
+    <header class="topbar">
+      <div class="group brand-group">
+        <span class="brand" aria-hidden="true">造物</span>
+        <button class="btn" data-cmd="scenes" data-icon="scenes"><span>场景</span></button>
+        <button class="btn" data-cmd="levels" data-icon="flag"><span>闯关</span></button>
+      </div>
+      <div class="spacer"></div>
+      <div class="group" id="play-group">
+        <button class="btn icon desktop-only" data-cmd="undo" data-icon="undo" aria-label="撤销" title="撤销 (Ctrl+Z)"></button>
+        <button class="btn icon desktop-only" data-cmd="redo" data-icon="redo" aria-label="重做" title="重做 (Ctrl+Shift+Z)"></button>
+        <button class="btn icon phone-only" data-cmd="undo" data-icon="undo" aria-label="撤销"></button>
+        <button class="btn primary play" id="play" data-cmd="play" aria-label="播放" title="播放 / 暂停 (空格)"><span class="play-icon" data-icon="play"></span><span class="pause-icon" data-icon="pause"></span><span class="play-label">播放</span></button>
+        <button class="btn icon" data-cmd="reset" data-icon="reset" aria-label="重置" title="回到播放前 (R)"></button>
+        <button class="btn icon desktop-only" data-cmd="step" data-icon="step" aria-label="单步" title="单步 (.)"></button>
+        <button class="btn icon toggle desktop-only" data-cmd="slow" data-icon="slow" aria-label="慢动作" title="慢动作" aria-pressed="false"></button>
+        <button class="btn icon" data-cmd="menu" data-icon="menu" aria-label="更多" aria-haspopup="menu"></button>
+      </div>
+    </header>
+
+    <div class="level-hud" id="level-hud" hidden>
+      <div class="hud-title"><span id="hud-name"></span><span class="hud-usage" id="hud-usage"></span></div>
+      <div class="hud-hint" id="hud-hint"></div>
+      <div class="hud-actions">
+        <button class="btn small" data-cmd="level-hint" data-icon="bulb"><span>看答案</span></button>
+        <button class="btn small" data-cmd="level-clear" data-icon="trash"><span>清空</span></button>
+        <button class="btn small" data-cmd="level-exit" data-icon="close"><span>退出</span></button>
+      </div>
+    </div>
+
+    <nav class="toolbar" id="toolbar" aria-label="工具"></nav>
+
+    <div class="matbar" id="matbar" role="radiogroup" aria-label="材料"></div>
+
+    <div class="timeline" id="timeline" hidden>
+      <span class="tl-label" data-icon="reset">时光倒流</span>
+      <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="时光倒流">
+      <span class="tl-time" id="scrub-time"></span>
+    </div>
+
+    <aside class="inspector" id="inspector" hidden aria-label="属性"></aside>
+
+    <div class="stats" id="stats" hidden></div>
+  </div>
+
+  <div class="menu" id="menu" role="menu" hidden></div>
+  <div class="dialog-backdrop" id="dialog" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div class="dialog-head"><h2 id="dialog-title"></h2><button class="btn icon" data-close data-icon="close" aria-label="关闭"></button></div>
+      <div class="dialog-body" id="dialog-body"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <input type="file" id="file-input" accept=".json,application/json" hidden>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
