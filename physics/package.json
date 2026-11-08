@@ -1,0 +1,19 @@
+{
+  "name": "zaowu-physics",
+  "version": "1.0.0",
+  "private": true,
+  "description": "造物：二维物理沙盒，自研物理引擎（动态 AABB 树、软约束子步求解器、关节、休眠、跨平台确定性）、画图造物、闯关",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node --test tests/unit/*.test.js",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run test:e2e"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
