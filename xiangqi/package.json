@@ -1,0 +1,19 @@
+{
+  "name": "yi-xiangqi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "弈：中国象棋，自研对弈引擎（alpha-beta 搜索、置换表、开局库）、中文记谱、残局练习",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node --test tests/unit/*.test.js",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run test:e2e"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
