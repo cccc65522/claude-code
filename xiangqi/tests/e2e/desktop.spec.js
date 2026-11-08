@@ -154,3 +154,18 @@ test('the game survives a reload, and the new-game dialog works', async ({ page 
   await waitPlies(page, 1);
   await expect(page.locator('#player-top')).toContainText('电脑 · 入门');
 });
+
+test('perpetual chase is ruled a loss in the game', async ({ page }) => {
+  await open(page);
+  await start(page, { mode: 'pvp', fen: '4k4/9/n8/9/9/9/2R6/9/9/3K5 w - - 0 1' });
+  const cycle = ['车七平九', '马1进3', '车九平七', '马3退1'];
+  for (const t of [...cycle, ...cycle]) {
+    await page.locator('#move-text').fill(t);
+    await page.locator('#move-text').press('Enter');
+  }
+  await expect(page.getByRole('dialog', { name: '黑方胜（红方长捉判负）' })).toBeVisible();
+  await page.getByRole('button', { name: '复盘' }).click();
+  await page.click('[data-cmd=menu]');
+  await page.getByRole('menuitem', { name: '规则与帮助' }).click();
+  await expect(page.getByRole('dialog', { name: '规则与帮助' })).toContainText('长捉');
+});
