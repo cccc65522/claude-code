@@ -1,0 +1,19 @@
+{
+  "name": "gesuan-sheet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "格算：纯前端电子表格，自研公式引擎（依赖图增量重算、循环引用检测、引用改写、xlsx 导入导出）",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node --test tests/unit/*.test.js",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run test:e2e"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
