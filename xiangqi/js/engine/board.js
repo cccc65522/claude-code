@@ -35,6 +35,9 @@ for (let y = 0; y < 10; y++) {
 export const onRedSide = s => rankOf(s) >= 5;
 const homeHalf = (s, side) => (side === RED ? rankOf(s) >= 5 : rankOf(s) <= 4);
 
+// Rough piece values for deciding whether attacking a protected piece still wins material.
+const CHASE_VALUE = [0, 1, 1, 3, 5, 3, 1]; // K A B N R C P
+
 // Elephant squares from Red's point of view (Black mirrored).
 const BISHOP_SQUARES = new Set(['2,9', '6,9', '0,7', '4,7', '8,7', '2,5', '6,5']);
 
@@ -453,6 +456,113 @@ export class Position {
       i--;
     }
     return 0;
+  }
+
+  // Length in plies of the most recent repetition cycle (0 if the position hasn't repeated).
+  repCycle() {
+    let selfSide = false;
+    let i = this.mvList.length - 1;
+    while (i > 0 && this.mvList[i] && !this.pcList[i]) {
+      if (selfSide && this.keyList[i] === this.key) return this.mvList.length - i;
+      selfSide = !selfSide;
+      i--;
+    }
+    return 0;
+  }
+
+  // ---------- chasing (捉) ----------
+  //
+  // A move "chases" an opponent piece when it creates a new, real threat to win it:
+  //   - the threat is new: made by the moved piece, or discovered by moving out of the way;
+  //   - kings and pawns may threaten freely (their attacks never count as chasing);
+  //   - the king and pawns that haven't crossed the river may be attacked freely;
+  //   - the threat must win material: the target is unprotected, or worth more than the
+  //     attacker (a horse attacking a protected rook still counts);
+  //   - attacking an equal piece that can capture you back is an offer to exchange (兑), not a chase.
+
+  // Legal captures available to `side` right now, as move numbers.
+  capturePairs(side) {
+    const flip = this.side !== side;
+    if (flip) this.changeSide();
+    const buf = new Int32Array(64);
+    const n = this.generate(buf, true);
+    const out = new Set();
+    for (let i = 0; i < n; i++) {
+      if (this.makeMove(buf[i])) { this.undoMove(); out.add(buf[i]); }
+    }
+    if (flip) this.changeSide();
+    return out;
+  }
+
+  // After the chaser takes on t with the piece on a, can the side to move recapture on t?
+  isProtected(a, t) {
+    this.changeSide(); // the chaser plays the capture
+    if (!this.makeMove(a | (t << 8))) { this.changeSide(); return true; }
+    let protectedSq = false;
+    for (const c of this.capturePairs(this.side)) if (dst(c) === t) { protectedSq = true; break; }
+    this.undoMove();
+    this.changeSide();
+    return protectedSq;
+  }
+
+  // Squares of the side-to-move's pieces chased by the move just played (`mv`).
+  // `before` = capturePairs(chaser) taken before that move was made.
+  chasedBy(mv, before) {
+    const victim = this.side;
+    const after = this.capturePairs(victim ^ 1);
+    const counter = this.capturePairs(victim);
+    const out = new Set();
+    for (const cap of after) {
+      const a = src(cap), t = dst(cap);
+      if (a !== dst(mv) && before.has(cap)) continue; // threat already existed
+      const at = this.squares[a] & 7, tt = this.squares[t] & 7;
+      if (at === KING || at === PAWN || tt === KING) continue;
+      if (tt === PAWN && homeHalf(t, victim)) continue;
+      if (CHASE_VALUE[tt] === CHASE_VALUE[at] && counter.has(t | (a << 8))) continue; // mutual: 兑
+      if (CHASE_VALUE[tt] > CHASE_VALUE[at] || !this.isProtected(a, t)) out.add(t);
+    }
+    return [...out];
+  }
+
+  // Replays the last `plies` moves (one repetition cycle) and reports, per side, whether
+  // every one of its moves gave check (长将), and whether it kept attacking — every move a
+  // check or a chase, at least one chase, and one piece chased throughout (长捉 / 一将一捉).
+  cycleStatus(plies) {
+    plies = Math.min(plies, this.mvList.length - 1);
+    const moves = [];
+    for (let i = 0; i < plies; i++) {
+      moves.unshift(this.mvList[this.mvList.length - 1]);
+      this.undoMove();
+    }
+    const recs = [];
+    for (const mv of moves) {
+      const mover = this.side;
+      const before = this.capturePairs(mover);
+      this.makeMove(mv);
+      const check = this.lastMoveGaveCheck();
+      recs.push({ mover, mv, check, chased: check ? [] : this.chasedBy(mv, before) });
+    }
+    const status = { check: [false, false], chase: [false, false] };
+    for (const side of [RED, BLACK]) {
+      const own = recs.filter(r => r.mover === side);
+      if (!own.length) continue;
+      status.check[side] = own.every(r => r.check);
+      let targets = null, anyChase = false, ok = true;
+      for (const r of recs) {
+        if (r.mover !== side) {
+          // The chased piece runs away: follow it.
+          if (targets?.has(src(r.mv))) { targets.delete(src(r.mv)); targets.add(dst(r.mv)); }
+          continue;
+        }
+        if (r.check) continue;
+        if (!r.chased.length) { ok = false; break; }
+        anyChase = true;
+        targets = targets === null ? new Set(r.chased) : new Set(r.chased.filter(s => targets.has(s)));
+        if (!targets.size) { ok = false; break; }
+      }
+      status.chase[side] = ok && anyChase;
+    }
+    return status;
   }
 
   // Enough material on the side to move for null-move pruning to be safe.
