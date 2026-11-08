@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f9fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1f2023" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="格算">
+  <title>格算 · 电子表格</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><rect x="2" y="2" width="20" height="20" rx="5" fill="currentColor"/><path d="M7 8h10M7 12h10M7 16h6M12 6v12" stroke="var(--brand-ink)" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <input class="doc-title" id="doc-title" aria-label="表格名称" spellcheck="false" maxlength="60">
+      <span class="save-state" id="save-state" aria-live="polite"></span>
+      <div class="spacer"></div>
+      <button class="tb" data-cmd="menu-file" aria-haspopup="menu" title="文件">文件</button>
+      <button class="tb" data-cmd="menu-help" title="快捷键与帮助" aria-label="帮助">?</button>
+    </header>
+
+    <div class="toolbar" id="toolbar" role="toolbar" aria-label="格式工具栏">
+      <button class="tb icon" data-cmd="undo" title="撤销 (Ctrl+Z)" aria-label="撤销"><svg viewBox="0 0 20 20"><path d="M7 5 3 9l4 4M3.5 9H12a5 5 0 0 1 0 10h-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tb icon" data-cmd="redo" title="重做 (Ctrl+Y)" aria-label="重做"><svg viewBox="0 0 20 20"><path d="m13 5 4 4-4 4M16.5 9H8a5 5 0 0 0 0 10h2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <span class="sep"></span>
+      <button class="tb" data-cmd="format-menu" aria-haspopup="menu" title="数字格式" id="fmt-btn">常规 ▾</button>
+      <button class="tb icon" data-cmd="fmt-percent" title="百分比" aria-label="百分比">%</button>
+      <button class="tb icon" data-cmd="fmt-dec-less" title="减少小数位" aria-label="减少小数位">.0←</button>
+      <button class="tb icon" data-cmd="fmt-dec-more" title="增加小数位" aria-label="增加小数位">.00→</button>
+      <span class="sep"></span>
+      <button class="tb icon" data-cmd="bold" title="加粗 (Ctrl+B)" aria-label="加粗" aria-pressed="false"><b>B</b></button>
+      <button class="tb icon" data-cmd="italic" title="倾斜 (Ctrl+I)" aria-label="倾斜" aria-pressed="false"><i>I</i></button>
+      <button class="tb icon" data-cmd="underline" title="下划线 (Ctrl+U)" aria-label="下划线" aria-pressed="false"><u>U</u></button>
+      <button class="tb icon" data-cmd="strike" title="删除线" aria-label="删除线" aria-pressed="false"><s>S</s></button>
+      <button class="tb icon swatch-btn" data-cmd="color-menu" title="文字颜色" aria-label="文字颜色"><span class="a-letter">A</span><span class="swatch-bar" id="color-bar"></span></button>
+      <button class="tb icon swatch-btn" data-cmd="fill-menu" title="填充颜色" aria-label="填充颜色"><svg viewBox="0 0 20 20"><path d="M4 11 10 5l5 5-6 6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M16 12s1.5 1.8 1.5 2.8a1.5 1.5 0 0 1-3 0c0-1 1.5-2.8 1.5-2.8z" fill="currentColor"/></svg><span class="swatch-bar" id="fill-bar"></span></button>
+      <span class="sep"></span>
+      <button class="tb icon" data-cmd="align-left" title="左对齐" aria-label="左对齐" aria-pressed="false"><svg viewBox="0 0 20 20"><path d="M3 5h14M3 9h9M3 13h14M3 17h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <button class="tb icon" data-cmd="align-center" title="居中" aria-label="居中" aria-pressed="false"><svg viewBox="0 0 20 20"><path d="M3 5h14M5.5 9h9M3 13h14M5.5 17h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <button class="tb icon" data-cmd="align-right" title="右对齐" aria-label="右对齐" aria-pressed="false"><svg viewBox="0 0 20 20"><path d="M3 5h14M8 9h9M3 13h14M8 17h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <button class="tb icon" data-cmd="wrap" title="自动换行" aria-label="自动换行" aria-pressed="false"><svg viewBox="0 0 20 20"><path d="M3 5h14M3 10h11a3 3 0 0 1 0 6h-3m0 0 2-2m-2 2 2 2M3 15h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <span class="sep"></span>
+      <button class="tb" data-cmd="autosum" title="自动求和 (Alt+=)">Σ 求和</button>
+      <button class="tb" data-cmd="functions" title="插入函数">fx 函数</button>
+      <button class="tb" data-cmd="sort-asc" title="按当前列升序排序">↑ 升序</button>
+      <button class="tb" data-cmd="sort-desc" title="按当前列降序排序">↓ 降序</button>
+      <button class="tb" data-cmd="insert-menu" aria-haspopup="menu" title="插入或删除行列">行列 ▾</button>
+      <button class="tb" data-cmd="find" title="查找替换 (Ctrl+F)">查找</button>
+      <span class="sep"></span>
+      <button class="tb" data-cmd="copy" title="复制 (Ctrl+C)">复制</button>
+      <button class="tb" data-cmd="cut" title="剪切 (Ctrl+X)">剪切</button>
+      <button class="tb" data-cmd="paste" title="粘贴 (Ctrl+V)">粘贴</button>
+      <button class="tb" data-cmd="clear" title="清除内容 (Delete)">清除</button>
+    </div>
+
+    <div class="fbar">
+      <input class="namebox" id="namebox" aria-label="名称框：当前单元格地址，可输入地址跳转" spellcheck="false" autocomplete="off">
+      <span class="fx" aria-hidden="true">fx</span>
+      <div class="fx-wrap editor-wrap" id="bar-wrap">
+        <div class="hl" aria-hidden="true"></div>
+        <textarea id="bar-input" rows="1" wrap="off" aria-label="编辑栏" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" enterkeyhint="done"></textarea>
+      </div>
+      <button class="tb icon bar-btn" data-cmd="edit-cancel" aria-label="取消输入" title="取消 (Esc)" hidden>✕</button>
+      <button class="tb icon bar-btn accept" data-cmd="edit-commit" aria-label="确认输入" title="确认 (Enter)" hidden>✓</button>
+    </div>
+
+    <main class="grid-area" id="grid-area">
+      <div class="viewport" id="viewport">
+        <div class="sheet-canvas" id="sheet-canvas">
+          <div class="colhdr" id="colhdr"><div class="corner" id="corner" title="全选"></div><div class="hdr-cells"></div></div>
+          <div class="rowhdr" id="rowhdr"><div class="hdr-cells"></div></div>
+          <div class="cells-layer" id="cells-layer">
+            <div class="gridlines"></div>
+            <div class="cells"></div>
+            <div class="overlays"></div>
+          </div>
+        </div>
+      </div>
+      <div class="cell-editor editor-wrap idle" id="cell-editor">
+        <div class="hl" aria-hidden="true"></div>
+        <textarea id="cell-input" rows="1" wrap="off" aria-label="单元格内容" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></textarea>
+      </div>
+      <div class="popup suggest" id="suggest" role="listbox" hidden></div>
+      <div class="popup arghint" id="arghint" hidden></div>
+    </main>
+
+    <footer class="bottombar">
+      <div class="tabs" id="tabs" role="tablist" aria-label="工作表"></div>
+      <button class="tb icon add-sheet" data-cmd="add-sheet" title="新建工作表" aria-label="新建工作表">＋</button>
+      <div class="status" id="status" aria-live="polite"></div>
+    </footer>
+
+    <div class="keybar" id="keybar" hidden>
+      <button data-key="=">=</button><button data-key="(">(</button><button data-key=")">)</button><button data-key=",">,</button><button data-key=":">:</button><button data-key="$">$</button><button data-key="+">+</button><button data-key="-">−</button><button data-key="*">×</button><button data-key="/">÷</button><button data-key="&amp;">&amp;</button><button data-key="&quot;">"</button><button data-cmd="functions" class="wide">fx</button>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept=".xlsx,.csv,.tsv,.txt,.json,application/json,text/csv" hidden>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div id="live" class="sr-only" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
