@@ -13,6 +13,7 @@ import { shapeMass, LINEAR_SLOP, SPECULATIVE } from './shapes.js';
 import { DynamicTree } from './tree.js';
 import { collide, newManifold, fixtureContains } from './collide.js';
 import { RevoluteJoint, DistanceJoint, WeldJoint, MouseJoint } from './joints.js';
+import { Fluid } from './fluid.js';
 
 export const STATIC = 0;
 export const DYNAMIC = 2;
@@ -269,6 +270,7 @@ export class World {
     this.ground = new Body(this, { type: 'static' });
     this.ground.id = 0;
     this.stats = { contacts: 0, awake: 0, ms: 0 };
+    this.fluid = new Fluid(this);
   }
 
   // ----- bodies -----
@@ -524,6 +526,7 @@ export class World {
     if (this.moveBuffer.length) this.updatePairs();
     this.updateContacts(dt);
     this.solve(dt);
+    this.fluid.step(dt);
     this.updatePairs();
     this.time += dt;
     this.stepCount++;
@@ -800,6 +803,7 @@ export class World {
 
   // Push dynamic bodies away from a point, stronger close to it.
   explode(x, y, radius, strength) {
+    this.fluid.explode(x, y, radius, strength);
     for (const b of this.bodies) {
       if (b.type !== DYNAMIC) continue;
       const dx = b.cx - x, dy = b.cy - y;
@@ -816,12 +820,20 @@ export class World {
     const buf = new Float64Array(6);
     const bytes = new Uint8Array(buf.buffer);
     let h1 = 0x811c9dc5, h2 = 0x01000193;
-    for (const b of this.bodies) {
-      buf[0] = b.x; buf[1] = b.y; buf[2] = b.angle; buf[3] = b.vx; buf[4] = b.vy; buf[5] = b.w;
+    const mix = () => {
       for (let i = 0; i < bytes.length; i++) {
         h1 = Math.imul(h1 ^ bytes[i], 16777619) >>> 0;
         h2 = Math.imul(h2 + bytes[i], 2246822519) >>> 0;
       }
+    };
+    for (const b of this.bodies) {
+      buf[0] = b.x; buf[1] = b.y; buf[2] = b.angle; buf[3] = b.vx; buf[4] = b.vy; buf[5] = b.w;
+      mix();
+    }
+    const f = this.fluid;
+    for (let i = 0; i < f.n; i++) {
+      buf[0] = f.x[i]; buf[1] = f.y[i]; buf[2] = f.vx[i]; buf[3] = f.vy[i]; buf[4] = 0; buf[5] = 0;
+      mix();
     }
     return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
   }

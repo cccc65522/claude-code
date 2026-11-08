@@ -4,7 +4,7 @@
 import { strokeToShape, centroid } from '../engine/geometry.js';
 import { flat } from '../engine/scene.js';
 
-export const TOOL_ORDER = ['hand', 'draw', 'box', 'circle', 'pin', 'motor', 'weld', 'spring', 'rope', 'eraser', 'bomb'];
+export const TOOL_ORDER = ['hand', 'draw', 'box', 'circle', 'pin', 'motor', 'weld', 'spring', 'rope', 'water', 'eraser', 'bomb'];
 
 export const TOOL_INFO = {
   hand: { name: '拖动', tip: '拖动物体；运行时可以抓住物体甩出去。拖空白处移动视图' },
@@ -16,7 +16,8 @@ export const TOOL_INFO = {
   weld: { name: '粘合', tip: '把两个重叠的物体粘死；只点一个就固定在背景上' },
   spring: { name: '弹簧', tip: '从一点拖到另一点。端点在物体上就连物体，在空白处就连背景' },
   rope: { name: '绳子', tip: '从一点拖到另一点，做一根绳子' },
-  eraser: { name: '橡皮', tip: '点或划过要删除的东西；可以剪断绳子' },
+  water: { name: '水', tip: '按住倒水，拖动可以“画”水。水会托起木头，石头和铁会沉下去' },
+  eraser: { name: '橡皮', tip: '点或划过要删除的东西；可以剪断绳子、擦掉水' },
   bomb: { name: '爆炸', tip: '点一下，把周围的东西炸开' }
 };
 
@@ -310,19 +311,53 @@ export function makeTools(app) {
     erase(e) {
       const j = app.pickJoint(e.sx, e.sy, true);
       const b = j ? null : app.pickBody(e.x, e.y, true);
-      if (!j && !b) return;
-      if (!this.started) {
+      if (!this.started && (j || b || app.world.fluid.occupied(e.x, e.y, 14 / scale()))) {
         app.beginEdit();
         this.started = true;
       }
+      if (!this.started) return;
+      app.eraseWater(e.x, e.y, 14 / scale());
       if (j) app.removeJoint(j);
-      else app.removeBody(b);
+      else if (b) app.removeBody(b);
       app.invalidate();
     },
     up() {
       app.preview = null;
       if (this.started) app.committed();
       this.started = false;
+    },
+    cancel() {
+      this.up();
+    }
+  };
+
+  tools.water = {
+    down(e) {
+      this.p = e;
+      this.v = { x: 0, y: 0 };
+      this.t = performance.now();
+      app.beginEdit();
+      this.added = 0;
+      this.tick();
+    },
+    move(e) {
+      if (!this.p) return;
+      const now = performance.now(), dt = Math.max(1, now - this.t) / 1000;
+      // follow the pointer's speed a little, so a flick throws water
+      this.v = { x: Math.max(-8, Math.min(8, (e.x - this.p.x) / dt * 0.4)), y: Math.max(-8, Math.min(8, (e.y - this.p.y) / dt * 0.4)) };
+      this.t = now;
+      this.p = e;
+      if (!app.running) this.tick();
+    },
+    tick() {
+      if (!this.p) return;
+      this.added += app.pour(this.p.x, this.p.y, this.v.x, this.v.y - (app.running ? 1 : 0), app.running ? 3 : 13);
+    },
+    up() {
+      if (!this.p) return;
+      this.p = null;
+      if (this.added) app.committed();
+      else app.dropEdit();
     },
     cancel() {
       this.up();

@@ -15,6 +15,7 @@
   --accent-soft: rgba(226, 98, 42, 0.14);
   --accent-ink: #ffffff;
   --goal: #16a05a;
+  --water: #2f86e0;
   --nodraw: #d43d3d;
   --joint: #2c2a26;
   --joint-fill: #ffffff;
@@ -46,6 +47,7 @@
     --accent-soft: rgba(255, 122, 61, 0.18);
     --accent-ink: #1a1208;
     --goal: #3ccf7f;
+    --water: #3e9cff;
     --nodraw: #ff6b6b;
     --joint: #e8e6e1;
     --joint-fill: #2a2d34;
@@ -70,6 +72,7 @@
   --accent-soft: rgba(255, 122, 61, 0.18);
   --accent-ink: #1a1208;
   --goal: #3ccf7f;
+  --water: #3e9cff;
   --nodraw: #ff6b6b;
   --joint: #e8e6e1;
   --joint-fill: #2a2d34;

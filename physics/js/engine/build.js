@@ -2,6 +2,7 @@
 // rope recipe shared by the builder and the rope tool.
 
 import { cosSin } from './math.js';
+import { waterBlock } from './fluid.js';
 
 const r4 = x => Math.round(x * 1e4) / 1e4;
 const sq = x => x * x;
@@ -151,8 +152,15 @@ export class SceneBuilder {
     return base;
   }
 
+  // A rectangle filled with water.
+  water(x0, y0, x1, y1) {
+    this.drops = (this.drops || []).concat(waterBlock(x0, y0, x1, y1));
+  }
+
   scene(extra = {}) {
-    return { v: 1, g: [0, -10], bodies: this.bodies, joints: this.joints, ...extra };
+    const s = { v: 1, g: [0, -10], bodies: this.bodies, joints: this.joints, ...extra };
+    if (this.drops && this.drops.length) s.water = this.drops;
+    return s;
   }
 }
 

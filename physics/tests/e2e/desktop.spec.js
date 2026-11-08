@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { trackErrors, expectNoProblems, open, setView, tool, drag, click, path, bodyCount, jointCount, lastBody, fastForward, toPage } from './helpers.js';
 import { buildWorld } from '../../js/engine/scene.js';
-import { demo } from '../../js/engine/demos.js';
+import { demo, DEMOS } from '../../js/engine/demos.js';
 import { allLevels } from '../../js/engine/levels.js';
 import { levelScene, LevelRun, canonical } from '../../js/engine/level-run.js';
 
@@ -243,7 +243,7 @@ test('every demo loads from the scenes dialog and runs', async ({ page }) => {
   const problems = trackErrors(page);
   await open(page);
   await page.locator('[data-cmd="scenes"]').click();
-  await expect(page.locator('.card')).toHaveCount(10);
+  await expect(page.locator('.card')).toHaveCount(DEMOS.length);
   await page.locator('.card', { hasText: '高尔顿板' }).click();
   expect(await bodyCount(page)).toBeGreaterThan(300);
   await fastForward(page, 120);
@@ -333,4 +333,34 @@ test('level answer button and level select', async ({ page }) => {
   await page.locator('[data-close]').click();
   await page.locator('[data-cmd="level-exit"]').click();
   await expect(page.locator('#level-hud')).toBeHidden();
+});
+
+test('water: pour into a cup while paused, it settles when played; erase and undo', async ({ page }) => {
+  const problems = trackErrors(page);
+  await open(page);
+  await setView(page, VIEW);
+  await tool(page, 'draw');
+  await page.locator('#matbar .fixed-toggle').click();
+  await drag(page, path([[-2, 4.5], [-2, 1], [2, 1], [2, 4.5]], 8), 2);
+  await tool(page, 'water');
+  await drag(page, path([[-1.4, 3], [1.4, 3], [1.4, 3.6], [-1.4, 3.6]], 12), 2);
+  const n = await page.evaluate(() => window.__zw.app.world.fluid.n);
+  expect(n).toBeGreaterThan(40);
+  await expect(page.locator('#toolbar [data-tool="water"]')).toHaveAttribute('aria-pressed', 'true');
+  await fastForward(page, 150);
+  const inCup = await page.evaluate(() => {
+    const f = window.__zw.app.world.fluid;
+    let inside = 0;
+    for (let i = 0; i < f.n; i++) if (f.x[i] > -2 && f.x[i] < 2 && f.y[i] > 1 && f.y[i] < 2.6) inside++;
+    return inside / f.n;
+  });
+  expect(inCup).toBeGreaterThan(0.95);
+  await page.locator('#play').click();
+  await tool(page, 'eraser');
+  await click(page, 0, 1.3);
+  const after = await page.evaluate(() => window.__zw.app.world.fluid.n);
+  expect(after).toBeLessThan(n);
+  await page.keyboard.press('Control+z');
+  expect(await page.evaluate(() => window.__zw.app.world.fluid.n)).toBe(n);
+  expectNoProblems(problems);
 });

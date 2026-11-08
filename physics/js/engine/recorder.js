@@ -13,6 +13,7 @@ export class Recorder {
 
   clear() {
     this.bodies = null;
+    this.drops = 0;
     this.frames = [];
     this.times = [];
     this.tick = 0;
@@ -28,7 +29,7 @@ export class Recorder {
 
   sameBodies(world) {
     const a = this.bodies, b = world.bodies;
-    if (!a || a.length !== b.length) return false;
+    if (!a || a.length !== b.length || world.fluid.n !== this.drops) return false;
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
   }
@@ -38,11 +39,16 @@ export class Recorder {
     if (!this.sameBodies(world)) {
       this.clear();
       this.bodies = world.bodies.slice();
+      this.drops = world.fluid.n;
       force = true;
     }
     if (!force && ++this.tick % this.every !== 0) return;
-    const n = this.bodies.length;
-    const f = new Float32Array(n * FIELDS);
+    const n = this.bodies.length, fl = world.fluid, base = n * FIELDS;
+    const f = new Float32Array(base + fl.n * 4);
+    for (let i = 0; i < fl.n; i++) {
+      f[base + 4 * i] = fl.x[i]; f[base + 4 * i + 1] = fl.y[i];
+      f[base + 4 * i + 2] = fl.vx[i]; f[base + 4 * i + 3] = fl.vy[i];
+    }
     for (let i = 0; i < n; i++) {
       const b = this.bodies[i], k = i * FIELDS;
       f[k] = b.x; f[k + 1] = b.y; f[k + 2] = b.angle;
@@ -50,7 +56,7 @@ export class Recorder {
     }
     this.frames.push(f);
     this.times.push(world.time);
-    const cap = this.capacity(n);
+    const cap = this.capacity(n + this.drops * 4 / FIELDS);
     if (this.frames.length > cap) {
       this.frames.splice(0, this.frames.length - cap);
       this.times.splice(0, this.times.length - cap);
@@ -77,6 +83,11 @@ export class Recorder {
     for (const j of world.joints) {
       if (j.linearImpulse) j.linearImpulse.x = j.linearImpulse.y = 0;
       j.motorImpulse = j.lowerImpulse = j.upperImpulse = j.impulse = j.angularImpulse = 0;
+    }
+    const fl = world.fluid, base = this.bodies.length * FIELDS;
+    for (let k = 0; k < fl.n; k++) {
+      fl.x[k] = f[base + 4 * k]; fl.y[k] = f[base + 4 * k + 1];
+      fl.vx[k] = f[base + 4 * k + 2]; fl.vy[k] = f[base + 4 * k + 3];
     }
     world.time = this.times[i];
     return true;

@@ -6,8 +6,9 @@
 //
 //   body:  { shape: {t:'circle', r} | {t:'box', w, h} | {t:'poly', pts:[x,y,…]} | {t:'line', pts:[x,y,…], w},
 //            x, y, a, v:[vx,vy], w, m: 'wood', fixed, tag, lock }
-//   joint: { t:'pin'|'spring'|'rod'|'weld', a, b (body index, −1 = background), la:[x,y], lb:[x,y],
+//   joint: { t:'pin'|'spring'|'rod'|'rope'|'weld', a, b (body index, −1 = background), la:[x,y], lb:[x,y],
 //            ref, motor:{s,t}, lim:[lo,hi], len, hz, z }
+//   water: [x, y, vx, vy, …] for every water particle
 
 import { World, STATIC } from './world.js';
 import { circle, box, polygon, convexHull } from './shapes.js';
@@ -151,6 +152,7 @@ export function addJointBetween(world, spec, bodyA, bodyB) {
 export function loadScene(world, scene) {
   const bodies = scene.bodies.map(s => addBody(world, s));
   const joints = (scene.joints || []).map(s => addJoint(world, s, bodies)).filter(Boolean);
+  if (Array.isArray(scene.water)) world.fluid.load(scene.water);
   return { bodies, joints };
 }
 
@@ -214,5 +216,7 @@ export function saveScene(world, extra = {}) {
     const s = jointSpec(j, index);
     if (s) joints.push(s);
   }
-  return { v: SCENE_VERSION, g: [world.gravity.x, world.gravity.y], bodies: world.bodies.map(bodySpec), joints, ...extra };
+  const scene = { v: SCENE_VERSION, g: [world.gravity.x, world.gravity.y], bodies: world.bodies.map(bodySpec), joints, ...extra };
+  if (world.fluid && world.fluid.n) scene.water = world.fluid.serialize();
+  return scene;
 }

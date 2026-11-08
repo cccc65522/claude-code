@@ -261,4 +261,52 @@ export const DEMOS = [
   }
 ];
 
+// A wheel with six paddles (one concave outline, cut into convex pieces by the engine).
+function paddleWheel(b, cx, cy, L, t, opt) {
+  const pts = [];
+  for (let k = 0; k < 6; k++) {
+    const a = k * Math.PI / 3, c = Math.cos(a), s = Math.sin(a);
+    pts.push([cx + L * c + t * s, cy + L * s - t * c], [cx + L * c - t * s, cy + L * s + t * c]);
+    const m = a + Math.PI / 6;
+    pts.push([cx + 2 * t * Math.cos(m), cy + 2 * t * Math.sin(m)]);
+  }
+  return b.poly(pts, opt);
+}
+
+DEMOS.push(
+  {
+    id: 'dam',
+    name: '决堤',
+    desc: '一大块水突然放开，冲向下游的木头小屋。木头会浮起来，石头沉底。',
+    view: { x: 0, y: 3.5, w: 21, h: 9 },
+    build() {
+      const b = new SceneBuilder();
+      b.line([[-9.6, 7], [-9.6, 0], [9.6, 0], [9.6, 4]], 0.4, { fixed: true });
+      b.water(-9.4, 0.2, -5.6, 4.8);
+      for (let r = 0; r < 3; r++) for (let i = 0; i < 3 - r; i++) b.box(3 + i * 0.85 + r * 0.42, 0.62 + r * 0.82, 0.8, 0.8, { m: 'wood', col: RAINBOW[(r + i) % 8], sleep: true });
+      b.box(6.8, 0.75, 0.9, 1.1, { m: 'stone', sleep: true });
+      b.poly([[-1.6, 0.2], [0.6, 0.2], [1, 0.75], [-2, 0.75]], { m: 'wood', col: '#c86fd0', sleep: true });
+      b.ball(-3.5, 0.6, 0.4, { m: 'rubber', sleep: true });
+      return b.scene();
+    }
+  },
+  {
+    id: 'waterwheel',
+    name: '水车',
+    desc: '水从上面的水箱流下来，冲着水车转。水车的轴是一个能自由转动的钉子。',
+    view: { x: 0, y: 5.5, w: 16, h: 12 },
+    build() {
+      const b = new SceneBuilder();
+      b.line([[-5.2, 12], [-5.2, 8.6], [0.7, 7.4]], 0.24, { fixed: true });
+      b.line([[1.7, 7.4], [1.7, 12]], 0.24, { fixed: true });
+      b.water(-5, 8.8, 1.55, 11.2);
+      const wheel = paddleWheel(b, 0, 4, 2.4, 0.13, { m: 'wood', col: '#c98a4b', grp: -3 }); // same group as the axle: they don't collide
+      b.pin(-1, wheel, 0, 4);
+      b.ball(0, 4, 0.12, { m: 'metal', fixed: true, col: '#5b6778', grp: -3 });
+      b.line([[-6.5, 1.8], [-6.5, 0], [6.5, 0], [6.5, 1.8]], 0.3, { fixed: true });
+      return b.scene();
+    }
+  }
+);
+
 export const demo = id => DEMOS.find(d => d.id === id);

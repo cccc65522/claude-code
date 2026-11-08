@@ -10,6 +10,7 @@ const P = {
   weld: '<rect x="4" y="4" width="9" height="9" rx="1"/><rect x="11" y="11" width="9" height="9" rx="1"/><path d="M11 11l2 2"/>',
   spring: '<path d="M4 12h2l2-5 3 10 3-10 3 10 2-5h1"/>',
   rope: '<path d="M4 6c4 0 4 4 8 4s4 4 8 4"/><circle cx="4" cy="6" r="1.5"/><circle cx="20" cy="14" r="1.5"/>',
+  water: '<path d="M12 3c3 4.5 6 7.8 6 11a6 6 0 0 1-12 0c0-3.2 3-6.5 6-11z"/><path d="M9 15a3 3 0 0 0 3 3"/>',
   eraser: '<path d="M8 20h12"/><path d="M5 15l9-9a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3l-8 8H8z"/><path d="M9 11l5 5"/>',
   bomb: '<circle cx="11" cy="14" r="6"/><path d="M15 9l2-2"/><path d="M18 3l.5 2M21 6l-2 .5M20 3l-1.5 1.5"/>',
   play: '<path d="M8 5l11 7-11 7z" fill="currentColor"/>',

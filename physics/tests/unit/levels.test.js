@@ -9,7 +9,8 @@ const TOOL_FOR = { pins: 'pin', motors: 'motor', ropes: 'rope', springs: 'spring
 
 const shift = (user, dx, dy) => ({
   bodies: user.bodies.map(b => ({ ...b, x: Math.round((b.x + dx) * 1e4) / 1e4, y: Math.round((b.y + dy) * 1e4) / 1e4 })),
-  joints: user.joints.map(j => (j.a === -1 ? { ...j, la: [j.la[0] + dx, j.la[1] + dy] } : j))
+  joints: user.joints.map(j => (j.a === -1 ? { ...j, la: [j.la[0] + dx, j.la[1] + dy] } : j)),
+  water: user.water && user.water.map((v, i) => (i % 4 === 0 ? v + dx : i % 4 === 1 ? v + dy : v))
 });
 
 for (const level of allLevels()) {
@@ -32,13 +33,18 @@ for (const level of allLevels()) {
   test(`level “${level.name}”: the solution plays by the level's rules`, () => {
     const sol = level.solution();
     const world = buildWorld(levelScene(level, sol));
-    const u = usage(world);
+    const u = usage(world, level);
     assert.ok(u.shapes <= (level.limits.shapes ?? 0), `${u.shapes} shapes`);
     for (const [k, tool] of Object.entries(TOOL_FOR)) {
       if (u[k]) {
         assert.ok(level.tools.includes(tool), `uses ${tool}, not offered`);
         assert.ok(u[k] <= (level.limits[k] ?? 0), `${u[k]} ${k}`);
       }
+    }
+    if (sol.water) {
+      assert.ok(level.tools.includes('water'), 'uses water, not offered');
+      assert.ok(u.water <= level.limits.water, `${u.water} drops of water`);
+      for (let k = 0; k < sol.water.length; k += 4) assert.equal(world.bodiesAt(sol.water[k], sol.water[k + 1]).length, 0, 'a drop inside a body');
     }
     for (const b of world.bodies) {
       if (b.locked || b.tag === 'link') continue;
@@ -85,4 +91,11 @@ test('demo scenes build, stay finite for 10 s, and run in real time', () => {
     assert.ok(ms < 8, `${d.id}: ${ms.toFixed(2)} ms per step`);
     for (const b of world.bodies) assert.ok(Number.isFinite(b.x + b.y + b.angle + b.vx + b.vy + b.w), `${d.id}: NaN`);
   }
+});
+
+test('level “水桶”: pouring the water without plugging the hole is not enough', () => {
+  const lvl = allLevels().find(l => l.id === 'bucket');
+  const sol = lvl.solution();
+  assert.equal(runLevel(lvl, { bodies: [], joints: [], water: sol.water }).result, 'lost');
+  assert.equal(runLevel(lvl, { bodies: sol.bodies, joints: [] }).result, 'lost');
 });

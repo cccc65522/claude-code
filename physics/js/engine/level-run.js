@@ -12,11 +12,14 @@ export const DT = 1 / 60;
 export function levelScene(level, user = { bodies: [], joints: [] }) {
   const base = level.scene.bodies.length;
   const ref = r => (typeof r === 'string' && r[0] === 'u' ? base + Number(r.slice(1)) : r);
-  return {
+  const scene = {
     ...level.scene,
     bodies: [...level.scene.bodies, ...user.bodies],
     joints: [...(level.scene.joints || []), ...(user.joints || []).map(j => ({ ...j, a: ref(j.a), b: ref(j.b) }))]
   };
+  const water = [...(level.scene.water || []), ...(user.water || [])];
+  if (water.length) scene.water = water;
+  return scene;
 }
 
 // The scene exactly as the app would save it (numbers rounded the same way), which is what a run starts from.
@@ -61,7 +64,7 @@ export class LevelRun {
     } else this.held = 0;
     if (!this.result && (this.ball.y < (this.level.floor ?? -15) || this.steps >= this.limit)) this.result = 'lost';
     // everything has come to rest outside the goal: nothing more will happen
-    if (!this.result && this.steps > 30 && this.held === 0 && this.world.stats.awake === 0) this.result = 'lost';
+    if (!this.result && this.steps > 30 && this.held === 0 && this.world.stats.awake === 0 && this.world.fluid.maxSpeed < 0.3) this.result = 'lost';
     return this.result;
   }
 
@@ -76,8 +79,9 @@ export function runLevel(level, user) {
 }
 
 // What the player has used so far (for the level's limits).
-export function usage(world) {
+export function usage(world, level = null) {
   const u = { shapes: 0, pins: 0, motors: 0, ropes: 0, springs: 0, welds: 0 };
+  u.water = world.fluid.n - (level?.scene.water ? level.scene.water.length / 4 : 0);
   for (const b of world.bodies) if (!b.locked && b.tag !== 'link') u.shapes++;
   for (const j of world.joints) {
     if (j.locked || !j.kind) continue;

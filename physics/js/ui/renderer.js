@@ -10,7 +10,7 @@ export function readTheme() {
   const v = n => cs.getPropertyValue(n).trim();
   return {
     bg: v('--stage-bg'), grid: v('--grid'), gridMajor: v('--grid-major'), ink: v('--ink'), muted: v('--muted'),
-    static: v('--static'), staticEdge: v('--static-edge'), accent: v('--accent'), goal: v('--goal'),
+    static: v('--static'), staticEdge: v('--static-edge'), accent: v('--accent'), goal: v('--goal'), water: v('--water'),
     nodraw: v('--nodraw'), joint: v('--joint'), jointFill: v('--joint-fill'), dark: document.documentElement.dataset.theme === 'dark' ||
       (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
   };
@@ -276,6 +276,26 @@ export class Renderer {
     }
   }
 
+  // Water: every drop as a disc, all in one path, filled once so overlaps merge into one body of water.
+  drawWater(f, view) {
+    if (!f || !f.n) return;
+    const ctx = this.ctx, cam = this.camera, s = cam.scale;
+    const R = Math.max(1.6, 0.85 * 0.13 * s), m = R / s;
+    const ox = cam.width / 2 - cam.x * s, oy = cam.height / 2 + cam.y * s;
+    ctx.beginPath();
+    for (let i = 0; i < f.n; i++) {
+      const x = f.x[i], y = f.y[i];
+      if (x < view.minX - m || x > view.maxX + m || y < view.minY - m || y > view.maxY + m) continue;
+      const sx = x * s + ox, sy = oy - y * s;
+      ctx.moveTo(sx + R, sy);
+      ctx.arc(sx, sy, R, 0, TAU);
+    }
+    ctx.fillStyle = this.theme.water;
+    ctx.globalAlpha = 0.72;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
   dot(p, r) {
     const ctx = this.ctx;
     ctx.fillStyle = this.theme.joint;
@@ -534,6 +554,7 @@ export class Renderer {
       this.drawBody(b, b.awake ? alpha : 1, selection && selection.body === b);
     }
     this.screenTransform();
+    this.drawWater(world.fluid, view);
     for (const j of world.joints) this.drawJoint(j, alpha, selection && selection.joint === j, time);
     if (this.debug) this.drawDebug(world);
     this.drawPreview(preview);

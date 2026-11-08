@@ -4,6 +4,7 @@ import { buildWorld, saveScene, addBody, addJointBetween, setMaterial } from './
 import { ropePieces } from './engine/build.js';
 import { MATERIALS, MATERIAL_KEYS, material } from './engine/materials.js';
 import { Recorder } from './engine/recorder.js';
+import { WATER } from './engine/fluid.js';
 import { DEMOS, demo } from './engine/demos.js';
 import { allLevels, level as getLevel } from './engine/levels.js';
 import { LevelRun, levelScene, usage, placementProblem } from './engine/level-run.js';
@@ -22,9 +23,12 @@ const MAX_HISTORY = 60;
 const BLANK = { v: 1, g: [0, -10], bodies: [{ shape: { t: 'box', w: 80, h: 1 }, x: 0, y: -0.5, a: 0, m: 'stone', fixed: true }], joints: [] };
 const SHAPE_NAMES = { circle: '圆', box: '方块', poly: '多边形', line: '线条' };
 const JOINT_NAMES = { pin: '钉子', spring: '弹簧', rod: '连杆', weld: '粘合', rope: '绳子' };
-const LIMIT_NAMES = { shapes: '形状', pins: '钉子', motors: '马达', ropes: '绳子', springs: '弹簧', welds: '粘合' };
-const TOOL_LIMIT = { pin: 'pins', motor: 'motors', rope: 'ropes', spring: 'springs', weld: 'welds' };
+const LIMIT_NAMES = { shapes: '形状', pins: '钉子', motors: '马达', ropes: '绳子', springs: '弹簧', welds: '粘合', water: '水' };
+const TOOL_LIMIT = { pin: 'pins', motor: 'motors', rope: 'ropes', spring: 'springs', weld: 'welds', water: 'water' };
 const params = new URLSearchParams(location.search);
+const TOOL_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
+// where new drops go around the pointer, in units of the drop spacing
+const POUR_PATTERN = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1], [2, 0], [-2, 0], [0, 2], [0, -2]];
 
 class App {
   constructor() {
@@ -219,6 +223,7 @@ class App {
 
   undo() {
     if (this.levelPhase === 'run') return;
+    if (this.levelMode && this.levelPhase !== 'edit') this.levelStop(); // showing a result: back to editing first
     if (!this.history.length) { toast('没有可以撤销的了'); return; }
     this.pause();
     this.future.push(this.snapshot());
@@ -229,6 +234,7 @@ class App {
 
   redo() {
     if (this.levelPhase === 'run') return;
+    if (this.levelMode && this.levelPhase !== 'edit') this.levelStop(); // showing a result: back to editing first
     if (!this.future.length) { toast('没有可以重做的了'); return; }
     this.pause();
     this.history.push(this.snapshot());
@@ -254,8 +260,36 @@ class App {
     if (this.levelPhase !== 'edit') return '先按「重来」回到摆放状态';
     const key = kind === 'shape' ? 'shapes' : TOOL_LIMIT[kind];
     const max = this.level.limits[key] ?? 0;
-    if (usage(this.world)[key] >= max) return max ? `这一关最多用 ${max} 个${LIMIT_NAMES[key]}` : `这一关不能用${LIMIT_NAMES[key]}`;
+    if (usage(this.world, this.level)[key] >= max) {
+      if (key === 'water') return max ? '这一关的水用完了' : '这一关不能倒水';
+      return max ? `这一关最多用 ${max} 个${LIMIT_NAMES[key]}` : `这一关不能用${LIMIT_NAMES[key]}`;
+    }
     return null;
+  }
+
+  // Add water around (x, y) where there is room (so holding still doesn't pile drops on top of each other).
+  // Returns how many drops were added.
+  pour(x, y, vx, vy, max = 4) {
+    const f = this.world.fluid, s = WATER.spacing;
+    let added = 0;
+    for (const [ox, oy] of POUR_PATTERN) {
+      if (added >= max || this.limitReached('water')) break;
+      const px = x + ox * s, py = y + oy * s;
+      if (f.occupied(px, py, s * 0.9)) continue;
+      if (this.world.bodiesAt(px, py).length) continue;
+      if (!f.add(px, py, vx, vy)) { if (!added) toast('水太多了，先擦掉一些'); break; }
+      added++;
+    }
+    if (added) this.invalidate();
+    return added;
+  }
+
+  eraseWater(x, y, r) {
+    if (this.levelMode && this.levelPhase !== 'edit') return 0;
+    if (this.levelMode && this.level.scene.water) return 0; // the level's own water stays
+    const n = this.world.fluid.removeInCircle(x, y, r);
+    if (n) this.invalidate();
+    return n;
   }
 
   addShape(spec) {
@@ -567,8 +601,10 @@ class App {
       if (n === 4) this.acc = Math.min(this.acc, STEP);
       this.needsRender = true;
       if (this.settings.debug) this.updateStats();
+      if (this.levelMode) this.updateChrome();
       if (this.recorder.length && (this.stepCounter = (this.stepCounter || 0) + 1) % 15 === 0) this.updateTimeline();
     }
+    if (this.input.active != null) this.tools[this.tool].tick?.(dt);
     const animating = this.renderer.effects.length || this.levelMode || this.world.joints.some(j => j.enableMotor);
     if (!this.needsRender && !animating) return;
     this.needsRender = false;
@@ -585,7 +621,7 @@ class App {
   updateStats() {
     const el = $('#stats');
     const w = this.world;
-    el.textContent = `物体 ${w.bodies.length}  醒着 ${w.stats.awake}\n接触 ${w.stats.contacts}  关节 ${w.joints.length}\n每步 ${w.stats.ms.toFixed(2)} 毫秒  树高 ${w.tree.height()}`;
+    el.textContent = `物体 ${w.bodies.length}  醒着 ${w.stats.awake}  水 ${w.fluid.n}\n接触 ${w.stats.contacts}  关节 ${w.joints.length}\n每步 ${w.stats.ms.toFixed(2)} 毫秒  树高 ${w.tree.height()}`;
   }
 
   // ---------- rewind ----------
@@ -694,7 +730,7 @@ class App {
     this.levelPhase = result;
     this.updateChrome();
     if (result === 'won') {
-      const used = usage(buildWorld(this.levelEditScene)).shapes;
+      const used = usage(buildWorld(this.levelEditScene), this.level).shapes;
       const prev = this.progress[this.level.id];
       if (!prev || !prev.done || used < prev.shapes) this.progress[this.level.id] = { done: true, shapes: used };
       store.save('progress', this.progress);
@@ -800,10 +836,10 @@ class App {
     $('[data-cmd="slow"]').setAttribute('aria-pressed', String(this.slow));
     for (const b of document.querySelectorAll('[data-cmd="step"], [data-cmd="slow"]')) b.disabled = this.levelMode;
     if (this.levelMode) {
-      const lvl = this.level, u = usage(this.world);
+      const lvl = this.level, u = usage(this.world, lvl);
       $('#hud-name').textContent = `第 ${allLevels().indexOf(lvl) + 1} 关 · ${lvl.name}`;
       $('#hud-hint').textContent = lvl.hint;
-      $('#hud-usage').textContent = Object.entries(lvl.limits).map(([k, max]) => `${LIMIT_NAMES[k]} ${Math.min(u[k], max)}/${max}`).join(' · ');
+      $('#hud-usage').textContent = Object.entries(lvl.limits).map(([k, max]) => k === 'water' ? `水 ${Math.round(100 * Math.min(u[k], max) / max)}%` : `${LIMIT_NAMES[k]} ${Math.min(u[k], max)}/${max}`).join(' · ');
     }
     $('#stats').hidden = !this.settings.debug;
     if (this.settings.debug) this.updateStats();
@@ -968,11 +1004,11 @@ class App {
       else if ((k === 'q' || k === 'e') && this.selection?.body) {
         const btn = document.querySelectorAll('#inspector [data-icon="rotl"], #inspector [data-icon="rotr"]')[k === 'q' ? 0 : 1];
         btn?.click();
-      } else if (/^[0-9]$/.test(k)) {
+      } else if (TOOL_KEYS.includes(k)) {
         const bar = document.querySelectorAll('.tool');
-        const idx = k === '0' ? 9 : Number(k) - 1;
-        if (bar[idx]) this.setTool(bar[idx].dataset.tool);
-      } else if (k === '-' && document.querySelectorAll('.tool')[10]) this.setTool(document.querySelectorAll('.tool')[10].dataset.tool);
+        const b = bar[TOOL_KEYS.indexOf(k)];
+        if (b) this.setTool(b.dataset.tool);
+      }
     });
   }
 

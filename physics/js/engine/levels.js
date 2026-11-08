@@ -8,6 +8,7 @@
 // tools: which tools are available. limits: {shapes, pins, motors, ropes, springs, welds}.
 
 import { SceneBuilder, ropePieces, localOf } from './build.js';
+import { waterBlock } from './fluid.js';
 
 const BALL = { m: 'wood', col: '#e5484d', tag: 'ball', lock: true };
 const L = { lock: true };
@@ -276,6 +277,59 @@ export const LEVELS = [
     }
   }
 ];
+
+// The bucket seesaw (level 10), built level and then tipped so its right end rests on the ground.
+const PIVOT = { x: 0, y: 1.32 };
+const WEIGHT_W = 2.6;
+const WATER_H = 2.2;
+const TILT = -Math.asin((PIVOT.y - 0.12) / 4);
+function tipped(x, y) {
+  const c = Math.cos(TILT), s = Math.sin(TILT), dx = x - PIVOT.x, dy = y - PIVOT.y;
+  return [PIVOT.x + c * dx - s * dy, PIVOT.y + s * dx + c * dy];
+}
+
+LEVELS.push({
+  id: 'bucket',
+  name: '水桶',
+  hint: '往左边的桶里倒水，水够重，跷跷板就会把右边的小球抬进星星框。可桶的左壁底下有道缝，水会漏光——先把它挡住。',
+  tools: ['box', 'draw', 'water'],
+  limits: { shapes: 1, water: 250 },
+  time: 20,
+  view: { x: -0.5, y: 2.8, w: 15, h: 8 },
+  goal: { x: 3.4, y: 2.5, w: 1.8, h: 1.4 },
+  noDraw: [{ x: 1, y: 2.4, w: 9, h: 4.8 }],
+  build() {
+    const b = new SceneBuilder();
+    b.box(0, -0.5, 30, 1, S);
+    b.poly([[-0.5, 0], [0.5, 0], [0, 1.15]], S);
+    const at = (x, y) => tipped(x, y);
+    const line = (pts, opt) => b.line(pts.map(p => at(...p)), 0.16, { ...L, ...opt });
+    // the plank runs on past the pivot's left side to be the bucket's floor
+    const plank = b.box(...at(-1, 1.32), 10, 0.24, { ...L, m: 'wood', a: TILT });
+    // the pivot only lets the plank turn from resting on its right end to a little past level
+    b.pin(-1, plank, ...at(0, 1.32), { lim: [-0.05, Math.round((0.15 - TILT) * 1e4) / 1e4] });
+    // the bucket: a right wall, and a left wall that stops short of the floor — that gap is the leak
+    const right = line([[-4.05, 1.44], [-4.05, 3.3]], { m: 'wood' });
+    const left = line([[-5.9, 2.2], [-5.9, 3.3]], { m: 'wood' });
+    b.weld(plank, right, ...at(-4.05, 1.44));
+    b.weld(plank, left, ...at(-5.9, 2.2));
+    // the cradle with the ball, and a metal counterweight
+    const cradle = line([[3.05, 2.45], [3.05, 1.52], [3.95, 1.52], [3.95, 2.45]], { m: 'wood' });
+    b.weld(plank, cradle, ...at(3.5, 1.44));
+    const weight = b.box(...at(1.7, 1.84), WEIGHT_W, 0.8, { ...L, m: 'metal', a: TILT });
+    b.weld(plank, weight, ...at(1.7, 1.44));
+    b.ball(...at(3.5, 1.9), 0.3, BALL);
+    return b.scene();
+  },
+  solution() {
+    const u = user();
+    // a block against the gap, taller than it: the water presses it onto the opening
+    const [px, py] = tipped(-5.55, 2.06);
+    u.box(px, py, 0.5, 1.2, { m: 'wood', a: Math.round(TILT * 1e4) / 1e4 });
+    const [wx, wy] = tipped(-5, 3.6);
+    return { bodies: u.bodies, joints: [], water: waterBlock(wx - 0.85, wy - 0.5, wx + 0.85, wy + WATER_H) };
+  }
+});
 
 function prepare(l) {
   if (!l.scene) {

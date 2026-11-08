@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { allLevels } from '../../js/engine/levels.js';
 import { trackErrors, expectNoProblems, open, setView, touch, path, bodyCount, lastBody } from './helpers.js';
 
 test.beforeEach(({}, info) => {
@@ -72,5 +73,5 @@ test('the menu and dialogs fit on the phone', async ({ page }) => {
   const dlg = await page.locator('.dialog').boundingBox();
   const vw = await page.evaluate(() => innerWidth);
   expect(dlg.width).toBeLessThanOrEqual(vw);
-  await expect(page.locator('.card')).toHaveCount(9);
+  await expect(page.locator('.card')).toHaveCount(allLevels().length);
 });
