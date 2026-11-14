@@ -463,3 +463,63 @@ test('RAM: writes on the clock edge when WE=1, reads combinationally, keeps cont
   sim2.reset();
   assert.deepEqual([...sim2.memory('m')!], [0, 0, 0, 0, 0, 0, 0, 0]);
 });
+
+test('scale: a 5000-gate chain settles (not mistaken for oscillation), a 64-bit adder of chips adds', async () => {
+  const chain = projectWith((b) => {
+    b.add('in', 0, 0, { id: 'src' });
+    let prev = 'src';
+    for (let i = 0; i < 5000; i++) {
+      const id = b.add(i % 2 ? 'not' : 'buf', 4 + i * 4, 0);
+      b.wire(prev, `${id}.i0`);
+      prev = id;
+    }
+    b.add('led', 4 + 5000 * 4, 0, { id: 'end' });
+    b.wire(prev, 'end.i');
+  });
+  const t0 = performance.now();
+  const sim = new Simulator(compile(chain));
+  assert.equal(sim.settle().stable, true);
+  sim.setInput('src', 1);
+  const res = sim.settle();
+  assert.equal(res.stable, true);
+  assert.equal(res.deltas, 5002, 'the switch, 5000 gates, then the lamp');
+  assert.equal(sim.pinValue('end', 'i'), 1, '2500 inverters: even count');
+  assert.ok(performance.now() - t0 < 2000, 'fast enough');
+
+  const { fullAdderChip } = await import('../../src/engine/examples.ts');
+  const fa = fullAdderChip();
+  const N = 64;
+  const p = projectWith((b) => {
+    b.add('const', 0, 0, { id: 'zero', value: 0 });
+    for (let i = 0; i < N; i++) {
+      b.add('in', 0, 10 + i * 10, { id: `A${i}` });
+      b.add('in', 0, 14 + i * 10, { id: `B${i}` });
+      b.add('chip', 10, 10 + i * 10, { id: `F${i}`, chip: 'fa' });
+      b.add('led', 30, 10 + i * 10, { id: `S${i}` });
+      b.wire(`A${i}`, `F${i}.A`).wire(`B${i}`, `F${i}.B`).wire(`F${i}.S`, `S${i}.i`);
+      b.wire(i ? `F${i - 1}.Co` : 'zero', `F${i}.Ci`);
+    }
+  }, [fa]);
+  const nl = compile(p);
+  assert.equal(nl.comps.filter((c) => c.kind === 'xor').length, 2 * N);
+  const big = new Simulator(nl);
+  big.settle();
+  const rand = (() => {
+    let s = 12345;
+    return () => (s = (s * 1103515245 + 12345) >>> 0);
+  })();
+  const t1 = performance.now();
+  for (let trial = 0; trial < 40; trial++) {
+    const a = (BigInt(rand()) << 32n) | BigInt(rand());
+    const c = (BigInt(rand()) << 32n) | BigInt(rand());
+    for (let i = 0; i < N; i++) {
+      big.setInput(`A${i}`, Number((a >> BigInt(i)) & 1n) as 0 | 1);
+      big.setInput(`B${i}`, Number((c >> BigInt(i)) & 1n) as 0 | 1);
+    }
+    assert.equal(big.settle().stable, true);
+    let sum = 0n;
+    for (let i = 0; i < N; i++) sum |= BigInt(big.pinValue(`S${i}`, 'i')) << BigInt(i);
+    assert.equal(sum, (a + c) & ((1n << 64n) - 1n));
+  }
+  assert.ok(performance.now() - t1 < 2000);
+});

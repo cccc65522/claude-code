@@ -41,11 +41,24 @@ export function bendAxis(p0: Pt, s0: Side, p1: Pt, s1: Side): 'x' | 'y' | null {
  * the result may contain half-grid coordinates at the middle bend. `bend` moves the
  * middle segment (see bendAxis).
  */
+/**
+ * Length of the stub a wire runs straight out of a pin before turning back. It varies
+ * with the pin's position across the stub (row for east/west pins), so several wires
+ * turning back next to a column of pins don't stack onto one vertical line, while
+ * branches of the same pin still share it.
+ */
+function stubLength(p: Pt, side: Side): number {
+  const across = horizontal(side) ? p[1] : p[0];
+  return 1 + ((((Math.floor(across) >> 1) % 3) + 3) % 3) * 0.5;
+}
+
 export function route(p0: Pt, s0: Side, p1: Pt, s1: Side, bend?: number): Pt[] {
   const [dx0, dy0] = sideVector(s0);
   const [dx1, dy1] = sideVector(s1);
-  const a: Pt = [p0[0] + dx0, p0[1] + dy0];
-  const b: Pt = [p1[0] + dx1, p1[1] + dy1];
+  const l0 = stubLength(p0, s0);
+  const l1 = stubLength(p1, s1);
+  const a: Pt = [p0[0] + dx0 * l0, p0[1] + dy0 * l0];
+  const b: Pt = [p1[0] + dx1 * l1, p1[1] + dy1 * l1];
   if (horizontal(s0) && horizontal(s1)) {
     // Forward when the source faces the target and the target faces back.
     const forward = dx0 * (p1[0] - p0[0]) > 0 && dx1 * (p0[0] - p1[0]) > 0;

@@ -40,3 +40,15 @@ test('distance to a polyline', () => {
   assert.equal(distToPolyline(12, 5, pts), 2);
   assert.equal(distToPolyline(10, 0, pts), 0);
 });
+
+test('wires turning back into a column of pins use separate vertical runs', () => {
+  // Three feedback wires from the right into pins at rows 1, 3, 5 of the same column.
+  const runs = [1, 3, 5].map((y, i) => route([20, y + 8], 'E', [0, y], 'W', -2 - i));
+  const targetVerticals = runs.map((pts) => pts[pts.length - 3][0]);
+  assert.equal(new Set(targetVerticals).size, 3, `distinct x: ${targetVerticals}`);
+  runs.forEach((pts) => assert.ok(orthogonal(pts)));
+  // Branches leaving the same pin still share their first run.
+  const b1 = route([10, 4], 'E', [0, 0], 'W');
+  const b2 = route([10, 4], 'E', [0, 20], 'W');
+  assert.deepEqual(b1[1], b2[1]);
+});

@@ -45,6 +45,12 @@ export class Simulator {
   /** Delta steps taken since the simulator was created (for statistics). */
   totalDeltas = 0;
 
+  /**
+   * Delta steps allowed before a settle counts as oscillation. Proportional to the
+   * circuit size so that a long (but finite) chain of gates is never mistaken for one.
+   */
+  readonly settleLimit: number;
+
   private queued: Uint8Array;
   private queue: number[] = [];
 
@@ -57,6 +63,7 @@ export class Simulator {
     this.prevClk = new Uint8Array(nc).fill(VX);
     this.cnt = new Int32Array(nc);
     this.queued = new Uint8Array(nc);
+    this.settleLimit = Math.max(DEFAULT_SETTLE_LIMIT, 2 * nc + 16);
 
     nl.comps.forEach((c, i) => {
       if (c.kind === 'in') this.q[i] = c.part.value === 1 ? 1 : 0;
@@ -195,7 +202,7 @@ export class Simulator {
   }
 
   /** Run delta steps until the circuit is stable or the limit is reached. */
-  settle(limit = DEFAULT_SETTLE_LIMIT): SettleResult {
+  settle(limit = this.settleLimit): SettleResult {
     let deltas = 0;
     this.unstableNets.clear();
     this.oscillating = false;
@@ -228,7 +235,7 @@ export class Simulator {
   }
 
   /** One clock tick followed by settling. */
-  tick(limit = DEFAULT_SETTLE_LIMIT): SettleResult {
+  tick(limit = this.settleLimit): SettleResult {
     this.advanceClocks();
     return this.settle(limit);
   }
