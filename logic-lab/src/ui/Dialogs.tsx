@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { EXAMPLES } from '../engine/examples.ts';
-import { ExprError, parseEquations, synthesize, variables } from '../engine/expr.ts';
+import { checkNames, ExprError, parseEquations, synthesize, tableToEquations, variables, type Cell, type Equation } from '../engine/expr.ts';
 import { createChip, insertCircuit, loadProject, store, toast, useEditor } from '../store/store.ts';
 
 export function Modal({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
@@ -56,23 +56,129 @@ const SAMPLE = `# 每行一个输出，例如一位全加器：
 S = A ^ B ^ Cin
 Cout = A & B | Cin & (A ^ B)`;
 
+type Parsed = { ok: true; eqs: Equation[]; vars: string[] } | { ok: false; error: string };
+
+function parseSource(src: string): Parsed {
+  try {
+    const eqs = parseEquations(src);
+    return { ok: true, eqs, vars: variables(eqs) };
+  } catch (e) {
+    if (e instanceof ExprError) return { ok: false, error: `第 ${e.line} 行第 ${e.col} 列：${e.message}` };
+    return { ok: false, error: String(e) };
+  }
+}
+
+const splitNames = (s: string) =>
+  s
+    .split(/[\s,，、;；]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+/** Truth table editor: click output cells to cycle 0 → 1 → × (don't care). */
+function TableDesigner({ onChange }: { onChange: (src: string | null, inputs: string[], error: string | null) => void }) {
+  const [inNames, setInNames] = useState('A B C');
+  const [outNames, setOutNames] = useState('Y');
+  const [cells, setCells] = useState<Record<string, Cell[]>>({});
+  const inputs = splitNames(inNames);
+  const outputs = splitNames(outNames);
+  const n = inputs.length;
+  const nameError = n > 6 ? '最多 6 个输入' : outputs.length > 8 ? '最多 8 个输出' : checkNames(inputs, outputs);
+  const rows = nameError ? 0 : 1 << n;
+  const valuesOf = (name: string): Cell[] => {
+    const v = cells[name] ?? [];
+    return Array.from({ length: rows }, (_, r) => v[r] ?? 0);
+  };
+  const src = nameError ? null : tableToEquations(inputs, outputs.map((name) => ({ name, values: valuesOf(name) })));
+  // `inputs` is rebuilt every render; the text it comes from is the real dependency.
+  useEffect(() => onChange(src, inputs, nameError), [src, nameError, inNames]);
+  const cycle = (name: string, r: number) => {
+    const v = valuesOf(name);
+    v[r] = v[r] === 0 ? 1 : v[r] === 1 ? 'x' : 0;
+    setCells({ ...cells, [name]: v });
+  };
+  const fill = (name: string, value: Cell) => setCells({ ...cells, [name]: Array.from({ length: rows }, () => value) });
+  return (
+    <div className="designer">
+      <div className="row">
+        <label className="field grow">
+          <span>输入（空格分隔，最多 6 个）</span>
+          <input value={inNames} onChange={(e) => setInNames(e.target.value)} data-testid="tt-inputs" />
+        </label>
+        <label className="field grow">
+          <span>输出</span>
+          <input value={outNames} onChange={(e) => setOutNames(e.target.value)} data-testid="tt-outputs" />
+        </label>
+      </div>
+      {nameError ? (
+        <p className="tip warn" role="alert">
+          {nameError}
+        </p>
+      ) : (
+        <div className="table-scroll designer-table">
+          <table className="tt">
+            <thead>
+              <tr>
+                {inputs.map((v) => (
+                  <th key={v}>{v}</th>
+                ))}
+                <th className="sep" />
+                {outputs.map((o) => (
+                  <th key={o} className="out">
+                    {o}
+                    <span className="fill">
+                      <button onClick={() => fill(o, 0)} title="全部填 0">0</button>
+                      <button onClick={() => fill(o, 1)} title="全部填 1">1</button>
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: rows }, (_, r) => (
+                <tr key={r}>
+                  {inputs.map((v, i) => (
+                    <td key={v} className="in">
+                      {(r >> (n - 1 - i)) & 1}
+                    </td>
+                  ))}
+                  <td className="sep" />
+                  {outputs.map((o) => {
+                    const v = valuesOf(o)[r];
+                    return (
+                      <td key={o} className={v === 1 ? 'v1' : v === 'x' ? 'vx' : ''}>
+                        <button className="cell" onClick={() => cycle(o, r)} data-cell={`${o}:${r}`}>
+                          {v === 'x' ? '×' : v}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="tip">点输出格在 0、1、×（无关项，化简时随意取）之间切换。</p>
+      {src && <pre className="code preview" data-testid="tt-equations">{src}</pre>}
+    </div>
+  );
+}
+
 export function ExprDialog() {
   const workspace = useEditor((s) => s.workspace);
+  const [mode, setMode] = useState<'expr' | 'table'>('expr');
   const [src, setSrc] = useState(SAMPLE);
+  const [table, setTable] = useState<{ src: string | null; inputs: string[]; error: string | null }>({ src: null, inputs: [], error: null });
   const [fan, setFan] = useState(4);
-  const parsed = useMemo(() => {
-    try {
-      const eqs = parseEquations(src);
-      return { ok: true as const, eqs, vars: variables(eqs) };
-    } catch (e) {
-      if (e instanceof ExprError) return { ok: false as const, error: `第 ${e.line} 行第 ${e.col} 列：${e.message}` };
-      return { ok: false as const, error: String(e) };
-    }
-  }, [src]);
+  const parsed = useMemo<Parsed>(() => {
+    if (mode === 'expr') return parseSource(src);
+    if (!table.src) return { ok: false, error: table.error ?? '' };
+    return parseSource(table.src);
+  }, [mode, src, table]);
   const disabled = workspace.mode === 'level';
   const make = (asChip: boolean) => {
     if (!parsed.ok) return;
-    const { circuit, gateCount } = synthesize(parsed.eqs, { maxFanIn: fan });
+    const { circuit, gateCount } = synthesize(parsed.eqs, { maxFanIn: fan, inputOrder: mode === 'table' ? table.inputs : undefined });
     if (asChip) {
       const name = parsed.eqs.map((e) => e.name).join('、').slice(0, 20);
       createChip(circuit, name, false);
@@ -84,20 +190,34 @@ export function ExprDialog() {
     close();
   };
   return (
-    <Modal title="由表达式生成电路" onClose={close} wide>
-      <p className="tip">
-        运算符：与 <code>&amp; * ·</code>，或 <code>| +</code>，异或 <code>^ ⊕</code>，非 <code>! ~ ¬</code> 或后缀 <code>A'</code>。优先级：非 &gt; 与 &gt; 异或 &gt; 或。
-        相同的子表达式只生成一次。
-      </p>
-      <textarea className="code" value={src} onChange={(e) => setSrc(e.target.value)} rows={7} spellCheck={false} aria-label="表达式" data-testid="expr-input" />
-      {parsed.ok ? (
-        <p className="tip ok">
-          输入：{parsed.vars.join('、') || '（无）'}；输出：{parsed.eqs.map((e) => e.name).join('、')}
-        </p>
+    <Modal title="自动生成电路" onClose={close} wide>
+      <div className="seg mode-tabs" role="tablist">
+        <button role="tab" aria-selected={mode === 'expr'} className={mode === 'expr' ? 'on' : ''} onClick={() => setMode('expr')}>
+          写表达式
+        </button>
+        <button role="tab" aria-selected={mode === 'table'} className={mode === 'table' ? 'on' : ''} onClick={() => setMode('table')} data-testid="mode-table">
+          填真值表
+        </button>
+      </div>
+      {mode === 'expr' ? (
+        <>
+          <p className="tip">
+            运算符：与 <code>&amp; * ·</code>，或 <code>| +</code>，异或 <code>^ ⊕</code>，非 <code>! ~ ¬</code> 或后缀 <code>A'</code>。优先级：非 &gt; 与 &gt; 异或 &gt; 或。
+            相同的子表达式只生成一次。
+          </p>
+          <textarea className="code" value={src} onChange={(e) => setSrc(e.target.value)} rows={7} spellCheck={false} aria-label="表达式" data-testid="expr-input" />
+          {parsed.ok ? (
+            <p className="tip ok">
+              输入：{parsed.vars.join('、') || '（无）'}；输出：{parsed.eqs.map((e) => e.name).join('、')}
+            </p>
+          ) : (
+            <p className="tip warn" role="alert">
+              {parsed.error}
+            </p>
+          )}
+        </>
       ) : (
-        <p className="tip warn" role="alert">
-          {parsed.error}
-        </p>
+        <TableDesigner onChange={(s, inputs, error) => setTable({ src: s, inputs, error })} />
       )}
       <label className="field inline">
         <span>每个门最多输入</span>
@@ -109,7 +229,7 @@ export function ExprDialog() {
           ))}
         </select>
       </label>
-      {disabled && <p className="tip warn">闯关模式下不能用表达式自动生成。</p>}
+      {disabled && <p className="tip warn">闯关模式下不能自动生成。</p>}
       <div className="row end">
         <button className="btn" disabled={!parsed.ok || disabled} onClick={() => make(true)}>
           生成为芯片

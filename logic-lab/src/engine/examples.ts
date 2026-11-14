@@ -158,6 +158,45 @@ function decimalCounter(): Project {
   return p;
 }
 
+/** Next-state and output logic of the traffic light, generated from equations. */
+export function trafficLogicChip(): Circuit {
+  const src = [
+    'D2 = Q2 ^ (Q1 & Q0)',
+    'D1 = Q1 ^ Q0',
+    'D0 = !Q0',
+    '绿 = !Q2',
+    '黄 = Q2 & !Q1 & !Q0',
+    '红 = Q2 & (Q1 | Q0)'
+  ].join('\n');
+  const { circuit } = synthesize(parseEquations(src), { inputOrder: ['Q2', 'Q1', 'Q0'], circuitId: 'traffic', circuitName: '交通灯逻辑', idPrefix: 't' });
+  circuit.parts.push({ id: 'note', kind: 'text', x: 0, y: -5, rot: 0, text: '状态 0–3 绿灯，4 黄灯，5–7 红灯；D 是下一个状态。由表达式自动生成。' });
+  return circuit;
+}
+
+function trafficLight(): Project {
+  const logic = trafficLogicChip();
+  const p = emptyProject();
+  p.chips = [logic];
+  const b = new CircuitBuilder('main', '交通灯', { project: p });
+  b.add('text', 0, -7, { text: '有限状态机：三个 D 触发器保存状态（0–7），芯片根据当前状态算出下一个状态和三盏灯。\n点“运行”：绿灯 4 拍 → 黄灯 1 拍 → 红灯 3 拍，循环。' });
+  const pin = (label: string, kind: 'in' | 'out') => logic.parts.find((x) => x.kind === kind && x.label === label)!.id;
+  b.add('chip', 14, 0, { id: 'L', chip: 'traffic' });
+  // Flip-flops staggered so their feedback wires don't share a vertical run.
+  ['2', '1', '0'].forEach((k, i) => b.add('dff', 32 + 3 * i, i * 8, { id: `F${k}` }));
+  b.add('clock', 22, 24, { id: 'clk', label: 'CLK', period: 2 });
+  for (const k of ['2', '1', '0']) b.wire('clk', `F${k}.c`);
+  b.wire(`L.${pin('D2', 'out')}`, 'F2.d');
+  b.wire(`L.${pin('D1', 'out')}`, 'F1.d', 29);
+  b.wire(`L.${pin('D0', 'out')}`, 'F0.d', 27);
+  ['2', '1', '0'].forEach((k, i) => b.wire(`F${k}.q`, `L.${pin(`Q${k}`, 'in')}`, -2 - i));
+  b.add('led', 52, 0, { id: 'red', label: '红', color: 'red' });
+  b.add('led', 52, 4, { id: 'amber', label: '黄', color: 'amber' });
+  b.add('led', 52, 8, { id: 'green', label: '绿', color: 'green' });
+  b.wire(`L.${pin('红', 'out')}`, 'red.i').wire(`L.${pin('黄', 'out')}`, 'amber.i').wire(`L.${pin('绿', 'out')}`, 'green.i');
+  p.main = b.build();
+  return p;
+}
+
 function tristateBus(): Project {
   const b = new CircuitBuilder('main', '三态总线');
   b.add('text', 0, -6, { text: '两个三态门共用一根总线。只打开一个使能端 EN 时，总线上是它的数据；\n都关上时总线悬空（Z，虚线）；都打开且数据不同时短路（E，红色）。' });
@@ -201,6 +240,7 @@ export const EXAMPLES: Example[] = [
   { id: 'sr-latch', title: 'SR 锁存器', desc: '交叉耦合的或非门，电路有了记忆', build: srLatch },
   { id: 'counter4', title: '4 位计数器', desc: 'T 触发器 + 时钟 + 十六进制显示 + 波形图', build: counter4 },
   { id: 'decimal', title: '十进制计数器', desc: '异步清零 + 自动生成的 BCD 七段译码器', build: decimalCounter },
+  { id: 'traffic', title: '交通灯状态机', desc: '三个 D 触发器 + 由表达式生成的状态转移逻辑', build: trafficLight },
   { id: 'tristate', title: '三态总线', desc: '高阻态 Z 与短路 E', build: tristateBus },
   { id: 'ring', title: '环形振荡器', desc: '没有稳定状态的电路，演示振荡检测', build: ringOscillator },
   { id: 'hazard', title: '竞争冒险', desc: '门延迟造成的毛刺，用“逐级传播”观察', build: hazard }

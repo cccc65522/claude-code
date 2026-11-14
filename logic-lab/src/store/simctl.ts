@@ -3,7 +3,7 @@
 // and records the waveform.
 import { useSyncExternalStore } from 'react';
 import { compile, findCircuit, type Netlist } from '../engine/compile.ts';
-import { KIND_NAME } from '../engine/parts.ts';
+import { KIND_NAME, partSpec } from '../engine/parts.ts';
 import { Simulator } from '../engine/sim.ts';
 import type { PartKind, Project } from '../engine/types.ts';
 import { VZ, type Val } from '../engine/values.ts';
@@ -11,8 +11,10 @@ import { VZ, type Val } from '../engine/values.ts';
 export interface WaveSignal {
   id: string;
   label: string;
-  kind: PartKind;
+  kind: PartKind | 'probe';
   pin: string;
+  /** Probe on a wire rather than a part. */
+  wire?: string;
 }
 
 export interface WaveSample {
@@ -42,6 +44,8 @@ class SimController {
   stepMode = false;
   version = 0;
   signals: WaveSignal[] = [];
+  /** Wires shown in the waveform, per circuit id. */
+  private probes = new Map<string, Set<string>>();
   samples: WaveSample[] = [];
   /** Delta steps run in the current tick (step mode). */
   private deltaInTick = 0;
@@ -100,11 +104,38 @@ class SimController {
       label: c.part.label?.trim() || KIND_NAME[c.kind],
       pin: SOURCE_KINDS.includes(c.kind) ? 'o' : 'i'
     }));
+    const circuit = this.project ? findCircuit(this.project, this.editing) : undefined;
+    const probes = this.probes.get(this.editing);
+    if (!circuit || !probes) return;
+    let k = 0;
+    for (const w of circuit.wires) {
+      if (!probes.has(w.id) || !this.nl.wireNet.has(w.id)) continue;
+      // Name the probe after the part driving the wire.
+      const ends = [w.a, w.b].map((r) => ({ r, part: circuit.parts.find((p) => p.id === r.part) }));
+      const project = this.project!;
+      const src = ends.find((e) => e.part && partSpec(e.part, project).pins.find((p) => p.name === e.r.pin)?.dir === 'out') ?? ends[0];
+      const name = src.part ? src.part.label?.trim() || KIND_NAME[src.part.kind] : '导线';
+      this.signals.push({ id: `probe:${w.id}`, kind: 'probe', label: `${name}·${++k}`, pin: '', wire: w.id });
+    }
+  }
+
+  isProbed(wireId: string): boolean {
+    return this.probes.get(this.editing)?.has(wireId) ?? false;
+  }
+
+  toggleProbe(wireId: string): void {
+    let set = this.probes.get(this.editing);
+    if (!set) this.probes.set(this.editing, (set = new Set()));
+    if (set.has(wireId)) set.delete(wireId);
+    else set.add(wireId);
+    this.refreshSignals();
+    this.sample();
+    this.notify();
   }
 
   private sample(): void {
     const v: Record<string, Val> = {};
-    for (const s of this.signals) v[s.id] = this.sim.pinValue(s.id, s.pin);
+    for (const s of this.signals) v[s.id] = s.wire ? this.wireValue(s.wire) : this.sim.pinValue(s.id, s.pin);
     const last = this.samples[this.samples.length - 1];
     if (last && last.t === this.sim.time && last.d === this.deltaInTick && this.signals.every((s) => last.v[s.id] === v[s.id])) return;
     this.samples.push({ t: this.sim.time, d: this.deltaInTick, v });

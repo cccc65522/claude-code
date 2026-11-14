@@ -14,6 +14,7 @@ import {
   loadProject,
   movePartsBy,
   newProject,
+  packageSelection,
   paste,
   redo,
   rotateSelection,
@@ -52,6 +53,16 @@ function useKeyboard() {
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       const s = store.get();
+      // Keys bound to inputs and buttons of the circuit being simulated.
+      if (!mod && !e.altKey && s.editing === MAIN_ID) {
+        const bound = currentCircuit(s).parts.filter((p) => p.key === key && (p.kind === 'in' || p.kind === 'button'));
+        if (bound.length) {
+          e.preventDefault();
+          if (e.repeat) return;
+          for (const p of bound) p.kind === 'in' ? simctl.toggleInput(p.id) : simctl.setButton(p.id, true);
+          return;
+        }
+      }
       if (mod && key === 'z' && !e.shiftKey) undo();
       else if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) redo();
       else if (mod && key === 'c') copySelection() && toast('已复制');
@@ -59,6 +70,7 @@ function useKeyboard() {
       else if (mod && key === 'v') paste();
       else if (mod && key === 'd') duplicateSelection();
       else if (mod && key === 'a') selectAll();
+      else if (mod && key === 'g') packageSelection();
       else if (mod) return;
       else if (key === 'delete' || key === 'backspace') deleteSelection();
       else if (key === 'r') rotateSelection(e.shiftKey ? -1 : 1);
@@ -72,8 +84,17 @@ function useKeyboard() {
       } else return;
       e.preventDefault();
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const s = store.get();
+      if (s.editing !== MAIN_ID) return;
+      for (const p of currentCircuit(s).parts) if (p.kind === 'button' && p.key === e.key.toLowerCase()) simctl.setButton(p.id, false);
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, []);
 }
 
@@ -175,7 +196,7 @@ function FileMenu() {
             打开示例…
           </button>
           <button role="menuitem" disabled={!free} onClick={run(() => store.set({ dialog: 'expr' }))}>
-            由表达式生成电路…
+            由表达式或真值表生成电路…
           </button>
           <hr />
           <button role="menuitem" disabled={!free} onClick={run(() => fileRef.current?.click())}>
@@ -240,7 +261,9 @@ function SimControls() {
       </select>
       <label className={`toggle ${simctl.stepMode ? 'on' : ''}`} title="一级一级地显示信号传播">
         <input type="checkbox" checked={simctl.stepMode} onChange={(e) => simctl.setStepMode(e.target.checked)} data-testid="step-mode" />
-        逐级<span className="lbl">传播</span>
+        <span>
+          逐级<span className="lbl">传播</span>
+        </span>
       </label>
       <button className="btn" onClick={() => simctl.reset()} title="复位：触发器清零、时钟归零" aria-label="复位">
         ⟲<span className="lbl"> 复位</span>

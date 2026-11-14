@@ -1440,3 +1440,73 @@ textarea.code {
     max-height: 30vh;
   }
 }
+
+/* generation dialog */
+.mode-tabs {
+  margin: 10px 0 6px;
+}
+.designer .row {
+  align-items: flex-start;
+}
+.designer .field.grow {
+  flex: 1;
+  min-width: 140px;
+  margin: 4px 0;
+}
+.designer-table {
+  max-height: 300px;
+}
+.designer-table .cell {
+  width: 100%;
+  min-width: 34px;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  padding: 2px 0;
+  border-radius: 4px;
+}
+.designer-table .cell:hover {
+  background: var(--accent-soft);
+}
+.designer-table td.v1 .cell {
+  color: var(--w1);
+  font-weight: 700;
+}
+.designer-table td.vx .cell {
+  color: var(--wx);
+}
+.designer-table .fill {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+}
+.designer-table .fill button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+pre.code.preview {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.key-badge rect {
+  fill: var(--panel-2);
+  stroke: var(--border);
+  stroke-width: 0.06;
+}
+.key-badge text {
+  font: 700 0.7px ui-monospace, Menlo, monospace;
+  text-anchor: middle;
+  fill: var(--dim);
+  pointer-events: none;
+}

@@ -6,6 +6,7 @@
 // Operators, loosest first:  OR: | + ∨ || or   XOR: ^ ⊕ xor   AND: & * · ∧ && and
 // NOT: prefix ! ~ ¬ not, or postfix '  (A' = NOT A). Constants 0 and 1.
 import { CircuitBuilder } from './builder.ts';
+import { minimize, sopToText } from './qm.ts';
 import { partSpec } from './parts.ts';
 import type { Circuit, GateKind, Part, Wire } from './types.ts';
 
@@ -478,3 +479,47 @@ export function boundsOf(parts: readonly Part[]): { x: number; y: number; w: num
 }
 
 export type { Wire };
+
+// ---------------------------------------------------------------------------
+// Truth table → equations
+
+export type Cell = 0 | 1 | 'x';
+
+const NAME_RE = /^[A-Za-z_一-鿿][A-Za-z0-9_一-鿿]*$/;
+const RESERVED = new Set(['and', 'or', 'xor', 'not']);
+
+/** Check a list of signal names; returns an error message or null. */
+export function checkNames(inputs: readonly string[], outputs: readonly string[]): string | null {
+  const all = [...inputs, ...outputs];
+  for (const n of all) {
+    if (!NAME_RE.test(n)) return `“${n}”不是合法的名字（字母、汉字、数字、下划线，不能以数字开头）`;
+    if (RESERVED.has(n.toLowerCase())) return `“${n}”是运算符，不能当名字`;
+  }
+  const seen = new Set<string>();
+  for (const n of all) {
+    if (seen.has(n)) return `名字“${n}”重复了`;
+    seen.add(n);
+  }
+  if (!inputs.length) return '至少要有一个输入';
+  if (!outputs.length) return '至少要有一个输出';
+  return null;
+}
+
+/**
+ * Minimal sum-of-products equations for a truth table. values[r] is the output for the
+ * row whose inputs spell r in binary (first input = most significant bit).
+ */
+export function tableToEquations(inputs: readonly string[], outputs: readonly { name: string; values: readonly Cell[] }[]): string {
+  const n = inputs.length;
+  return outputs
+    .map(({ name, values }) => {
+      const ones: number[] = [];
+      const dcs: number[] = [];
+      values.forEach((v, r) => {
+        if (v === 1) ones.push(r);
+        else if (v === 'x') dcs.push(r);
+      });
+      return `${name} = ${sopToText(minimize(n, ones, dcs), n, inputs)}`;
+    })
+    .join('\n');
+}

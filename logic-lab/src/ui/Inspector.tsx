@@ -10,12 +10,16 @@ import {
   currentCircuit,
   deleteSelection,
   enterCircuit,
+  packageSelection,
   renameCircuit,
+  setWireBend,
   rotateSelection,
   store,
+  toast,
   updatePart,
   useEditor
 } from '../store/store.ts';
+import { isBindableKey } from '../engine/serialize.ts';
 
 const LED_COLORS: [string, string][] = [
   ['red', '红'],
@@ -133,6 +137,21 @@ function PartProps({ part }: { part: Part }) {
         </p>
       )}
       {k === 'button' && <p className="tip">按住为 1，松开为 0。</p>}
+      {(k === 'in' || k === 'button') && store.get().editing === MAIN_ID && (
+        <label className="field">
+          <span>键盘按键（a–z、0–9，R 和 F 除外）</span>
+          <LazyInput
+            value={part.key ?? ''}
+            placeholder="例如 1"
+            onCommit={(v) => {
+              const key = v.trim().toLowerCase();
+              if (!key) updatePart(part.id, { key: undefined });
+              else if (isBindableKey(key)) updatePart(part.id, { key });
+              else toast('只能用一个字母或数字（R、F 是编辑器快捷键）', 'error');
+            }}
+          />
+        </label>
+      )}
       {(k === 'dff' || k === 'jkff' || k === 'tff') && <p className="tip">在时钟输入的上升沿（0→1）动作。底部的 R 是异步清零端，接 1 时 Q 立即变 0，可以不接。</p>}
       {k === 'tri' && <p className="tip">EN=1 时输出等于输入；EN=0 时输出高阻（Z），不影响导线上的其他信号。</p>}
       {k === 'mux' && <p className="tip">S=0 选输入 0，S=1 选输入 1。</p>}
@@ -162,6 +181,39 @@ function PartProps({ part }: { part: Part }) {
           删除（Delete）
         </button>
       )}
+    </div>
+  );
+}
+
+function WireProps({ id, bent }: { id: string; bent: boolean }) {
+  useSimVersion();
+  const probed = simctl.isProbed(id);
+  const v = simctl.wireValue(id);
+  return (
+    <div className="props">
+      <h2>导线</h2>
+      <p className="tip">
+        当前值 <b>{['0', '1', 'X（未知）', 'Z（悬空）', 'E（短路）'][v]}</b>
+      </p>
+      <button
+        className={`btn wide${probed ? ' on' : ''}`}
+        data-testid="probe"
+        onClick={() => {
+          simctl.toggleProbe(id);
+          if (!probed) store.set({ waveOpen: true });
+        }}
+      >
+        {probed ? '从波形图移除' : '加入波形图'}
+      </button>
+      {bent && (
+        <button className="btn wide" onClick={() => setWireBend(id, undefined)}>
+          恢复自动走线
+        </button>
+      )}
+      <button className="btn danger wide" onClick={deleteSelection}>
+        删除（Delete）
+      </button>
+      <p className="tip">拖动导线中间那段可以调整走线，双击恢复自动。把新导线拖到这根导线上，会接到同一个信号。</p>
     </div>
   );
 }
@@ -226,10 +278,15 @@ export function Inspector() {
   const selWires = useEditor((s) => s.selWires);
   const project = useEditor((s) => s.project);
   const editing = useEditor((s) => s.editing);
+  const workspace = useEditor((s) => s.workspace);
   const c = findCircuit(project, editing) ?? project.main;
   if (selParts.length === 1 && selWires.length === 0) {
     const part = c.parts.find((p) => p.id === selParts[0]);
     if (part) return <PartProps part={part} />;
+  }
+  if (selWires.length === 1 && selParts.length === 0) {
+    const wire = c.wires.find((w) => w.id === selWires[0]);
+    if (wire) return <WireProps id={wire.id} bent={wire.bend !== undefined} />;
   }
   if (selParts.length + selWires.length > 0) {
     return (
@@ -244,6 +301,14 @@ export function Inspector() {
               ⟳ 旋转
             </button>
           </div>
+        )}
+        {workspace.mode === 'free' && selParts.length > 0 && (
+          <>
+            <button className="btn wide primary" onClick={packageSelection} data-testid="package">
+              封装为芯片（Ctrl+G）
+            </button>
+            <p className="tip">选中的逻辑会移进一个新芯片，跨出选区的连线自动变成芯片的引脚。开关、指示灯和显示器留在外面。</p>
+          </>
         )}
         <button className="btn danger wide" onClick={deleteSelection}>
           删除（Delete）

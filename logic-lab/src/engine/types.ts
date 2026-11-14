@@ -46,6 +46,8 @@ export interface Part {
   text?: string;
   /** Challenge mode: part cannot be moved away or deleted. */
   locked?: boolean;
+  /** Keyboard key that toggles an input / holds a button (a–z or 0–9). */
+  key?: string;
 }
 
 export interface PinRef {

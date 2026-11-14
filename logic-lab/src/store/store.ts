@@ -6,6 +6,7 @@ import { findCircuit, placeableChips } from '../engine/compile.ts';
 import { boundsOf } from '../engine/expr.ts';
 import { checkLevel, levelById, levelCircuit, type CheckResult } from '../engine/levels.ts';
 import { bendAxis } from '../engine/geometry.ts';
+import { packageParts, PackageError } from '../engine/package.ts';
 import { clampInputs, isMultiInputGate, partBounds, partSpec, placedPins } from '../engine/parts.ts';
 import { parseProject, projectToJSON } from '../engine/serialize.ts';
 import type { Circuit, Part, PartKind, PinRef, Project, Rot, Wire } from '../engine/types.ts';
@@ -713,4 +714,24 @@ export function withInputValues(p: Project, circuitId: string, inputs: Record<st
 export function saveUI(): void {
   const s = store.get();
   writeLS(LS.ui, JSON.stringify({ workspace: s.workspace, tab: s.tab, waveOpen: s.waveOpen, theme: s.theme }));
+}
+
+/** Move the selected logic into a new chip and put an instance of it in its place. */
+export function packageSelection(): boolean {
+  const s = store.get();
+  if (s.workspace.mode === 'level') {
+    toast('闯关模式下不能封装芯片', 'error');
+    return false;
+  }
+  try {
+    const name = uniqueChipName(s.project, '新芯片');
+    const res = packageParts(s.project, s.editing, s.selParts, { chipId: newId('chip'), name, newId });
+    commit(res.project, { selParts: [res.instanceId], selWires: [] });
+    toast(`已封装为芯片“${name}”：${res.inputs} 个输入、${res.outputs} 个输出。可以在“芯片”页改名`, 'ok');
+    return true;
+  } catch (e) {
+    if (e instanceof PackageError) toast(e.message, 'error');
+    else throw e;
+    return false;
+  }
 }

@@ -157,6 +157,22 @@ export function Canvas() {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
+  /** The pin to connect to when a new wire is dropped onto an existing one (same signal). */
+  const wireAnchor = (wireId: string, from: PinRef): PinRef | null => {
+    const wire = circuit.wires.find((x) => x.id === wireId);
+    if (!wire) return null;
+    const fromDir = pins.get(`${from.part}:${from.pin}`)?.dir;
+    const aDir = pins.get(`${wire.a.part}:${wire.a.pin}`)?.dir;
+    // An input joins the wire at its driver; an output joins at the far end.
+    const wantDir = fromDir === 'out' ? 'in' : 'out';
+    const pick = aDir === wantDir ? wire.a : wire.b;
+    return pick.part === from.part && pick.pin === from.pin ? (pick === wire.a ? wire.b : wire.a) : pick;
+  };
+  const wireAnchorAt = (clientX: number, clientY: number, from: PinRef): PinRef | null => {
+    const id = document.elementFromPoint(clientX, clientY)?.closest('[data-wire]')?.getAttribute('data-wire');
+    return id ? wireAnchor(id, from) : null;
+  };
+
   const startPinch = () => {
     const pts = [...pointers.current.values()];
     if (pts.length < 2) return;
@@ -207,6 +223,14 @@ export function Canvas() {
       return;
     }
     const wireId = target?.getAttribute('data-wire');
+    const pp = store.get().pendingPin;
+    if (wireId && pp) {
+      // Tap-tap wiring onto an existing wire joins its signal.
+      const anchor = wireAnchor(wireId, pp);
+      if (anchor) connect(pp, anchor);
+      inter.current = { type: 'none' };
+      return;
+    }
     if (wireId) {
       select([], [wireId], additive);
       const wire = circuit.wires.find((x) => x.id === wireId);
@@ -308,7 +332,7 @@ export function Canvas() {
       case 'wire': {
         setWireFrom(null);
         if (it.moved) {
-          const to = nearestPin(w.x, w.y, it.from);
+          const to = nearestPin(w.x, w.y, it.from) ?? wireAnchorAt(e.clientX, e.clientY, it.from);
           if (to) connect(it.from, to);
           store.set({ pendingPin: null });
         } else {

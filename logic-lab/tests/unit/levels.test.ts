@@ -118,6 +118,35 @@ const SOLUTIONS: Record<string, Parameters<typeof solve>[1]> = {
     w('b', 'o.i1');
     w('o', 'out_Y.i');
   },
+  mux4: (add, w) => {
+    add('m0', 'mux');
+    add('m1', 'mux');
+    add('m', 'mux');
+    w('in_D0', 'm0.a');
+    w('in_D1', 'm0.b');
+    w('in_S0', 'm0.s');
+    w('in_D2', 'm1.a');
+    w('in_D3', 'm1.b');
+    w('in_S0', 'm1.s');
+    w('m0', 'm.a');
+    w('m1', 'm.b');
+    w('in_S1', 'm.s');
+    w('m', 'out_Y.i');
+  },
+  comparator: (add, w) => {
+    add('eq', 'xnor');
+    add('gt', 'nor');
+    add('lt', 'nor');
+    w('in_A', 'eq.i0');
+    w('in_B', 'eq.i1');
+    w('eq', 'gt.i0');
+    w('in_B', 'gt.i1');
+    w('eq', 'lt.i0');
+    w('in_A', 'lt.i1');
+    w('eq', 'out_EQ.i');
+    w('gt', 'out_GT.i');
+    w('lt', 'out_LT.i');
+  },
   majority: (add, w) => {
     add('ab', 'and');
     add('ac', 'and');
@@ -309,6 +338,23 @@ test('decimal counter example counts 0–9 and wraps', () => {
     if (seen[seen.length - 1] !== d) seen.push(d);
   }
   assert.deepEqual(seen.slice(0, 12), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1]);
+});
+
+test('traffic light cycles green ×4, amber ×1, red ×3', () => {
+  const p = EXAMPLES.find((e) => e.id === 'traffic')!.build();
+  const sim = new Simulator(compile(p));
+  sim.settle();
+  const light = () => (sim.pinValue('green', 'i') ? 'G' : '') + (sim.pinValue('amber', 'i') ? 'Y' : '') + (sim.pinValue('red', 'i') ? 'R' : '');
+  // One letter per state: the initial one, then after each rising clock edge.
+  let seq = light();
+  let clk = sim.pinValue('clk', 'o');
+  for (let i = 0; i < 64; i++) {
+    sim.tick();
+    const now = sim.pinValue('clk', 'o');
+    if (clk === 0 && now === 1) seq += light();
+    clk = now;
+  }
+  assert.equal(seq, 'GGGGYRRR'.repeat(2) + 'G');
 });
 
 test('project validation and share links round-trip', async () => {

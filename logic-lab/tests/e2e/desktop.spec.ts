@@ -111,7 +111,7 @@ test('expression → circuit → truth table with minimised expression and K-map
   await fresh(page);
   await newBlank(page);
   await page.getByTestId('file-menu').click();
-  await page.getByRole('menuitem', { name: '由表达式生成电路…' }).click();
+  await page.getByRole('menuitem', { name: '由表达式或真值表生成电路…' }).click();
   await page.getByTestId('expr-input').fill('Y = A B');
   await expect(page.getByRole('alert')).toContainText('缺少运算符');
   await page.getByTestId('expr-input').fill("Y = A & B | A & C | B & C | A & B & C'");
@@ -355,4 +355,130 @@ test('a wire bend can be dragged and reset by double-click', async ({ page }) =>
   const m1 = await middle();
   await page.mouse.dblclick(m1.x, m1.y);
   await expect(line).toHaveAttribute('d', d0!);
+});
+
+test('package a selection as a chip with Ctrl+G; the circuit keeps working', async ({ page }) => {
+  await fresh(page);
+  const a = await partByLabel(page, 'in', 'A');
+  const b = await partByLabel(page, 'in', 'B');
+  const s = await partByLabel(page, 'out', 'S');
+  const c = await partByLabel(page, 'out', 'C');
+  await page.locator('.canvas').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Control+g');
+  await expect(page.getByTestId('toast')).toContainText('2 个输入、2 个输出');
+  await expect(page.locator('.canvas .part.kind-xor')).toHaveCount(0);
+  await expect(page.locator('.canvas .part.kind-chip')).toHaveCount(1);
+  // The chip's pins are named after the switches and outputs they connect to.
+  await expect(page.locator('.canvas .part.kind-chip .pin-label')).toHaveText(['A', 'B', 'S', 'C']);
+  await clickPart(page, a);
+  await clickPart(page, b);
+  await expect(readout(page, s)).toHaveText('0');
+  await expect(readout(page, c)).toHaveText('1');
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.canvas .part.kind-xor')).toHaveCount(1);
+});
+
+test('truth table designer builds the circuit for a table', async ({ page }) => {
+  await fresh(page);
+  await newBlank(page);
+  await page.getByTestId('file-menu').click();
+  await page.getByRole('menuitem', { name: '由表达式或真值表生成电路…' }).click();
+  await page.getByTestId('mode-table').click();
+  await page.getByTestId('tt-inputs').fill('P Q');
+  await page.getByTestId('tt-outputs').fill('F');
+  // F = 1 for rows 01 and 10 (XOR), don't care for 11.
+  await page.locator('[data-cell="F:1"]').click();
+  await page.locator('[data-cell="F:2"]').click();
+  await page.locator('[data-cell="F:3"]').click();
+  await page.locator('[data-cell="F:3"]').click();
+  await expect(page.locator('[data-cell="F:3"]')).toHaveText('×');
+  await expect(page.getByTestId('tt-equations')).toHaveText('F = P | Q');
+  await page.getByTestId('tt-inputs').fill('P P');
+  await expect(page.getByRole('alert')).toContainText('重复');
+  await page.getByTestId('tt-inputs').fill('P Q');
+  await page.getByTestId('expr-insert').click();
+  await page.getByRole('tab', { name: '真值表' }).click();
+  const rows = page.getByTestId('truth-table').locator('tbody tr');
+  await expect(rows).toHaveCount(4);
+  await expect(rows.nth(0).locator('td').last()).toHaveText('0');
+  await expect(rows.nth(1).locator('td').last()).toHaveText('1');
+});
+
+test('a new wire dropped onto an existing wire joins its signal; probes show in the waveform', async ({ page }) => {
+  await fresh(page);
+  await newBlank(page);
+  await page.locator('.palette-item[data-kind="in"]').click();
+  await page.locator('.palette-item[data-kind="led"]').click();
+  await page.locator('.palette-item[data-kind="out"]').click();
+  const [i] = await partIds(page, 'in');
+  const [l] = await partIds(page, 'led');
+  const [o] = await partIds(page, 'out');
+  await dragWire(page, [i, 'o'], [l, 'i']);
+  // Drag from the output pin's input onto the middle of the existing wire.
+  const line = page.locator('.wire-line').first();
+  const mid = await line.evaluate((el) => {
+    const path = el as SVGPathElement;
+    const pt = path.getPointAtLength(path.getTotalLength() / 2);
+    const m = path.getScreenCTM()!;
+    return { x: pt.x * m.a + m.e, y: pt.y * m.d + m.f };
+  });
+  const start = await pinCenter(page, o, 'i');
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(mid.x, mid.y, { steps: 6 });
+  await page.mouse.up();
+  expect(await wireCount(page)).toBe(2);
+  await clickPart(page, i);
+  await expect(readout(page, o)).toHaveText('1');
+  // Probe the first wire.
+  await page.mouse.click(mid.x, mid.y);
+  await page.getByTestId('probe').click();
+  await expect(page.getByTestId('waveform').locator('.wave-row.kind-probe')).toHaveCount(1);
+});
+
+test('keyboard keys toggle inputs', async ({ page }) => {
+  await fresh(page);
+  const a = await partByLabel(page, 'in', 'A');
+  const s = await partByLabel(page, 'out', 'S');
+  await clickPart(page, a);
+  await clickPart(page, a); // back to 0, and selected
+  const field = page.locator('.field', { hasText: '键盘按键' }).locator('input');
+  await field.fill('1');
+  await field.press('Enter');
+  await expect(page.locator(`.canvas [data-part="${a}"] .key-badge`)).toHaveText('1');
+  await page.locator('.canvas').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('1');
+  await expect(readout(page, s)).toHaveText('1');
+  await page.keyboard.press('1');
+  await expect(readout(page, s)).toHaveText('0');
+});
+
+test('new challenge: four-way multiplexer from three 2:1 muxes', async ({ page }) => {
+  await fresh(page);
+  await page.getByTestId('levels-mode').click();
+  await page.locator('[data-level="mux4"]').click();
+  await expect(page.getByTestId('level-card')).toContainText('四选一');
+  for (let k = 0; k < 3; k++) await page.locator('.palette-item[data-kind="mux"]').click();
+  const [m0, m1, m] = await partIds(page, 'mux');
+  await dragWire(page, ['in_D0', 'o'], [m0, 'a']);
+  await dragWire(page, ['in_D1', 'o'], [m0, 'b']);
+  await dragWire(page, ['in_S0', 'o'], [m0, 's']);
+  await dragWire(page, ['in_D2', 'o'], [m1, 'a']);
+  await dragWire(page, ['in_D3', 'o'], [m1, 'b']);
+  await dragWire(page, ['in_S0', 'o'], [m1, 's']);
+  await dragWire(page, [m0, 'o'], [m, 'a']);
+  await dragWire(page, [m1, 'o'], [m, 'b']);
+  await dragWire(page, ['in_S1', 'o'], [m, 's']);
+  await dragWire(page, [m, 'o'], ['out_Y', 'i']);
+  await page.getByTestId('check').click();
+  await expect(page.getByTestId('check-result')).toContainText('达到最少');
+});
+
+test('the built app is installable: manifest and service worker', async ({ page }) => {
+  await fresh(page);
+  await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
+  const manifest = await (await page.request.get('/manifest.webmanifest')).json();
+  expect(manifest.short_name).toBe('门道');
+  await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length), { timeout: 10000 }).toBe(1);
 });

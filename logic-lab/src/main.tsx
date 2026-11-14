@@ -20,6 +20,11 @@ const syncSim = () => {
 store.subscribe(syncSim);
 syncSim();
 
+// Offline support in the built app (not in the dev server).
+if (import.meta.env.PROD && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => undefined));
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

@@ -278,6 +278,14 @@ function PartViewImpl({ part, spec, selected, vals, pressed, chipName, missing, 
           {part.label}
         </text>
       )}
+      {part.key && (k === 'in' || k === 'button') && (
+        <g className="key-badge">
+          <rect x={-1.5} y={H / 2 - 0.55} width={1.1} height={1.1} rx={0.2} />
+          <text x={-0.95} y={H / 2 + 0.27}>
+            {part.key.toUpperCase()}
+          </text>
+        </g>
+      )}
     </g>
   );
 }

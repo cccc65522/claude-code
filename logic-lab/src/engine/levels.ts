@@ -145,6 +145,30 @@ export const LEVELS: Level[] = [
     best: 4
   },
   {
+    id: 'mux4',
+    title: '四选一',
+    goal: '用两位选择信号 S1S0 从 D0–D3 里选出一路',
+    desc: '大部件由小部件拼成：这一关可以直接用“二选一”。S1S0 = 2 时 Y = D2，依此类推。',
+    hint: '先用两个二选一按 S0 分别在 D0/D1、D2/D3 里选，再用第三个按 S1 选。',
+    inputs: ['D0', 'D1', 'D2', 'D3', 'S1', 'S0'],
+    outputs: ['Y'],
+    palette: ['mux', 'not', 'and', 'or'],
+    test: { kind: 'comb', fn: (v) => ({ Y: [v.D0, v.D1, v.D2, v.D3][v.S1 * 2 + v.S0] }) },
+    best: 3
+  },
+  {
+    id: 'comparator',
+    title: '一位比较器',
+    goal: '比较 A 和 B：A>B 时 GT=1，相等时 EQ=1，A<B 时 LT=1',
+    desc: '三个输出恰好有一个为 1。直接按定义搭需要 5 个门，想办法让输出之间互相利用，3 个门就够。',
+    hint: 'EQ 是同或；A>B 等于“不相等并且 B=0”，也就是 NOR(EQ, B)。',
+    inputs: ['A', 'B'],
+    outputs: ['GT', 'EQ', 'LT'],
+    palette: BASIC,
+    test: { kind: 'comb', fn: (v) => ({ GT: b(v.A > v.B), EQ: b(v.A === v.B), LT: b(v.A < v.B) }) },
+    best: 3
+  },
+  {
     id: 'majority',
     title: '三人表决器',
     goal: '三个人里至少两个人同意（1），Y 才为 1',

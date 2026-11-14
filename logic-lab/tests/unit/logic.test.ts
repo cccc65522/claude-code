@@ -204,3 +204,36 @@ test('truth table errors', () => {
   assert.equal(res.ok, false);
   if (!res.ok) assert.match(res.error, /最多/);
 });
+
+import { checkNames, tableToEquations, type Cell } from '../../src/engine/expr.ts';
+
+test('truth table designer: random tables round-trip through minimisation, synthesis and simulation', () => {
+  const rand = rng(99);
+  for (let trial = 0; trial < 40; trial++) {
+    const n = 1 + Math.floor(rand() * 4);
+    const inputs = ['P', 'Q', 'R', 'S'].slice(0, n);
+    const outs = ['F', 'G'].map((name) => ({ name, values: Array.from({ length: 1 << n }, (): Cell => (rand() < 0.15 ? 'x' : rand() < 0.5 ? 1 : 0)) }));
+    const src = tableToEquations(inputs, outs);
+    const { circuit } = synthesize(parseEquations(src), { inputOrder: inputs });
+    const p = emptyProject();
+    p.main = { ...circuit, id: 'main' };
+    const res = truthTable(p, 'main');
+    assert.ok(res.ok, src);
+    if (!res.ok) continue;
+    assert.deepEqual(res.table.inputs.map((s) => s.label), inputs, 'inputs keep their order even if unused');
+    outs.forEach((o, k) =>
+      o.values.forEach((v, r) => {
+        if (v !== 'x') assert.equal(res.table.rows[r][k], v, `${src}\nrow ${r}`);
+      })
+    );
+  }
+});
+
+test('truth table designer: name checks', () => {
+  assert.equal(checkNames(['A', 'B'], ['Y']), null);
+  assert.match(checkNames(['A', 'A'], ['Y'])!, /重复/);
+  assert.match(checkNames(['A', '1x'], ['Y'])!, /不是合法/);
+  assert.match(checkNames(['and'], ['Y'])!, /运算符/);
+  assert.match(checkNames(['A'], ['A'])!, /重复/);
+  assert.match(checkNames([], ['Y'])!, /至少/);
+});

@@ -8,6 +8,11 @@ const KINDS = new Set<string>([
 
 export class ProjectError extends Error {}
 
+/** Keys that can be bound to inputs: letters and digits, except the editor's own shortcuts. */
+export function isBindableKey(k: string): boolean {
+  return /^[a-z0-9]$/.test(k) && k !== 'r' && k !== 'f';
+}
+
 const str = (v: unknown, max = 200): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined);
 const int = (v: unknown, lo: number, hi: number): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : undefined;
@@ -39,6 +44,7 @@ function cleanPart(raw: unknown): Part | null {
   const text = str(r.text, 2000);
   if (text !== undefined) part.text = text;
   if (r.locked === true) part.locked = true;
+  if (typeof r.key === 'string' && isBindableKey(r.key)) part.key = r.key;
   return part;
 }
 
