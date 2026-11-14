@@ -1,7 +1,7 @@
 // SVG drawing of every kind of part, in grid units. The body is drawn in the part's
 // local (unrotated) frame and rotated; labels and readouts are drawn upright on top.
 import { memo, type ReactNode } from 'react';
-import { KIND_NAME, type PartSpec } from '../engine/parts.ts';
+import { KIND_NAME, memBits, type PartSpec } from '../engine/parts.ts';
 import type { Part } from '../engine/types.ts';
 import { VAL_NAME, type Val } from '../engine/values.ts';
 
@@ -228,6 +228,45 @@ function PartViewImpl({ part, spec, selected, vals, pressed, chipName, missing, 
         </>
       );
       break;
+    case 'rom':
+    case 'ram':
+    case 'reg': {
+      const { a, d } = memBits(part);
+      const title = k === 'reg' ? `寄存器 ${d} 位` : `${k.toUpperCase()} ${1 << a}×${d}`;
+      body = (
+        <>
+          {spec.pins.map((p) =>
+            p.side === 'W' ? (
+              <line key={p.name} className="stub" x1={0} y1={p.y} x2={0.5} y2={p.y} />
+            ) : p.side === 'E' ? (
+              <line key={p.name} className="stub" x1={w - 0.5} y1={p.y} x2={w} y2={p.y} />
+            ) : (
+              <line key={p.name} className="stub" x1={p.x} y1={h - 0.3} x2={p.x} y2={h} />
+            )
+          )}
+          <rect className="body chip mem" x={0.5} y={0.3} width={w - 1} height={h - 0.6} rx={0.2} />
+          {spec.pins.map((p) =>
+            p.name === 'c' && p.side === 'W' ? (
+              <path key={p.name} className="body-line" d={`M0.5 ${p.y - 0.45} L1.1 ${p.y} L0.5 ${p.y + 0.45}`} />
+            ) : (
+              <text
+                key={p.name}
+                className="pin-label"
+                x={p.side === 'W' ? 0.8 : p.side === 'E' ? w - 0.8 : p.x}
+                y={p.side === 'S' ? h - 0.6 : p.y + 0.25}
+                textAnchor={p.side === 'W' ? 'start' : p.side === 'E' ? 'end' : 'middle'}
+              >
+                {p.name === 'c' ? 'CLK' : p.label}
+              </text>
+            )
+          )}
+          <text className="mem-title" x={w / 2} y={k === 'rom' ? h - 0.75 : h - 1.6}>
+            {title}
+          </text>
+        </>
+      );
+      break;
+    }
     case 'chip':
       body = (
         <>

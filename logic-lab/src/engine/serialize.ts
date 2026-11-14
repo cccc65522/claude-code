@@ -3,7 +3,7 @@ import { GATE_KINDS } from './parts.ts';
 import type { Circuit, Part, PartKind, Project, Rot, Wire } from './types.ts';
 
 const KINDS = new Set<string>([
-  'in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7', ...GATE_KINDS, 'tri', 'mux', 'dff', 'jkff', 'tff', 'chip', 'text'
+  'in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7', ...GATE_KINDS, 'tri', 'mux', 'dff', 'jkff', 'tff', 'rom', 'ram', 'reg', 'chip', 'text'
 ]);
 
 export class ProjectError extends Error {}
@@ -45,6 +45,11 @@ function cleanPart(raw: unknown): Part | null {
   if (text !== undefined) part.text = text;
   if (r.locked === true) part.locked = true;
   if (typeof r.key === 'string' && isBindableKey(r.key)) part.key = r.key;
+  const abits = int(r.abits, 1, 6);
+  if (abits !== undefined) part.abits = abits;
+  const dbits = int(r.dbits, 1, 8);
+  if (dbits !== undefined) part.dbits = dbits;
+  if (Array.isArray(r.data)) part.data = r.data.slice(0, 64).map((v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(255, Math.round(v))) : 0));
   return part;
 }
 

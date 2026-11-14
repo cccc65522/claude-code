@@ -21,6 +21,9 @@ export type PartKind =
   | 'dff'
   | 'jkff'
   | 'tff'
+  | 'rom' // read-only memory, contents edited in the inspector
+  | 'ram' // read/write memory, written on the rising clock edge
+  | 'reg' // n-bit register
   | 'chip' // instance of a user-defined circuit
   | 'text'; // annotation
 
@@ -48,6 +51,12 @@ export interface Part {
   locked?: boolean;
   /** Keyboard key that toggles an input / holds a button (a–z or 0–9). */
   key?: string;
+  /** Memories: address width in bits. */
+  abits?: number;
+  /** Memories and registers: data width in bits. */
+  dbits?: number;
+  /** ROM contents, one word per address. */
+  data?: number[];
 }
 
 export interface PinRef {

@@ -10,7 +10,13 @@
 // steps until nothing changes). A circuit that does not settle within a step limit is
 // reported as oscillating.
 import type { Comp, Netlist } from './compile.ts';
+import { memBits } from './parts.ts';
 import { and, asLogic, not, or, resolve, V0, V1, VX, VZ, xor, type Val } from './values.ts';
+
+function memSize(c: Comp): number {
+  const { a, d } = memBits(c.part);
+  return c.kind === 'ram' ? (1 << a) * d : d;
+}
 
 export const DEFAULT_SETTLE_LIMIT = 1000;
 
@@ -29,6 +35,8 @@ export class Simulator {
   readonly prevClk: Uint8Array;
   /** Per component: clock tick counter. */
   readonly cnt: Int32Array;
+  /** Storage of registers (one value per bit) and RAMs (word-major), by component index. */
+  readonly mem = new Map<number, Uint8Array>();
   time = 0;
   /** True when the last settle hit the step limit. */
   oscillating = false;
@@ -52,11 +60,14 @@ export class Simulator {
 
     nl.comps.forEach((c, i) => {
       if (c.kind === 'in') this.q[i] = c.part.value === 1 ? 1 : 0;
+      if (c.kind === 'reg' || c.kind === 'ram') this.mem.set(i, new Uint8Array(memSize(c)));
       const old = carry ? carry.nl.compByPath.get(c.path) : undefined;
       if (carry && old !== undefined && carry.nl.comps[old].kind === c.kind) {
         this.q[i] = carry.q[old];
         this.prevClk[i] = carry.prevClk[old];
         this.cnt[i] = carry.cnt[old];
+        const oldMem = carry.mem.get(old);
+        if (oldMem && oldMem.length === memSize(c)) this.mem.set(i, oldMem.slice());
         const oc = carry.nl.comps[old];
         for (let k = 0; k < c.outs.length && k < oc.outs.length; k++) this.slotVal[c.outBase + k] = carry.slotVal[oc.outBase + k];
       }
@@ -74,6 +85,7 @@ export class Simulator {
       this.prevClk[i] = VX;
       this.cnt[i] = 0;
     });
+    for (const m of this.mem.values()) m.fill(0);
     this.slotVal.fill(VX);
     this.primeSources();
     for (let n = 0; n < this.nl.netCount; n++) this.netVal[n] = this.resolveNet(n);
@@ -309,11 +321,67 @@ export class Simulator {
         this.out(c, 1, not(q), touched);
         return;
       }
+      case 'rom': {
+        const { a, d } = memBits(c.part);
+        const addr = this.address(c, 0, a);
+        const word = addr < 0 ? -1 : (c.part.data?.[addr] ?? 0);
+        for (let k = 0; k < d; k++) this.out(c, k, word < 0 ? VX : (((word >> k) & 1) as Val), touched);
+        return;
+      }
+      case 'reg': {
+        // Pins: d0..d(n-1), c, en, clr
+        const { d } = memBits(c.part);
+        const m = this.mem.get(i)!;
+        const clk = asLogic(this.inVal(c, d));
+        const en = this.inVal(c, d + 1);
+        const clr = this.inVal(c, d + 2);
+        const rising = this.prevClk[i] === 0 && clk === 1;
+        this.prevClk[i] = clk;
+        if (clr === V1) m.fill(0);
+        else if (rising && en !== V0) {
+          // Enable is optional: floating counts as enabled; unknown makes the result unknown.
+          for (let k = 0; k < d; k++) m[k] = en === VZ || en === V1 ? asLogic(this.inVal(c, k)) : VX;
+        }
+        for (let k = 0; k < d; k++) this.out(c, k, m[k] as Val, touched);
+        return;
+      }
+      case 'ram': {
+        // Pins: a0..a(A-1), i0..i(D-1), we, c
+        const { a, d } = memBits(c.part);
+        const m = this.mem.get(i)!;
+        const clk = asLogic(this.inVal(c, a + d + 1));
+        const we = asLogic(this.inVal(c, a + d));
+        const rising = this.prevClk[i] === 0 && clk === 1;
+        this.prevClk[i] = clk;
+        const addr = this.address(c, 0, a);
+        if (rising && we !== 0) {
+          if (addr >= 0 && we === 1) for (let k = 0; k < d; k++) m[addr * d + k] = asLogic(this.inVal(c, a + k));
+        }
+        for (let k = 0; k < d; k++) this.out(c, k, addr < 0 ? VX : (m[addr * d + k] as Val), touched);
+        return;
+      }
       case 'out':
       case 'led':
       case 'hex':
       case 'seg7':
         return;
     }
+  }
+
+  /** Binary number on input pins [from, from + n), or -1 if any bit is not 0/1. */
+  private address(c: Comp, from: number, n: number): number {
+    let addr = 0;
+    for (let k = 0; k < n; k++) {
+      const v = asLogic(this.inVal(c, from + k));
+      if (v === VX) return -1;
+      addr |= v << k;
+    }
+    return addr;
+  }
+
+  /** Current contents of a register or RAM (by part id at the top level), for display. */
+  memory(partId: string): Uint8Array | undefined {
+    const i = this.nl.compByPath.get(partId);
+    return i === undefined ? undefined : this.mem.get(i);
   }
 }

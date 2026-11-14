@@ -417,3 +417,18 @@ test('state table with an input, and error cases', () => {
   assert.equal(half.ok, false);
   if (!half.ok) assert.match(half.error, /没有触发器/);
 });
+
+test('ROM example shows 0–F in order', () => {
+  const p = EXAMPLES.find((e) => e.id === 'rom7')!.build();
+  const sim = new Simulator(compile(p));
+  sim.settle();
+  const patterns = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x77, 0x7c, 0x39, 0x5e, 0x79, 0x71];
+  const shown = () => patterns.indexOf('abcdefg'.split('').reduce((s, seg, i) => s | (sim.pinValue('disp', seg) << i), 0));
+  const seen = [shown()];
+  for (let i = 0; i < 80; i++) {
+    sim.tick();
+    const d = shown();
+    if (d !== seen[seen.length - 1]) seen.push(d);
+  }
+  assert.deepEqual(seen.slice(0, 17), [...Array(16).keys(), 0]);
+});

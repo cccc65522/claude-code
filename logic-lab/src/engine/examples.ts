@@ -197,6 +197,25 @@ function trafficLight(): Project {
   return p;
 }
 
+/** Seven-segment patterns for 0–F: bit 0 = segment a … bit 6 = segment g. */
+export const HEX_SEGMENTS = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x77, 0x7c, 0x39, 0x5e, 0x79, 0x71];
+
+function romDisplay(): Project {
+  const b = new CircuitBuilder('main', 'ROM 查表');
+  b.add('text', 0, -7, { text: '用 ROM 当译码器：计数器给出地址，ROM 里存着 0–F 每个数字的七段字形（第 0 位是 a 段）。\n选中 ROM 可以在属性里改内容，比如把某个数字换成别的图案。' });
+  b.add('clock', 0, 5, { id: 'clk', label: 'CLK', period: 2 });
+  b.add('const', 0, 0, { id: 'one', value: 1 });
+  for (let i = 0; i < 4; i++) b.add('tff', 6 + i * 8, 0, { id: `T${i}` });
+  b.wire('clk', 'T0.c');
+  for (let i = 0; i < 4; i++) b.wire('one', `T${i}.t`);
+  for (let i = 1; i < 4; i++) b.wire(`T${i - 1}.nq`, `T${i}.c`);
+  b.add('rom', 42, 10, { id: 'rom', abits: 4, dbits: 7, data: HEX_SEGMENTS });
+  for (let i = 0; i < 4; i++) b.wire(`T${i}.q`, `rom.a${i}`);
+  b.add('seg7', 56, 10, { id: 'disp' });
+  'abcdefg'.split('').forEach((s, i) => b.wire(`rom.d${i}`, `disp.${s}`));
+  return project(b.build());
+}
+
 function tristateBus(): Project {
   const b = new CircuitBuilder('main', '三态总线');
   b.add('text', 0, -6, { text: '两个三态门共用一根总线。只打开一个使能端 EN 时，总线上是它的数据；\n都关上时总线悬空（Z，虚线）；都打开且数据不同时短路（E，红色）。' });
@@ -240,6 +259,7 @@ export const EXAMPLES: Example[] = [
   { id: 'sr-latch', title: 'SR 锁存器', desc: '交叉耦合的或非门，电路有了记忆', build: srLatch },
   { id: 'counter4', title: '4 位计数器', desc: 'T 触发器 + 时钟 + 十六进制显示 + 波形图', build: counter4 },
   { id: 'decimal', title: '十进制计数器', desc: '异步清零 + 自动生成的 BCD 七段译码器', build: decimalCounter },
+  { id: 'rom7', title: 'ROM 查表显示', desc: 'ROM 存着 0–F 的七段字形，计数器扫过地址', build: romDisplay },
   { id: 'traffic', title: '交通灯状态机', desc: '三个 D 触发器 + 由表达式生成的状态转移逻辑', build: trafficLight },
   { id: 'tristate', title: '三态总线', desc: '高阻态 Z 与短路 E', build: tristateBus },
   { id: 'ring', title: '环形振荡器', desc: '没有稳定状态的电路，演示振荡检测', build: ringOscillator },

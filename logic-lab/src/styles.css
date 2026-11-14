@@ -1560,3 +1560,35 @@ pre.code.preview {
 .tt tr.faded td {
   opacity: 0.45;
 }
+
+/* memories */
+.mem-title {
+  font-size: 0.7px;
+  text-anchor: middle;
+  fill: var(--dim);
+  font-weight: 700;
+  pointer-events: none;
+}
+.mem-view {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  font: 13px ui-monospace, Menlo, monospace;
+  margin: 8px 0;
+}
+.mem-view span {
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 2px 6px;
+  display: flex;
+  justify-content: space-between;
+}
+.mem-view i {
+  font-style: normal;
+  color: var(--dim);
+  margin-right: 6px;
+}
+#rom-data {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  min-height: 70px;
+}

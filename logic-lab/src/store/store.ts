@@ -305,6 +305,9 @@ export function defaultProps(kind: PartKind): Partial<Part> {
   if (kind === 'const') return { value: 1 };
   if (kind === 'led') return { color: 'red' };
   if (kind === 'text') return { text: '双击编辑文字' };
+  if (kind === 'rom') return { abits: 4, dbits: 4, data: Array.from({ length: 16 }, (_, i) => i) };
+  if (kind === 'ram') return { abits: 4, dbits: 4 };
+  if (kind === 'reg') return { dbits: 4 };
   return {};
 }
 
@@ -417,7 +420,7 @@ export function updatePart(id: string, patch: Partial<Part>): void {
     if (patch.n !== undefined) next.n = clampInputs(patch.n);
     let wires = c.wires;
     // Shrinking a gate drops wires on pins that no longer exist.
-    if (patch.n !== undefined || patch.chip !== undefined) {
+    if (patch.n !== undefined || patch.chip !== undefined || patch.abits !== undefined || patch.dbits !== undefined) {
       const pins = new Set(partSpec(next, store.get().project).pins.map((p) => p.name));
       wires = wires.filter((w) => !((w.a.part === id && !pins.has(w.a.pin)) || (w.b.part === id && !pins.has(w.b.pin))));
     }

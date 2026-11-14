@@ -365,3 +365,101 @@ test('state survives recompiling after an edit', () => {
   assert.equal(sim2.pinValue('l', 'i'), 1);
   assert.equal(sim2.getInput('c'), 1);
 });
+
+test('ROM: looks up the word at the address; unknown address gives X', () => {
+  const p = projectWith((b) => {
+    for (let i = 0; i < 2; i++) b.add('in', 0, i * 4, { id: `a${i}` });
+    b.add('rom', 6, 0, { id: 'rom', abits: 2, dbits: 3, data: [5, 2, 7] });
+    b.wire('a0', 'rom.a0').wire('a1', 'rom.a1');
+  });
+  const sim = run(p);
+  const word = () => [0, 1, 2].reduce((s, k) => s + (sim.pinValue('rom', `d${k}`) << k), 0);
+  const at = (addr: number) => {
+    sim.setInput('a0', (addr & 1) as 0 | 1);
+    sim.setInput('a1', ((addr >> 1) & 1) as 0 | 1);
+    sim.settle();
+    return word();
+  };
+  assert.deepEqual([at(0), at(1), at(2), at(3)], [5, 2, 7, 0], 'missing words read as 0');
+  const q = projectWith((b) => {
+    b.add('rom', 6, 0, { id: 'rom', abits: 1, dbits: 1, data: [1, 1] });
+  });
+  assert.equal(run(q).pinValue('rom', 'd0'), VX, 'floating address');
+});
+
+test('register: loads on the rising edge when enabled, clears asynchronously', () => {
+  const p = projectWith((b) => {
+    for (let i = 0; i < 4; i++) b.add('in', 0, i * 3, { id: `d${i}` });
+    b.add('in', 0, 14, { id: 'clk' });
+    b.add('in', 0, 18, { id: 'en', value: 1 });
+    b.add('in', 0, 22, { id: 'clr' });
+    b.add('reg', 8, 0, { id: 'r' });
+    for (let i = 0; i < 4; i++) b.wire(`d${i}`, `r.d${i}`);
+    b.wire('clk', 'r.c').wire('en', 'r.en').wire('clr', 'r.clr');
+  });
+  const sim = run(p);
+  const val = () => [0, 1, 2, 3].reduce((s, k) => s + (sim.pinValue('r', `q${k}`) << k), 0);
+  const set = (id: string, v: 0 | 1) => {
+    sim.setInput(id, v);
+    sim.settle();
+  };
+  set('d0', 1);
+  set('d2', 1);
+  assert.equal(val(), 0);
+  set('clk', 1);
+  assert.equal(val(), 5);
+  set('clk', 0);
+  set('en', 0);
+  set('d1', 1);
+  set('clk', 1);
+  assert.equal(val(), 5, 'disabled: holds');
+  set('clr', 1);
+  assert.equal(val(), 0);
+  assert.deepEqual([...sim.memory('r')!], [0, 0, 0, 0]);
+});
+
+test('RAM: writes on the clock edge when WE=1, reads combinationally, keeps contents across edits', () => {
+  const p = projectWith((b) => {
+    for (let i = 0; i < 2; i++) b.add('in', 0, i * 3, { id: `a${i}` });
+    for (let i = 0; i < 2; i++) b.add('in', 0, 8 + i * 3, { id: `i${i}` });
+    b.add('in', 0, 16, { id: 'we' });
+    b.add('in', 0, 20, { id: 'clk' });
+    b.add('ram', 8, 0, { id: 'm', abits: 2, dbits: 2 });
+    b.wire('a0', 'm.a0').wire('a1', 'm.a1').wire('i0', 'm.i0').wire('i1', 'm.i1').wire('we', 'm.we').wire('clk', 'm.c');
+  });
+  const sim = run(p);
+  const set = (id: string, v: 0 | 1) => {
+    sim.setInput(id, v);
+    sim.settle();
+  };
+  const read = () => sim.pinValue('m', 'o0') + 2 * sim.pinValue('m', 'o1');
+  const write = (addr: number, v: number) => {
+    set('a0', (addr & 1) as 0 | 1);
+    set('a1', ((addr >> 1) & 1) as 0 | 1);
+    set('i0', (v & 1) as 0 | 1);
+    set('i1', ((v >> 1) & 1) as 0 | 1);
+    set('we', 1);
+    set('clk', 1);
+    set('clk', 0);
+    set('we', 0);
+  };
+  write(1, 3);
+  write(2, 2);
+  set('i0', 0);
+  set('i1', 0);
+  set('clk', 1); // WE=0: no write
+  set('clk', 0);
+  const at = (addr: number) => {
+    set('a0', (addr & 1) as 0 | 1);
+    set('a1', ((addr >> 1) & 1) as 0 | 1);
+    return read();
+  };
+  assert.deepEqual([at(0), at(1), at(2), at(3)], [0, 3, 2, 0]);
+  // Editing the circuit keeps the memory contents.
+  p.main.parts.push({ id: 'extra', kind: 'led', x: 40, y: 0, rot: 0 });
+  const sim2 = new Simulator(compile(p), sim);
+  sim2.settle();
+  assert.deepEqual([...sim2.memory('m')!], [0, 0, 1, 1, 0, 1, 0, 0]);
+  sim2.reset();
+  assert.deepEqual([...sim2.memory('m')!], [0, 0, 0, 0, 0, 0, 0, 0]);
+});

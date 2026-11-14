@@ -499,3 +499,30 @@ test('state diagram of the traffic light follows the running machine', async ({ 
   await expect(page.locator('.fsm-node.current')).toHaveAttribute('data-state', '100');
   await expect(page.locator('.canvas .part.kind-led circle.led-amber')).toHaveClass(/v1/);
 });
+
+test('memories: edit ROM contents, place a RAM and a register', async ({ page }) => {
+  await fresh(page);
+  await openExample(page, 'rom7');
+  const segs = page.locator('.canvas .part.kind-seg7 polygon.segment.lit');
+  await expect(segs).toHaveCount(6); // "0"
+  await clickPart(page, 'rom');
+  const data = page.locator('#rom-data');
+  await expect(data).toHaveValue(/^3F 06 5B/);
+  await data.fill((await data.inputValue()).replace(/^3F/, '7F'));
+  await data.blur();
+  await expect(segs).toHaveCount(7); // address 0 now shows "8"
+  await data.fill('ZZ');
+  await data.blur();
+  await expect(page.getByTestId('toast')).toContainText('不对');
+
+  await newBlank(page);
+  await page.locator('.palette-item[data-kind="ram"]').click();
+  await expect(page.getByTestId('ram-view').locator('span')).toHaveCount(16);
+  await page.getByRole('button', { name: '减少地址位数' }).click();
+  await expect(page.getByTestId('ram-view').locator('span')).toHaveCount(8);
+  await page.locator('.palette-item[data-kind="reg"]').click();
+  const [reg] = await partIds(page, 'reg');
+  await expect(page.locator(`[data-pin="${reg}:q3"]`)).toHaveCount(1);
+  await page.getByRole('button', { name: '增加数据位数' }).click();
+  await expect(page.locator(`[data-pin="${reg}:q4"]`)).toHaveCount(1);
+});

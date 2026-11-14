@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { circuitStats } from '../engine/analyze.ts';
 import { findCircuit } from '../engine/compile.ts';
-import { clampInputs, isMultiInputGate, KIND_NAME, MAX_INPUTS, MIN_INPUTS } from '../engine/parts.ts';
+import { clampInputs, isMultiInputGate, KIND_NAME, MAX_INPUTS, MEM_LIMITS, memBits, MIN_INPUTS } from '../engine/parts.ts';
 import type { Part } from '../engine/types.ts';
 import { MAIN_ID } from '../engine/types.ts';
 import { simctl, useSimVersion } from '../store/simctl.ts';
@@ -51,6 +51,95 @@ function LazyInput({ value, onCommit, placeholder, id, multiline }: { value: str
         }
       }}
     />
+  );
+}
+
+function Stepper({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (v: number) => void; label: string }) {
+  return (
+    <div className="stepper">
+      <button onClick={() => onChange(value - 1)} disabled={value <= min} aria-label={`减少${label}`}>
+        −
+      </button>
+      <output>{value}</output>
+      <button onClick={() => onChange(value + 1)} disabled={value >= max} aria-label={`增加${label}`}>
+        +
+      </button>
+    </div>
+  );
+}
+
+const hex = (v: number, digits: number) => v.toString(16).toUpperCase().padStart(digits, '0');
+
+function MemoryProps({ part }: { part: Part }) {
+  useSimVersion();
+  const { a, d } = memBits(part);
+  const k = part.kind;
+  const words = 1 << a;
+  const digits = Math.ceil(d / 4);
+  const text = Array.from({ length: words }, (_, i) => hex(part.data?.[i] ?? 0, digits))
+    .join(' ')
+    .replace(/((?:\S+ ){7}\S+) /g, '$1\n');
+  const live = simctl.sim.memory(part.id);
+  return (
+    <>
+      {k !== 'reg' && (
+        <label className="field">
+          <span>地址位数（{words} 个字）</span>
+          <Stepper value={a} min={MEM_LIMITS.abits[0]} max={MEM_LIMITS.abits[1]} label="地址位数" onChange={(v) => updatePart(part.id, { abits: v })} />
+        </label>
+      )}
+      <label className="field">
+        <span>{k === 'reg' ? '位数' : '数据位数'}</span>
+        <Stepper value={d} min={MEM_LIMITS.dbits[0]} max={MEM_LIMITS.dbits[1]} label="数据位数" onChange={(v) => updatePart(part.id, { dbits: v })} />
+      </label>
+      {k === 'rom' && (
+        <label className="field">
+          <span>内容（十六进制，从地址 0 开始，空格或换行分隔）</span>
+          <LazyInput
+            id="rom-data"
+            multiline
+            value={text}
+            onCommit={(v) => {
+              const tokens = v.split(/[\s,，]+/).filter(Boolean);
+              const values = tokens.map((t) => parseInt(t.replace(/^0x/i, ''), 16));
+              const bad = tokens.findIndex((t, i) => !/^(0x)?[0-9a-f]+$/i.test(t) || values[i] >= 1 << d);
+              if (bad >= 0) toast(`第 ${bad + 1} 个数“${tokens[bad]}”不对：要用十六进制，并且小于 ${hex(1 << d, 1)}`, 'error');
+              else if (tokens.length > words) toast(`最多 ${words} 个字`, 'error');
+              else updatePart(part.id, { data: values });
+            }}
+          />
+        </label>
+      )}
+      {k === 'ram' && live && store.get().editing === MAIN_ID && (
+        <div className="mem-view" data-testid="ram-view">
+          {Array.from({ length: words }, (_, w) => {
+            let v = 0;
+            let unknown = false;
+            for (let b = 0; b < d; b++) {
+              const bit = live[w * d + b];
+              if (bit > 1) unknown = true;
+              v |= (bit & 1) << b;
+            }
+            return (
+              <span key={w} title={`地址 ${w}`}>
+                <i>{hex(w, Math.ceil(a / 4))}</i>
+                {unknown ? 'X'.repeat(digits) : hex(v, digits)}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {k === 'reg' && live && store.get().editing === MAIN_ID && (
+        <p className="tip">
+          当前值 <b className="mono">{[...live].some((b) => b > 1) ? 'X' : hex([...live].reduce((s, b, i) => s | (b << i), 0), digits)}</b>（十六进制）
+        </p>
+      )}
+      <p className="tip">
+        {k === 'rom' && '只读存储器：输出地址 A 处的字，相当于一张真值表。'}
+        {k === 'ram' && '读出是即时的；WE=1 时，在时钟上升沿把 I 写进地址 A。复位会清空内容。'}
+        {k === 'reg' && '时钟上升沿把 D 存进去；EN=0 时保持（EN 不接视为 1）；R=1 立即清零。'}
+      </p>
+    </>
   );
 }
 
@@ -153,6 +242,7 @@ function PartProps({ part }: { part: Part }) {
         </label>
       )}
       {(k === 'dff' || k === 'jkff' || k === 'tff') && <p className="tip">在时钟输入的上升沿（0→1）动作。底部的 R 是异步清零端，接 1 时 Q 立即变 0，可以不接。</p>}
+      {(k === 'rom' || k === 'ram' || k === 'reg') && <MemoryProps part={part} />}
       {k === 'tri' && <p className="tip">EN=1 时输出等于输入；EN=0 时输出高阻（Z），不影响导线上的其他信号。</p>}
       {k === 'mux' && <p className="tip">S=0 选输入 0，S=1 选输入 1。</p>}
       {k === 'chip' && def && (

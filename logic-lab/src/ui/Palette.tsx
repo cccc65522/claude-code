@@ -11,6 +11,7 @@ const GROUPS: { title: string; kinds: PartKind[] }[] = [
   { title: '输入输出', kinds: ['in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7'] },
   { title: '逻辑门', kinds: ['and', 'or', 'not', 'xor', 'nand', 'nor', 'xnor', 'buf'] },
   { title: '组合与时序', kinds: ['mux', 'tri', 'dff', 'jkff', 'tff'] },
+  { title: '存储', kinds: ['reg', 'rom', 'ram'] },
   { title: '标注', kinds: ['text'] }
 ];
 

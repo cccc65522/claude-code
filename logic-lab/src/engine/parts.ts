@@ -56,12 +56,21 @@ export const KIND_NAME: Record<PartKind, string> = {
   dff: 'D 触发器',
   jkff: 'JK 触发器',
   tff: 'T 触发器',
+  rom: 'ROM',
+  ram: 'RAM',
+  reg: '寄存器',
   chip: '芯片',
   text: '文字'
 };
 
 /** Parts that hold state between ticks (their output depends on history). */
-export const STATEFUL_KINDS: ReadonlySet<PartKind> = new Set(['dff', 'jkff', 'tff', 'clock', 'button']);
+export const STATEFUL_KINDS: ReadonlySet<PartKind> = new Set(['dff', 'jkff', 'tff', 'clock', 'button', 'ram', 'reg']);
+
+export const MEM_LIMITS = { abits: [1, 6], dbits: [1, 8] } as const;
+export function memBits(part: Part): { a: number; d: number } {
+  const clamp = (v: number | undefined, [lo, hi]: readonly [number, number], def: number) => Math.min(hi, Math.max(lo, Math.round(v ?? def)));
+  return { a: clamp(part.abits, MEM_LIMITS.abits, 4), d: clamp(part.dbits, MEM_LIMITS.dbits, 4) };
+}
 
 /** Interface of a chip definition: its `in` parts become input pins, `out` parts output pins, top to bottom. */
 export function chipInterface(def: Circuit): { inputs: Part[]; outputs: Part[] } {
@@ -180,6 +189,48 @@ export function partSpec(part: Part, project?: Project): PartSpec {
           { name: 'nq', dir: 'out', x: 5, y: 5, side: 'E', label: 'Q̄' }
         ]
       };
+    case 'rom': {
+      const { a, d } = memBits(part);
+      const h = Math.max(a, d) + 2;
+      return {
+        w: 6,
+        h,
+        pins: [
+          ...Array.from({ length: a }, (_, i) => ({ name: `a${i}`, dir: 'in' as const, x: 0, y: 1 + i, side: 'W' as const, label: `A${i}` })),
+          ...Array.from({ length: d }, (_, i) => ({ name: `d${i}`, dir: 'out' as const, x: 6, y: 1 + i, side: 'E' as const, label: `D${i}` }))
+        ]
+      };
+    }
+    case 'ram': {
+      const { a, d } = memBits(part);
+      const h = a + d + 4;
+      return {
+        w: 7,
+        h,
+        pins: [
+          ...Array.from({ length: a }, (_, i) => ({ name: `a${i}`, dir: 'in' as const, x: 0, y: 1 + i, side: 'W' as const, label: `A${i}` })),
+          ...Array.from({ length: d }, (_, i) => ({ name: `i${i}`, dir: 'in' as const, x: 0, y: a + 2 + i, side: 'W' as const, label: `I${i}` })),
+          { name: 'we', dir: 'in' as const, x: 2, y: h, side: 'S' as const, label: 'WE' },
+          { name: 'c', dir: 'in' as const, x: 5, y: h, side: 'S' as const, label: '>' },
+          ...Array.from({ length: d }, (_, i) => ({ name: `o${i}`, dir: 'out' as const, x: 7, y: 1 + i, side: 'E' as const, label: `O${i}` }))
+        ]
+      };
+    }
+    case 'reg': {
+      const { d } = memBits(part);
+      const h = d + 4;
+      return {
+        w: 6,
+        h,
+        pins: [
+          ...Array.from({ length: d }, (_, i) => ({ name: `d${i}`, dir: 'in' as const, x: 0, y: 1 + i, side: 'W' as const, label: `D${i}` })),
+          { name: 'c', dir: 'in' as const, x: 0, y: d + 2, side: 'W' as const, label: '>' },
+          { name: 'en', dir: 'in' as const, x: 2, y: h, side: 'S' as const, label: 'EN' },
+          { name: 'clr', dir: 'in' as const, x: 4, y: h, side: 'S' as const, label: 'R' },
+          ...Array.from({ length: d }, (_, i) => ({ name: `q${i}`, dir: 'out' as const, x: 6, y: 1 + i, side: 'E' as const, label: `Q${i}` }))
+        ]
+      };
+    }
     case 'chip': {
       const def = project?.chips.find((c) => c.id === part.chip);
       if (!def) return { w: 6, h: 4, pins: [] };
