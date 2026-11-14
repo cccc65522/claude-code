@@ -55,7 +55,10 @@ function cleanWire(raw: unknown): Wire | null {
   const id = str(r.id, 80);
   const a = ref(r.a);
   const b = ref(r.b);
-  return id && a && b ? { id, a, b } : null;
+  if (!id || !a || !b) return null;
+  const wire: Wire = { id, a, b };
+  if (typeof r.bend === 'number' && Number.isFinite(r.bend)) wire.bend = Math.round(Math.max(-100000, Math.min(100000, r.bend)) * 2) / 2;
+  return wire;
 }
 
 function cleanCircuit(raw: unknown, fallbackId: string): Circuit {

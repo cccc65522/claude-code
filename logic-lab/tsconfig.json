@@ -18,5 +18,5 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["src", "tests/unit", "vite.config.ts"]
+  "include": ["src", "tests", "vite.config.ts", "playwright.config.ts"]
 }

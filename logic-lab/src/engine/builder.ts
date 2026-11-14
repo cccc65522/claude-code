@@ -31,8 +31,10 @@ export class CircuitBuilder {
    * Connect two pins. A pin is written "partId.pin"; a bare "partId" means the part's
    * first output pin (or, for parts without outputs, its first input pin).
    */
-  wire(a: string, b: string): this {
-    this.wires.push({ id: `w${this.wires.length + 1}_${this.prefix}`, a: this.ref(a), b: this.ref(b) });
+  wire(a: string, b: string, bend?: number): this {
+    const w: Circuit['wires'][number] = { id: `w${this.wires.length + 1}_${this.prefix}`, a: this.ref(a), b: this.ref(b) };
+    if (bend !== undefined) w.bend = bend;
+    this.wires.push(w);
     return this;
   }
 

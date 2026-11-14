@@ -1,0 +1,256 @@
+import { useEffect, useState } from 'react';
+import { circuitStats } from '../engine/analyze.ts';
+import { findCircuit } from '../engine/compile.ts';
+import { clampInputs, isMultiInputGate, KIND_NAME, MAX_INPUTS, MIN_INPUTS } from '../engine/parts.ts';
+import type { Part } from '../engine/types.ts';
+import { MAIN_ID } from '../engine/types.ts';
+import { simctl, useSimVersion } from '../store/simctl.ts';
+import {
+  createChip,
+  currentCircuit,
+  deleteSelection,
+  enterCircuit,
+  renameCircuit,
+  rotateSelection,
+  store,
+  updatePart,
+  useEditor
+} from '../store/store.ts';
+
+const LED_COLORS: [string, string][] = [
+  ['red', '红'],
+  ['green', '绿'],
+  ['amber', '黄'],
+  ['blue', '蓝'],
+  ['white', '白']
+];
+
+/** Text input that commits on blur / Enter instead of on every keystroke. */
+function LazyInput({ value, onCommit, placeholder, id, multiline }: { value: string; onCommit: (v: string) => void; placeholder?: string; id?: string; multiline?: boolean }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => draft !== value && onCommit(draft);
+  if (multiline)
+    return <textarea id={id} value={draft} rows={3} placeholder={placeholder} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />;
+  return (
+    <input
+      id={id}
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Escape') {
+          setDraft(value);
+          setTimeout(() => (e.target as HTMLInputElement).blur());
+        }
+      }}
+    />
+  );
+}
+
+function PartProps({ part }: { part: Part }) {
+  const project = useEditor((s) => s.project);
+  useSimVersion();
+  const def = part.kind === 'chip' ? project.chips.find((c) => c.id === part.chip) : undefined;
+  const k = part.kind;
+  return (
+    <div className="props">
+      <h2>
+        {KIND_NAME[k]}
+        {part.locked && <span className="badge">闯关引脚</span>}
+      </h2>
+      {k !== 'text' && k !== 'chip' && (
+        <label className="field">
+          <span>名字</span>
+          {part.locked ? (
+            <input value={part.label ?? ''} disabled />
+          ) : (
+            <LazyInput value={part.label ?? ''} placeholder={k === 'in' || k === 'out' ? '例如 A、Cin' : '可选'} onCommit={(v) => updatePart(part.id, { label: v.trim() || undefined })} />
+          )}
+        </label>
+      )}
+      {k === 'text' && (
+        <label className="field">
+          <span>文字</span>
+          <LazyInput id="prop-text" multiline value={part.text ?? ''} onCommit={(v) => updatePart(part.id, { text: v })} />
+        </label>
+      )}
+      {isMultiInputGate(k) && (
+        <label className="field">
+          <span>输入个数</span>
+          <div className="stepper">
+            <button onClick={() => updatePart(part.id, { n: clampInputs((part.n ?? 2) - 1) })} disabled={(part.n ?? 2) <= MIN_INPUTS} aria-label="减少输入">
+              −
+            </button>
+            <output data-testid="input-count">{clampInputs(part.n)}</output>
+            <button onClick={() => updatePart(part.id, { n: clampInputs((part.n ?? 2) + 1) })} disabled={(part.n ?? 2) >= MAX_INPUTS} aria-label="增加输入">
+              +
+            </button>
+          </div>
+        </label>
+      )}
+      {k === 'const' && (
+        <label className="field">
+          <span>值</span>
+          <div className="seg">
+            {[0, 1].map((v) => (
+              <button key={v} className={part.value === v ? 'on' : ''} onClick={() => updatePart(part.id, { value: v as 0 | 1 })}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </label>
+      )}
+      {k === 'clock' && (
+        <label className="field">
+          <span>每几拍翻转</span>
+          <div className="stepper">
+            <button onClick={() => updatePart(part.id, { period: Math.max(1, (part.period ?? 1) - 1) })} disabled={(part.period ?? 1) <= 1}>
+              −
+            </button>
+            <output>{part.period ?? 1}</output>
+            <button onClick={() => updatePart(part.id, { period: Math.min(64, (part.period ?? 1) + 1) })}>+</button>
+          </div>
+        </label>
+      )}
+      {k === 'led' && (
+        <label className="field">
+          <span>颜色</span>
+          <div className="seg">
+            {LED_COLORS.map(([c, name]) => (
+              <button key={c} className={`swatch led-${c} ${(part.color ?? 'red') === c ? 'on' : ''}`} onClick={() => updatePart(part.id, { color: c })} title={name}>
+                {name}
+              </button>
+            ))}
+          </div>
+        </label>
+      )}
+      {k === 'in' && (
+        <p className="tip">
+          当前值 <b>{simctl.sim.getInput(part.id) ?? 0}</b>。点击画布上的引脚切换。{project.chips.length > 0 || store.get().editing !== MAIN_ID ? '在芯片内部，输入引脚就是芯片的输入接口。' : ''}
+        </p>
+      )}
+      {k === 'button' && <p className="tip">按住为 1，松开为 0。</p>}
+      {(k === 'dff' || k === 'jkff' || k === 'tff') && <p className="tip">在时钟输入的上升沿（0→1）动作。底部的 R 是异步清零端，接 1 时 Q 立即变 0，可以不接。</p>}
+      {k === 'tri' && <p className="tip">EN=1 时输出等于输入；EN=0 时输出高阻（Z），不影响导线上的其他信号。</p>}
+      {k === 'mux' && <p className="tip">S=0 选输入 0，S=1 选输入 1。</p>}
+      {k === 'chip' && def && (
+        <>
+          <p className="tip">
+            芯片“{def.name}”，{def.parts.filter((p) => p.kind === 'in').length} 个输入、{def.parts.filter((p) => p.kind === 'out').length} 个输出。
+          </p>
+          <button className="btn wide" onClick={() => enterCircuit(def.id)}>
+            查看内部
+          </button>
+        </>
+      )}
+      {k === 'chip' && !def && <p className="tip warn">这个芯片的定义已经被删除了。</p>}
+      {k !== 'text' && (
+        <div className="row">
+          <button className="btn" onClick={() => rotateSelection(-1)} title="逆时针旋转（Shift+R）">
+            ⟲ 旋转
+          </button>
+          <button className="btn" onClick={() => rotateSelection(1)} title="顺时针旋转（R）">
+            ⟳ 旋转
+          </button>
+        </div>
+      )}
+      {!part.locked && (
+        <button className="btn danger wide" onClick={deleteSelection}>
+          删除（Delete）
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CircuitInfo() {
+  const project = useEditor((s) => s.project);
+  const editing = useEditor((s) => s.editing);
+  const workspace = useEditor((s) => s.workspace);
+  useSimVersion();
+  const c = findCircuit(project, editing) ?? project.main;
+  const stats = circuitStats(project, editing, simctl.nl);
+  return (
+    <div className="props">
+      <h2>{editing === MAIN_ID ? (workspace.mode === 'level' ? '闯关电路' : '主电路') : '芯片'}</h2>
+      {editing !== MAIN_ID && (
+        <label className="field">
+          <span>芯片名字</span>
+          <LazyInput value={c.name} onCommit={(v) => renameCircuit(c.id, v)} />
+        </label>
+      )}
+      <dl className="stats">
+        <dt>元件</dt>
+        <dd>{stats.parts}</dd>
+        <dt>导线</dt>
+        <dd>{stats.wires}</dd>
+        <dt>逻辑门</dt>
+        <dd>{stats.gates}</dd>
+        {stats.flatGates !== stats.gates && (
+          <>
+            <dt>展开芯片后</dt>
+            <dd>{stats.flatGates} 个门</dd>
+          </>
+        )}
+        <dt>最长门级路径</dt>
+        <dd>{stats.depth} 级</dd>
+      </dl>
+      {editing === MAIN_ID && workspace.mode === 'free' && c.parts.some((p) => p.kind === 'in' || p.kind === 'out') && (
+        <button className="btn wide" onClick={() => createChip(currentCircuit(), c.name === '主电路' ? '新芯片' : c.name)}>
+          把当前电路复制为芯片
+        </button>
+      )}
+      <div className="help-mini">
+        <p>
+          <b>放元件</b>：点左侧元件，或拖到画布上。
+        </p>
+        <p>
+          <b>连线</b>：从一个引脚拖到另一个引脚；也可以先点一个引脚，再点另一个。
+        </p>
+        <p>
+          <b>移动视图</b>：拖动空白处；滚轮或双指缩放。<b>框选</b>：按住 Shift 拖动。
+        </p>
+        <p>
+          <b>快捷键</b>：Delete 删除、R 旋转、Ctrl+Z/Y 撤销重做、Ctrl+C/V 复制粘贴、空格 运行/暂停、. 单步。
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function Inspector() {
+  const selParts = useEditor((s) => s.selParts);
+  const selWires = useEditor((s) => s.selWires);
+  const project = useEditor((s) => s.project);
+  const editing = useEditor((s) => s.editing);
+  const c = findCircuit(project, editing) ?? project.main;
+  if (selParts.length === 1 && selWires.length === 0) {
+    const part = c.parts.find((p) => p.id === selParts[0]);
+    if (part) return <PartProps part={part} />;
+  }
+  if (selParts.length + selWires.length > 0) {
+    return (
+      <div className="props">
+        <h2>{selParts.length ? `已选 ${selParts.length} 个元件` : ''}{selWires.length ? `${selParts.length ? '、' : '已选 '}${selWires.length} 根导线` : ''}</h2>
+        {selParts.length > 0 && (
+          <div className="row">
+            <button className="btn" onClick={() => rotateSelection(-1)}>
+              ⟲ 旋转
+            </button>
+            <button className="btn" onClick={() => rotateSelection(1)}>
+              ⟳ 旋转
+            </button>
+          </div>
+        )}
+        <button className="btn danger wide" onClick={deleteSelection}>
+          删除（Delete）
+        </button>
+        <p className="tip">Ctrl+C 复制、Ctrl+V 粘贴、Ctrl+D 原地复制一份。</p>
+      </div>
+    );
+  }
+  return <CircuitInfo />;
+}

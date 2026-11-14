@@ -57,6 +57,8 @@ export interface Wire {
   id: string;
   a: PinRef;
   b: PinRef;
+  /** Position of the wire's middle segment (x or y, see geometry.bendAxis); automatic when absent. */
+  bend?: number;
 }
 
 export interface Circuit {

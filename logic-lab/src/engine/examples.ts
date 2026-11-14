@@ -20,7 +20,7 @@ function project(main: Circuit, chips: Circuit[] = []): Project {
 
 function halfAdder(): Project {
   const b = new CircuitBuilder('main', '半加器');
-  b.add('text', 0, -5, { text: '半加器：S = A ⊕ B，C = A·B。点击左边的输入切换 0/1。' });
+  b.add('text', 0, -5, { text: '半加器：S 是 A、B 的异或，C 是 A、B 的与。点击左边的输入引脚切换 0/1。' });
   b.add('in', 0, 1, { id: 'A', label: 'A' });
   b.add('in', 0, 9, { id: 'B', label: 'B' });
   b.add('xor', 8, 1, { id: 'x' });
@@ -67,7 +67,8 @@ function adder4(): Project {
   b.wire('zero', 'F0.Ci');
   for (let i = 0; i < 3; i++) b.wire(`F${i}.Co`, `F${i + 1}.Ci`);
   b.add('hex', 32, 0, { id: 'sum', label: '和' });
-  for (let i = 0; i < 4; i++) b.wire(`F${i}.S`, `sum.d${i}`);
+  // Stagger the vertical runs so the four sum wires don't overlap.
+  for (let i = 0; i < 4; i++) b.wire(`F${i}.S`, `sum.d${i}`, i === 0 ? undefined : 24 + 2 * i);
   b.add('led', 32, 32, { id: 'cout', label: '进位', color: 'amber' });
   b.wire('F3.Co', 'cout.i');
   p.main = b.build();
@@ -185,13 +186,12 @@ function ringOscillator(): Project {
 
 function hazard(): Project {
   const b = new CircuitBuilder('main', '竞争冒险');
-  b.add('text', 0, -6, { text: 'Y = A·¬A 理论上永远是 0，但非门有延迟：A 从 0 变 1 的瞬间，与门两个输入都是 1，\n输出会出现一个短暂的“毛刺”。打开工具栏的“逐级传播”再拨动 A，就能看到。' });
+  b.add('text', 0, -6, { text: 'Y = A·¬A 理论上永远是 0，但非门有延迟：A 从 0 变 1 的瞬间，与门两个输入都是 1，\n输出会出现一个短暂的“毛刺”。打开工具栏的“逐级传播”再拨动 A，就能看到（波形图里也有）。' });
   b.add('in', 0, 1, { id: 'A', label: 'A' });
-  b.add('not', 6, 6, { id: 'n' });
-  b.add('buf', 6, 0, { id: 'd' });
+  b.add('not', 6, 5, { id: 'n' });
   b.add('and', 14, 1, { id: 'g' });
   b.add('out', 22, 2, { id: 'Y', label: 'Y' });
-  b.wire('A', 'd.i0').wire('A', 'n.i0').wire('d', 'g.i0').wire('n', 'g.i1').wire('g', 'Y.i');
+  b.wire('A', 'g.i0').wire('A', 'n.i0').wire('n', 'g.i1').wire('g', 'Y.i');
   return project(b.build());
 }
 
