@@ -526,3 +526,21 @@ test('memories: edit ROM contents, place a RAM and a register', async ({ page })
   await page.getByRole('button', { name: '增加数据位数' }).click();
   await expect(page.locator(`[data-pin="${reg}:q4"]`)).toHaveCount(1);
 });
+
+test('export the circuit as SVG and PNG images', async ({ page }) => {
+  await fresh(page);
+  await page.getByTestId('file-menu').click();
+  let download = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: '导出图片（SVG）' }).click();
+  const svg = readFileSync((await (await download).path())!, 'utf8');
+  expect(svg).toMatch(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox=/);
+  expect(svg).toContain('kind-xor');
+  expect(svg).toContain('--w1:');
+  expect(svg).not.toContain('class="pin-hit"'); // interaction layers are stripped
+  await page.getByTestId('file-menu').click();
+  download = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: '导出图片（PNG）' }).click();
+  const png = readFileSync((await (await download).path())!);
+  expect([...png.subarray(1, 4)].map((c) => String.fromCharCode(c)).join('')).toBe('PNG');
+  expect(png.readUInt32BE(16)).toBeGreaterThan(400); // width
+});

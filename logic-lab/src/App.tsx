@@ -31,6 +31,7 @@ import {
   type Tab
 } from './store/store.ts';
 import { Canvas } from './ui/Canvas.tsx';
+import { exportPng, exportSvg } from './ui/exportImage.ts';
 import { ChipsPanel } from './ui/ChipsPanel.tsx';
 import { ExamplesDialog, ExprDialog, HelpDialog } from './ui/Dialogs.tsx';
 import { Inspector } from './ui/Inspector.tsx';
@@ -143,6 +144,16 @@ function useShareLink() {
   }, []);
 }
 
+async function exportImage(kind: 'svg' | 'png') {
+  const name = currentCircuit().name || '电路';
+  try {
+    const ok = kind === 'svg' ? exportSvg(name) : await exportPng(name);
+    toast(ok ? `已导出${kind.toUpperCase()}图片` : '电路是空的，没有可导出的内容', ok ? 'ok' : 'error');
+  } catch (e) {
+    toast(`导出失败：${(e as Error).message}`, 'error');
+  }
+}
+
 function FileMenu() {
   const [open, setOpen] = useState(false);
   const workspace = useEditor((s) => s.workspace);
@@ -207,6 +218,13 @@ function FileMenu() {
           </button>
           <button role="menuitem" onClick={run(share)}>
             复制分享链接
+          </button>
+          <hr />
+          <button role="menuitem" onClick={run(() => exportImage('svg'))}>
+            导出图片（SVG）
+          </button>
+          <button role="menuitem" onClick={run(() => exportImage('png'))}>
+            导出图片（PNG）
           </button>
         </div>
       )}
