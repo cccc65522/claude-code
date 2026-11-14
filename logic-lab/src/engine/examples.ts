@@ -216,6 +216,63 @@ function romDisplay(): Project {
   return project(b.build());
 }
 
+/**
+ * ALU of the tiny CPU, generated from equations: op 00 = keep A, 01 = B (load),
+ * 10 = A + B (ripple carry written out; shared subexpressions are built once), 11 = A xor B.
+ */
+export function aluChip(): Circuit {
+  const carry: string[] = ['0'];
+  for (let i = 1; i < 4; i++) carry.push(`(a${i - 1} & b${i - 1} | (a${i - 1} ^ b${i - 1}) & ${carry[i - 1]})`);
+  carry[1] = '(a0 & b0)';
+  const sum = (i: number) => (i === 0 ? 'a0 ^ b0' : `a${i} ^ b${i} ^ ${carry[i]}`);
+  const src = [3, 2, 1, 0]
+    .map((i) => `r${i} = !op1 & !op0 & a${i} | !op1 & op0 & b${i} | op1 & !op0 & (${sum(i)}) | op1 & op0 & (a${i} ^ b${i})`)
+    .join('\n');
+  const { circuit } = synthesize(parseEquations(src), {
+    inputOrder: ['op1', 'op0', 'a3', 'a2', 'a1', 'a0', 'b3', 'b2', 'b1', 'b0'],
+    circuitId: 'alu',
+    circuitName: 'ALU',
+    idPrefix: 'u'
+  });
+  circuit.parts.push({ id: 'note', kind: 'text', x: 0, y: -5, rot: 0, text: 'op=00 保持 A，01 输出 B，10 输出 A+B，11 输出 A⊕B。由表达式自动生成。' });
+  return circuit;
+}
+
+/** Program of the tiny CPU: (op << 4) | operand. */
+export const CPU_PROGRAM = [0x11, 0x21, 0x22, 0x24, 0x27, 0x35, 0x26, 0x00, 0x19, 0x3f, 0x29, 0, 0, 0, 0, 0];
+
+function tinyCpu(): Project {
+  const alu = aluChip();
+  const p = emptyProject();
+  p.chips = [alu];
+  const b = new CircuitBuilder('main', '简易 CPU', { project: p });
+  b.add('text', 0, -9, {
+    text: '一台 4 位累加器 CPU：PC（四个 T 触发器）每拍加一，从 ROM 取出指令，ALU 算出结果，时钟上升沿存进累加器 ACC。\n指令 = 操作码×16 + 操作数：1x 载入 x，2x 加 x，3x 异或 x，00 空操作。程序：载入 1，加 1，加 2，加 4，加 7，异或 5，加 6……\n点“单拍”一步步看 ACC 的变化，或者选中 ROM 改程序。'
+  });
+  const pin = (label: string) => alu.parts.find((x) => (x.kind === 'in' || x.kind === 'out') && x.label === label)!.id;
+  b.add('const', 0, 0, { id: 'one', value: 1 });
+  b.add('clock', 0, 26, { id: 'clk', label: 'CLK', period: 2 });
+  for (let i = 0; i < 4; i++) b.add('tff', 6 + i * 8, 0, { id: `PC${i}` });
+  for (let i = 0; i < 4; i++) b.wire('one', `PC${i}.t`);
+  b.wire('clk', 'PC0.c');
+  for (let i = 1; i < 4; i++) b.wire(`PC${i - 1}.nq`, `PC${i}.c`);
+  b.add('hex', 42, 0, { id: 'pcHex', label: 'PC' });
+  for (let i = 0; i < 4; i++) b.wire(`PC${i}.q`, `pcHex.d${i}`);
+  b.add('rom', 42, 12, { id: 'rom', label: '程序', abits: 4, dbits: 6, data: CPU_PROGRAM });
+  for (let i = 0; i < 4; i++) b.wire(`PC${i}.q`, `rom.a${i}`);
+  b.add('chip', 56, 10, { id: 'alu', chip: 'alu' });
+  for (let i = 0; i < 4; i++) b.wire(`rom.d${i}`, `alu.${pin(`b${i}`)}`);
+  b.wire('rom.d4', `alu.${pin('op0')}`).wire('rom.d5', `alu.${pin('op1')}`);
+  b.add('reg', 74, 10, { id: 'acc', label: 'ACC' });
+  for (let i = 0; i < 4; i++) b.wire(`alu.${pin(`r${i}`)}`, `acc.d${i}`);
+  b.wire('clk', 'acc.c');
+  for (let i = 0; i < 4; i++) b.wire(`acc.q${i}`, `alu.${pin(`a${i}`)}`, 32 + i);
+  b.add('hex', 86, 9, { id: 'accHex', label: 'ACC' });
+  for (let i = 0; i < 4; i++) b.wire(`acc.q${i}`, `accHex.d${i}`);
+  p.main = b.build();
+  return p;
+}
+
 function tristateBus(): Project {
   const b = new CircuitBuilder('main', '三态总线');
   b.add('text', 0, -6, { text: '两个三态门共用一根总线。只打开一个使能端 EN 时，总线上是它的数据；\n都关上时总线悬空（Z，虚线）；都打开且数据不同时短路（E，红色）。' });
@@ -260,6 +317,7 @@ export const EXAMPLES: Example[] = [
   { id: 'counter4', title: '4 位计数器', desc: 'T 触发器 + 时钟 + 十六进制显示 + 波形图', build: counter4 },
   { id: 'decimal', title: '十进制计数器', desc: '异步清零 + 自动生成的 BCD 七段译码器', build: decimalCounter },
   { id: 'rom7', title: 'ROM 查表显示', desc: 'ROM 存着 0–F 的七段字形，计数器扫过地址', build: romDisplay },
+  { id: 'cpu', title: '简易 CPU', desc: 'PC + 程序 ROM + 自动生成的 ALU + 累加器寄存器', build: tinyCpu },
   { id: 'traffic', title: '交通灯状态机', desc: '三个 D 触发器 + 由表达式生成的状态转移逻辑', build: trafficLight },
   { id: 'tristate', title: '三态总线', desc: '高阻态 Z 与短路 E', build: tristateBus },
   { id: 'ring', title: '环形振荡器', desc: '没有稳定状态的电路，演示振荡检测', build: ringOscillator },

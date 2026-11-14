@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { truthTable } from '../../src/engine/analyze.ts';
 import { compile } from '../../src/engine/compile.ts';
+import * as EXAMPLES_MODULE from '../../src/engine/examples.ts';
 import { bcdDecoderChip, EXAMPLES } from '../../src/engine/examples.ts';
 import { checkLevel, LEVELS, levelCircuit, type Level } from '../../src/engine/levels.ts';
 import { decodeShare, encodeShare, parseProject, projectToJSON } from '../../src/engine/serialize.ts';
@@ -431,4 +432,41 @@ test('ROM example shows 0–F in order', () => {
     if (d !== seen[seen.length - 1]) seen.push(d);
   }
   assert.deepEqual(seen.slice(0, 17), [...Array(16).keys(), 0]);
+});
+
+test('tiny CPU runs its program: ACC after each instruction', () => {
+  const p = EXAMPLES.find((e) => e.id === 'cpu')!.build();
+  const nl = compile(p);
+  assert.deepEqual(nl.errors, []);
+  const sim = new Simulator(nl);
+  sim.settle();
+  const acc = () => [0, 1, 2, 3].reduce((s, i) => s + (sim.pinValue('accHex', `d${i}`) << i), 0);
+  const pc = () => [0, 1, 2, 3].reduce((s, i) => s + (sim.pinValue('pcHex', `d${i}`) << i), 0);
+  const seen: number[] = [];
+  let clk = sim.pinValue('clk', 'o');
+  for (let t = 0; t < 4 * 12; t++) {
+    sim.tick();
+    const now = sim.pinValue('clk', 'o');
+    if (clk === 0 && now === 1) seen.push(acc());
+    clk = now;
+  }
+  // LOAD 1, ADD 1, ADD 2, ADD 4, ADD 7, XOR 5, ADD 6 (wraps), NOP, LOAD 9, XOR F, ADD 9, NOP
+  assert.deepEqual(seen, [1, 2, 4, 8, 15, 10, 0, 0, 9, 6, 15, 15]);
+  assert.equal(pc(), 12);
+});
+
+test('ALU chip: all four operations on every operand pair', () => {
+  const { aluChip } = EXAMPLES_MODULE;
+  const alu = aluChip();
+  const p = { version: 1 as const, main: { id: 'main', name: 'm', parts: [], wires: [] }, chips: [alu] };
+  const res = truthTable(p, 'alu');
+  assert.ok(res.ok);
+  if (!res.ok) return;
+  res.table.rows.forEach((row, r) => {
+    const op = r >> 8;
+    const a = (r >> 4) & 15;
+    const b = r & 15;
+    const want = [a, b, (a + b) & 15, a ^ b][op];
+    assert.equal(row.reduce<number>((s, v, k) => s + (v << (3 - k)), 0), want, `op ${op} a ${a} b ${b}`);
+  });
 });
