@@ -225,3 +225,106 @@ export function circuitStats(project: Project, circuitId: string, nl?: Netlist):
     depth: logicDepth(net)
   };
 }
+
+// ---------------------------------------------------------------------------
+// State machines: state transition table of a clocked circuit
+
+export const MAX_FLOPS = 6;
+export const MAX_FSM_INPUTS = 4;
+
+export interface StateRow {
+  state: number;
+  input: number;
+  /** Next state after one clock cycle, or -1 when it is not fully known. */
+  next: number;
+  /** Outputs during this state with these inputs (before the clock edge). */
+  out: Val[];
+}
+
+export interface StateTable {
+  flops: Signal[];
+  inputs: Signal[];
+  outputs: Signal[];
+  rows: StateRow[];
+  /** States reachable from the reset state (all flip-flops 0). */
+  reachable: number[];
+  /** Outputs depend only on the state (Moore machine). */
+  moore: boolean;
+  period: number;
+}
+
+export type StateResult = { ok: true; table: StateTable } | { ok: false; error: string };
+
+export function stateTable(project: Project, circuitId: string): StateResult {
+  const circuit = findCircuit(project, circuitId);
+  if (!circuit) return { ok: false, error: '找不到电路' };
+  const nl = compile(project, circuitId);
+  if (nl.errors.some((e) => e.kind !== 'dangling-wire')) return { ok: false, error: nl.errors[0].message };
+  // State bits: flip-flops of this circuit top to bottom, then those inside chips.
+  const flops = nl.comps
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => c.kind === 'dff' || c.kind === 'jkff' || c.kind === 'tff')
+    .sort((a, b) => Number(b.c.root) - Number(a.c.root) || (a.c.root ? a.c.part.y - b.c.part.y || a.c.part.x - b.c.part.x : a.i - b.i));
+  const clocks = nl.comps.filter((c) => c.kind === 'clock');
+  if (!flops.length) return { ok: false, error: '电路里没有触发器。' };
+  if (flops.length > MAX_FLOPS) return { ok: false, error: `触发器有 ${flops.length} 个，最多支持 ${MAX_FLOPS} 个。` };
+  if (!clocks.length) return { ok: false, error: '电路里没有时钟元件，无法推算下一个状态。' };
+  const periods = new Set(clocks.map((c) => Math.max(1, Math.round(c.part.period ?? 1))));
+  if (periods.size > 1) return { ok: false, error: '电路里有几个周期不同的时钟，无法确定“一个时钟周期”。' };
+  const period = [...periods][0];
+  const { inputs, outputs } = chipInterface(circuit);
+  if (inputs.length > MAX_FSM_INPUTS) return { ok: false, error: `输入引脚有 ${inputs.length} 个，状态表最多支持 ${MAX_FSM_INPUTS} 个。` };
+  const outs = [...outputs, ...circuit.parts.filter((p) => p.kind === 'led')];
+
+  const sim = new Simulator(nl);
+  const nf = flops.length;
+  const ni = inputs.length;
+  const rows: StateRow[] = [];
+  for (let state = 0; state < 1 << nf; state++) {
+    for (let input = 0; input < 1 << ni; input++) {
+      sim.reset();
+      flops.forEach(({ i }, k) => (sim.q[i] = (state >> (nf - 1 - k)) & 1));
+      inputs.forEach((p, k) => sim.setInput(p.id, ((input >> (ni - 1 - k)) & 1) as 0 | 1));
+      sim.settle();
+      const out = outs.map((p) => sim.pinValue(p.id, 'i'));
+      // One full clock cycle: the clock rises after `period` ticks and falls after another `period`.
+      for (let t = 0; t < 2 * period; t++) sim.tick();
+      let next = 0;
+      for (const [k, { i }] of flops.entries()) {
+        const q = sim.q[i];
+        if (q > 1) {
+          next = -1;
+          break;
+        }
+        next |= q << (nf - 1 - k);
+      }
+      rows.push({ state, input, next, out });
+    }
+  }
+  const reachable = new Set<number>([0]);
+  const queue = [0];
+  while (queue.length) {
+    const s = queue.shift()!;
+    for (const r of rows) if (r.state === s && r.next >= 0 && !reachable.has(r.next)) {
+      reachable.add(r.next);
+      queue.push(r.next);
+    }
+  }
+  const moore = rows.every((r) => {
+    const first = rows.find((x) => x.state === r.state)!;
+    return r.out.every((v, k) => v === first.out[k]);
+  });
+  const flopLabel = (c: (typeof flops)[number]['c'], k: number) => c.part.label?.trim() || `F${k + 1}`;
+  return {
+    ok: true,
+    table: {
+      flops: flops.map(({ c }, k) => ({ id: c.path, label: flopLabel(c, k) })),
+      inputs: inputs.map((p, i) => ({ id: p.id, label: pinLabel(p, i, 'I') })),
+      outputs: outs.map((p, i) => ({ id: p.id, label: p.label?.trim() || (p.kind === 'led' ? `灯${i + 1}` : `O${i + 1}`) })),
+      rows,
+      reachable: [...reachable].sort((a, b) => a - b),
+      moore,
+      period
+    }
+  };
+}

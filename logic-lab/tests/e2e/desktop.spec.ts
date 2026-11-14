@@ -482,3 +482,20 @@ test('the built app is installable: manifest and service worker', async ({ page 
   expect(manifest.short_name).toBe('门道');
   await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length), { timeout: 10000 }).toBe(1);
 });
+
+test('state diagram of the traffic light follows the running machine', async ({ page }) => {
+  await fresh(page);
+  await openExample(page, 'traffic');
+  await page.locator('.tabs').getByRole('tab', { name: '真值表' }).click();
+  await page.getByTestId('fsm-tab').click();
+  await expect(page.getByTestId('state-table').locator('tbody tr')).toHaveCount(8);
+  await expect(page.locator('.fsm-node')).toHaveCount(8);
+  await expect(page.locator('.fsm-node.current')).toHaveAttribute('data-state', '000');
+  // CLK flips every 2 ticks: one full cycle is 4 ticks.
+  for (let i = 0; i < 4; i++) await page.getByTestId('step').click();
+  await expect(page.locator('.fsm-node.current')).toHaveAttribute('data-state', '001');
+  await expect(page.locator('.canvas .part.kind-led circle.led-green')).toHaveClass(/v1/);
+  for (let i = 0; i < 12; i++) await page.getByTestId('step').click();
+  await expect(page.locator('.fsm-node.current')).toHaveAttribute('data-state', '100');
+  await expect(page.locator('.canvas .part.kind-led circle.led-amber')).toHaveClass(/v1/);
+});

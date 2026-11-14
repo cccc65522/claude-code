@@ -374,3 +374,46 @@ test('project validation and share links round-trip', async () => {
   assert.equal(cleaned.main.parts[0].x, 1);
   assert.equal(cleaned.main.wires.length, 0);
 });
+
+import { stateTable } from '../../src/engine/analyze.ts';
+
+test('state table of the traffic light: an 8-state cycle, Moore outputs', () => {
+  const res = stateTable(EXAMPLES.find((e) => e.id === 'traffic')!.build(), 'main');
+  assert.ok(res.ok);
+  if (!res.ok) return;
+  const t = res.table;
+  assert.deepEqual(t.flops.map((f) => f.label), ['Q2', 'Q1', 'Q0']);
+  assert.equal(t.inputs.length, 0);
+  assert.deepEqual(t.rows.map((r) => r.next), [1, 2, 3, 4, 5, 6, 7, 0]);
+  assert.deepEqual(t.reachable, [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(t.moore, true);
+  // Lamps in order red, amber, green.
+  assert.deepEqual(t.outputs.map((o) => o.label), ['红', '黄', '绿']);
+  assert.deepEqual(t.rows.map((r) => r.out.join('')), ['001', '001', '001', '001', '010', '100', '100', '100']);
+});
+
+test('state table with an input, and error cases', () => {
+  // A toggle flip-flop with an enable input: T = EN.
+  const p = { version: 1 as const, chips: [], main: { id: 'main', name: 'm', wires: [] as never[], parts: [] as never[] } } as unknown as import('../../src/engine/types.ts').Project;
+  p.main.parts.push(
+    { id: 'en', kind: 'in', x: 0, y: 0, rot: 0, label: 'EN' },
+    { id: 'clk', kind: 'clock', x: 0, y: 6, rot: 0, period: 3 },
+    { id: 't', kind: 'tff', x: 6, y: 0, rot: 0, label: 'Q' },
+    { id: 'y', kind: 'out', x: 14, y: 0, rot: 0, label: 'Y' }
+  );
+  p.main.wires.push(
+    { id: 'w1', a: { part: 'en', pin: 'o' }, b: { part: 't', pin: 't' } },
+    { id: 'w2', a: { part: 'clk', pin: 'o' }, b: { part: 't', pin: 'c' } },
+    { id: 'w3', a: { part: 't', pin: 'q' }, b: { part: 'y', pin: 'i' } }
+  );
+  const res = stateTable(p, 'main');
+  assert.ok(res.ok);
+  if (!res.ok) return;
+  assert.equal(res.table.period, 3);
+  // (state, EN) → next: hold when EN=0, toggle when EN=1.
+  assert.deepEqual(res.table.rows.map((r) => `${r.state}${r.input}>${r.next}`), ['00>0', '01>1', '10>1', '11>0']);
+  assert.deepEqual(res.table.reachable, [0, 1]);
+  const half = stateTable(EXAMPLES.find((e) => e.id === 'half-adder')!.build(), 'main');
+  assert.equal(half.ok, false);
+  if (!half.ok) assert.match(half.error, /没有触发器/);
+});

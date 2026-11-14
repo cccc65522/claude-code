@@ -36,7 +36,7 @@ import { ExamplesDialog, ExprDialog, HelpDialog } from './ui/Dialogs.tsx';
 import { Inspector } from './ui/Inspector.tsx';
 import { LevelsPanel } from './ui/LevelsPanel.tsx';
 import { Palette } from './ui/Palette.tsx';
-import { TruthPanel } from './ui/TruthPanel.tsx';
+import { AnalysisPanel } from './ui/TruthPanel.tsx';
 import { Waveform } from './ui/Waveform.tsx';
 
 const save = () => saveProject(simctl.inputValues());
@@ -353,7 +353,7 @@ function SidePanel() {
       </div>
       <div className="panel">
         {active === 'props' && <Inspector />}
-        {active === 'table' && <TruthPanel />}
+        {active === 'table' && <AnalysisPanel />}
         {active === 'chips' && <ChipsPanel />}
         {active === 'levels' && <LevelsPanel />}
       </div>

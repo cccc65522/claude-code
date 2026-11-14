@@ -182,7 +182,7 @@ function trafficLight(): Project {
   const pin = (label: string, kind: 'in' | 'out') => logic.parts.find((x) => x.kind === kind && x.label === label)!.id;
   b.add('chip', 14, 0, { id: 'L', chip: 'traffic' });
   // Flip-flops staggered so their feedback wires don't share a vertical run.
-  ['2', '1', '0'].forEach((k, i) => b.add('dff', 32 + 3 * i, i * 8, { id: `F${k}` }));
+  ['2', '1', '0'].forEach((k, i) => b.add('dff', 32 + 3 * i, i * 8, { id: `F${k}`, label: `Q${k}` }));
   b.add('clock', 22, 24, { id: 'clk', label: 'CLK', period: 2 });
   for (const k of ['2', '1', '0']) b.wire('clk', `F${k}.c`);
   b.wire(`L.${pin('D2', 'out')}`, 'F2.d');

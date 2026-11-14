@@ -1510,3 +1510,53 @@ pre.code.preview {
   fill: var(--dim);
   pointer-events: none;
 }
+
+/* state diagram */
+.analysis-tabs {
+  margin: 10px 14px 0;
+}
+.fsm {
+  width: 100%;
+  max-height: 360px;
+  margin: 6px 0;
+}
+.fsm-edge path,
+.fsm-edge circle {
+  fill: none;
+  stroke: var(--dim);
+  stroke-width: 1.4;
+}
+.fsm-arrowhead {
+  fill: var(--dim);
+}
+.fsm-edge text {
+  font: 11px ui-monospace, Menlo, monospace;
+  fill: var(--accent);
+  text-anchor: middle;
+}
+.fsm-node circle {
+  fill: var(--panel);
+  stroke: var(--part-stroke);
+  stroke-width: 1.6;
+}
+.fsm-node.current circle {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 2.6;
+}
+.fsm-node.unreachable {
+  opacity: 0.4;
+}
+.fsm-bits {
+  font: 600 12px ui-monospace, Menlo, monospace;
+  text-anchor: middle;
+  fill: var(--text);
+}
+.fsm-out {
+  font: 10px ui-monospace, Menlo, monospace;
+  text-anchor: middle;
+  fill: var(--w1);
+}
+.tt tr.faded td {
+  opacity: 0.45;
+}

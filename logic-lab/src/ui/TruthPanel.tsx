@@ -3,7 +3,9 @@ import { tableToText, truthTable, type TruthTable } from '../engine/analyze.ts';
 import { parseEquations, synthesize } from '../engine/expr.ts';
 import { covers, literalCount, literals, sopToText, type Implicant } from '../engine/qm.ts';
 import { VAL_NAME } from '../engine/values.ts';
+import { simctl, useSimVersion } from '../store/simctl.ts';
 import { createChip, toast, useEditor } from '../store/store.ts';
+import { StatePanel } from './StatePanel.tsx';
 import { valClass } from './PartShape.tsx';
 
 function Lit({ name, neg }: { name: string; neg: boolean }) {
@@ -98,6 +100,34 @@ function KMap({ table, k, hover }: { table: TruthTable; k: number; hover: Implic
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** Analysis tab: truth table, plus a state diagram for clocked circuits. */
+export function AnalysisPanel() {
+  useSimVersion();
+  const hasFlops = simctl.nl.comps.some((c) => c.kind === 'dff' || c.kind === 'jkff' || c.kind === 'tff');
+  const [view, setView] = useState<'truth' | 'fsm'>('truth');
+  if (!hasFlops) return <TruthPanel />;
+  return (
+    <>
+      <div className="seg analysis-tabs" role="tablist">
+        <button role="tab" aria-selected={view === 'truth'} className={view === 'truth' ? 'on' : ''} onClick={() => setView('truth')}>
+          真值表
+        </button>
+        <button role="tab" aria-selected={view === 'fsm'} className={view === 'fsm' ? 'on' : ''} onClick={() => setView('fsm')} data-testid="fsm-tab">
+          状态图
+        </button>
+      </div>
+      {view === 'truth' ? (
+        <TruthPanel />
+      ) : (
+        <div className="panel-body">
+          <h2>状态转移</h2>
+          <StatePanel />
+        </div>
+      )}
+    </>
   );
 }
 
