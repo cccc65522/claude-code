@@ -129,6 +129,29 @@ test('settings: threshold 1 removes a wrong question after one right answer; val
   assert.equal(store.state.wrong.size, 0);
 });
 
+test('settings changed in quick succession are all kept, also after a reload', async () => {
+  const db = createMemoryDB();
+  const { store } = await freshStore(db);
+  // Both saves start before either has finished, as when two settings are changed right after each other.
+  await Promise.all([store.updateSettings({ masterThreshold: 1 }), store.updateSettings({ instantSingle: false })]);
+  assert.equal(store.state.settings.masterThreshold, 1);
+  assert.equal(store.state.settings.instantSingle, false);
+  const { store: reloaded } = await freshStore(db);
+  assert.equal(reloaded.state.settings.masterThreshold, 1);
+  assert.equal(reloaded.state.settings.instantSingle, false);
+});
+
+test('a settings save that fails leaves the previous settings in place', async () => {
+  const db = createMemoryDB();
+  const { store } = await freshStore(db);
+  const before = store.state.settings;
+  const batch = db.batch;
+  db.batch = async () => { throw new Error('disk full'); };
+  await assert.rejects(store.updateSettings({ masterThreshold: 4 }), /disk full/);
+  db.batch = batch;
+  assert.deepEqual(store.state.settings, before);
+});
+
 test('shuffled options keep the original keys so grading is unaffected', async () => {
   const { store } = await freshStore();
   const parsed = parseImport(JSON.stringify(SAMPLE_BANK), 'sample.json');
