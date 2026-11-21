@@ -1,5 +1,6 @@
 // Offline support: pages are network-first (so a new build is picked up at once),
 // everything else (hashed assets, icons) is cache-first.
+// Only this app's own old caches are cleaned up: other apps on the same origin share Cache Storage.
 const CACHE = 'mendao-v1';
 const CORE = ['./', './manifest.webmanifest', './favicon.svg', './icon-192.png'];
 
@@ -11,7 +12,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('mendao-') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
