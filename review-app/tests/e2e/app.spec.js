@@ -310,6 +310,24 @@ test('works offline after the first visit (service worker)', async ({ page, cont
   await context.setOffline(false);
 });
 
+test('the service worker leaves the other apps on the site alone', async ({ page, context }) => {
+  // Other apps (格算 under sheet/, 弈 under xiangqi/, ...) share the origin's Cache Storage.
+  await page.goto('/manifest.webmanifest');
+  await page.evaluate(async () => {
+    for (const name of ['gesuan-v1', 'yi-xiangqi-v1', 'review-app-v0']) await (await caches.open(name)).put('/x-' + name, new Response('x'));
+  });
+  await loadSample(page);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  const keys = await page.evaluate(() => caches.keys());
+  expect(keys.sort()).toEqual(['gesuan-v1', 'review-app-v1', 'yi-xiangqi-v1']);
+  // Offline, a page in another app's folder must not be answered with 复习本's index.html.
+  await context.setOffline(true);
+  await expect(page.goto('/other-app/')).rejects.toThrow();
+  await context.setOffline(false);
+});
+
 test('downloaded templates and an exported bank import back without errors', async ({ page }) => {
   await loadSample(page);
   await page.goto('/#/banks');
