@@ -1,0 +1,15 @@
+{
+  "name": "门道 · 数字电路实验台",
+  "short_name": "门道",
+  "description": "在浏览器里搭数字逻辑电路：逻辑门、触发器、自定义芯片、真值表、波形图、闯关。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
