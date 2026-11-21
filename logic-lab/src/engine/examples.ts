@@ -20,7 +20,7 @@ function project(main: Circuit, chips: Circuit[] = []): Project {
 
 function halfAdder(): Project {
   const b = new CircuitBuilder('main', '半加器');
-  b.add('text', 0, -5, { text: '半加器：S 是 A、B 的异或，C 是 A、B 的与。点击左边的输入引脚切换 0/1。' });
+  b.add('text', 0, -6, { text: '半加器：S 是 A、B 的异或，C 是 A、B 的与。\n点击左边的输入引脚切换 0/1。' });
   b.add('in', 0, 1, { id: 'A', label: 'A' });
   b.add('in', 0, 9, { id: 'B', label: 'B' });
   b.add('xor', 8, 1, { id: 'x' });
@@ -77,7 +77,7 @@ function adder4(): Project {
 
 function srLatch(): Project {
   const b = new CircuitBuilder('main', 'SR 锁存器');
-  b.add('text', 0, -6, { text: '两个或非门交叉耦合：按一下 S 置 1，按一下 R 清 0，松开后状态保持。\n两个都按住再同时松开，理想电路会振荡（状态栏会提示）。' });
+  b.add('text', 0, -9, { text: '两个或非门交叉耦合：按一下 S 置 1，\n按一下 R 清 0，松开后状态保持。\n两个都按住再同时松开，理想电路会振荡\n（状态栏会提示）。' });
   b.add('button', 0, 1, { id: 'S', label: 'S' });
   b.add('button', 0, 11, { id: 'R', label: 'R' });
   b.add('nor', 8, 1, { id: 'n1' });
@@ -169,7 +169,7 @@ export function trafficLogicChip(): Circuit {
     '红 = Q2 & (Q1 | Q0)'
   ].join('\n');
   const { circuit } = synthesize(parseEquations(src), { inputOrder: ['Q2', 'Q1', 'Q0'], circuitId: 'traffic', circuitName: '交通灯逻辑', idPrefix: 't' });
-  circuit.parts.push({ id: 'note', kind: 'text', x: 0, y: -5, rot: 0, text: '状态 0–3 绿灯，4 黄灯，5–7 红灯；D 是下一个状态。由表达式自动生成。' });
+  circuit.parts.push({ id: 'note', kind: 'text', x: 0, y: -6, rot: 0, text: '状态 0–3 绿灯，4 黄灯，5–7 红灯；\nD 是下一个状态。由表达式自动生成。' });
   return circuit;
 }
 
@@ -275,7 +275,7 @@ function tinyCpu(): Project {
 
 function tristateBus(): Project {
   const b = new CircuitBuilder('main', '三态总线');
-  b.add('text', 0, -6, { text: '两个三态门共用一根总线。只打开一个使能端 EN 时，总线上是它的数据；\n都关上时总线悬空（Z，虚线）；都打开且数据不同时短路（E，红色）。' });
+  b.add('text', 0, -9, { text: '两个三态门共用一根总线。\n只打开一个使能端 EN 时，总线上是它的数据；\n都关上时总线悬空（Z，虚线）；\n都打开且数据不同时短路（E，红色）。' });
   b.add('in', 0, 1, { id: 'D1', label: 'D1', value: 1 });
   b.add('in', 0, 6, { id: 'E1', label: 'EN1', value: 1 });
   b.add('in', 0, 13, { id: 'D2', label: 'D2' });
@@ -301,7 +301,7 @@ function ringOscillator(): Project {
 
 function hazard(): Project {
   const b = new CircuitBuilder('main', '竞争冒险');
-  b.add('text', 0, -6, { text: 'Y = A·¬A 理论上永远是 0，但非门有延迟：A 从 0 变 1 的瞬间，与门两个输入都是 1，\n输出会出现一个短暂的“毛刺”。打开工具栏的“逐级传播”再拨动 A，就能看到（波形图里也有）。' });
+  b.add('text', 0, -10, { text: 'Y = A·¬A 理论上永远是 0，但非门有延迟：\nA 从 0 变 1 的瞬间，与门两个输入都是 1，\n输出会出现一个短暂的“毛刺”。\n打开工具栏的“逐级传播”再拨动 A 就能看到，\n波形图里也有。' });
   b.add('in', 0, 1, { id: 'A', label: 'A' });
   b.add('not', 6, 5, { id: 'n' });
   b.add('and', 14, 1, { id: 'g' });
