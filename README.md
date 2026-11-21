@@ -54,4 +54,6 @@ npm run test:e2e   # 浏览器端到端测试（需要 Playwright 的 Chromium�
 
 ## 发布
 
-`gh-pages` 分支就是线上网站的内容：根目录是复习本，其他应用各占一个子文件夹。原生 JavaScript 的项目复制运行需要的文件（`index.html`、`css/`、`js/`、`icons/`、`manifest.webmanifest`、`sw.js`）；Vite 项目复制 `npm run build` 生成的 `dist/`。
+合并到默认分支后，GitHub Actions 先跑完所有应用的测试，全部通过就自动发布：[`scripts/build-site.sh`](scripts/build-site.sh) 把整个网站组装好，放进 `gh-pages` 分支，GitHub Pages 再把它发布出去，一般几分钟内就能在线上看到。
+
+`gh-pages` 分支的结构：根目录是复习本，其他应用各占一个子文件夹。原生 JavaScript 的项目只复制运行需要的文件（`index.html`、`css/`、`js/`、`icons/`、`manifest.webmanifest`、`sw.js`），Vite 项目复制 `npm run build` 生成的 `dist/`。想在本地看看发布出去会是什么样，运行 `scripts/build-site.sh 某个目录`。
