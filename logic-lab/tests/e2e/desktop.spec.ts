@@ -483,6 +483,16 @@ test('the built app is installable: manifest and service worker', async ({ page 
   await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length), { timeout: 10000 }).toBe(1);
 });
 
+test('works offline after a single visit', async ({ page, context }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toBeVisible();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toBeVisible();
+  await context.setOffline(false);
+});
+
 test('state diagram of the traffic light follows the running machine', async ({ page }) => {
   await fresh(page);
   await openExample(page, 'traffic');
