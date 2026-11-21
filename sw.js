@@ -1,4 +1,7 @@
 // Offline support: network first (so updates show up right away), cached copy when offline.
+// 复习本 sits at the site root, and other apps live in sub-folders next to it (sheet/, xiangqi/, ...).
+// They share one Cache Storage and fall inside this worker's scope, so it keeps to its own files:
+// it only cleans up its own old caches and only answers requests for its own files.
 const CACHE = 'review-app-v1';
 const ASSETS = [
   './',
@@ -35,14 +38,20 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k.startsWith('review-app-') && k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
+const BASE = new URL('./', self.location).pathname;
+const OWN = /^(|index\.html|manifest\.webmanifest|(css|js|icons)\/.*)$/;
+function isOwn(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith(BASE) && OWN.test(url.pathname.slice(BASE.length));
+}
+
 self.addEventListener('fetch', event => {
   const req = event.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  if (req.method !== 'GET' || !isOwn(new URL(req.url))) return;
   event.respondWith(
     fetch(req)
       .then(res => {

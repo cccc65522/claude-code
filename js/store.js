@@ -228,11 +228,19 @@ export function createStore(db, { now = () => Date.now(), rng = Math.random } = 
   // ------------------------------------------------------------ settings, backup, restore
 
   async function updateSettings(patch) {
-    const next = { ...state.settings, ...patch };
+    const prev = state.settings;
+    const next = { ...prev, ...patch };
     next.masterThreshold = Math.min(5, Math.max(1, Math.round(Number(next.masterThreshold) || DEFAULT_SETTINGS.masterThreshold)));
     next.defaultCount = Math.max(0, Math.round(Number(next.defaultCount) || 0));
-    await db.batch([meta('settings', next)]);
+    // Update the state before the write, so a second change made while this one is still
+    // being saved builds on it instead of overwriting it with the old value.
     state.settings = next;
+    try {
+      await db.batch([meta('settings', next)]);
+    } catch (e) {
+      if (state.settings === next) state.settings = prev;
+      throw e;
+    }
     return next;
   }
 
