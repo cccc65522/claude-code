@@ -1,0 +1,63 @@
+# Runs every app's tests on pull requests and on pushes to the default branch.
+# Each app is its own npm project, so each gets its own job.
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [claude/red-heels-mv-obby1j]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: review-app
+            check: npm test
+            e2e: true
+          - app: sheet
+            check: npm test
+            e2e: true
+          - app: xiangqi
+            check: npm test
+            e2e: true
+          - app: physics
+            check: npm test
+            e2e: true
+          - app: voxel-world
+            check: npm test && npm run build
+            e2e: false
+          - app: logic-lab
+            check: npm run typecheck && npm test && npm run build
+            e2e: true
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+      - run: npm ci
+      - name: Unit tests and build
+        run: ${{ matrix.check }}
+      - name: Install Chromium for Playwright
+        if: matrix.e2e
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests
+        if: matrix.e2e
+        run: npm run test:e2e -- --trace off
