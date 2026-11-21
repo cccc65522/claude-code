@@ -249,6 +249,15 @@ test('settings persist, and threshold 1 clears a wrong question after one right 
   await page.goto('/#/data');
   await page.locator('#set-threshold').selectOption('1');
   await page.locator('#set-instant').uncheck();
+  // A reload aborts a write that is still in flight, so wait until both changes are stored.
+  await expect.poll(() => page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('review-app');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const get = open.result.transaction('meta').objectStore('meta').get('settings');
+      get.onsuccess = () => { const v = get.result?.value; open.result.close(); resolve(v && [v.masterThreshold, v.instantSingle]); };
+    };
+  }))).toEqual([1, false]);
   await page.reload();
   await expect(page.locator('#set-threshold')).toHaveValue('1');
   await expect(page.locator('#set-instant')).not.toBeChecked();
