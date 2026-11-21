@@ -523,3 +523,32 @@ test('scale: a 5000-gate chain settles (not mistaken for oscillation), a 64-bit 
   }
   assert.ok(performance.now() - t1 < 2000);
 });
+
+test('tunnels: same label connects, different label or different circuit does not', () => {
+  const chip = new CircuitBuilder('c', 'c');
+  chip.add('in', 0, 0, { id: 'ci', label: 'X' });
+  chip.add('tunnel', 4, 0, { id: 'ct', label: 'BUS' });
+  chip.add('out', 10, 0, { id: 'co', label: 'Y' });
+  chip.add('tunnel', 6, 4, { id: 'ct2', label: 'BUS' });
+  chip.wire('ci', 'ct.p').wire('ct2.p', 'co.i');
+  const p = projectWith(
+    (b) => {
+      b.add('in', 0, 0, { id: 'src' });
+      b.add('tunnel', 4, 0, { id: 't1', label: 'BUS' });
+      b.add('tunnel', 4, 6, { id: 't2', label: 'BUS' });
+      b.add('tunnel', 4, 12, { id: 't3', label: 'OTHER' });
+      b.add('led', 10, 6, { id: 'l2' });
+      b.add('led', 10, 12, { id: 'l3' });
+      b.add('chip', 4, 20, { id: 'inst', chip: 'c' });
+      b.add('led', 20, 20, { id: 'l4' });
+      b.wire('src', 't1.p').wire('t2.p', 'l2.i').wire('t3.p', 'l3.i').wire('inst.co', 'l4.i');
+    },
+    [chip.build()]
+  );
+  const sim = run(p);
+  sim.setInput('src', 1);
+  sim.settle();
+  assert.equal(sim.pinValue('l2', 'i'), 1);
+  assert.equal(sim.pinValue('l3', 'i'), VZ, 'different label: floating');
+  assert.equal(sim.pinValue('l4', 'i'), VZ, "the chip's BUS is its own: its input X is unconnected");
+});

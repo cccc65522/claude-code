@@ -554,3 +554,26 @@ test('export the circuit as SVG and PNG images', async ({ page }) => {
   expect([...png.subarray(1, 4)].map((c) => String.fromCharCode(c)).join('')).toBe('PNG');
   expect(png.readUInt32BE(16)).toBeGreaterThan(400); // width
 });
+
+test('tunnels with the same name are connected without a wire', async ({ page }) => {
+  await fresh(page);
+  await newBlank(page);
+  await page.locator('.palette-item[data-kind="in"]').click();
+  await page.locator('.palette-item[data-kind="tunnel"]').click();
+  await page.locator('.palette-item[data-kind="tunnel"]').click();
+  await page.locator('.palette-item[data-kind="led"]').click();
+  const [i] = await partIds(page, 'in');
+  const [t1, t2] = await partIds(page, 'tunnel');
+  const [l] = await partIds(page, 'led');
+  await dragWire(page, [i, 'o'], [t1, 'p']);
+  await dragWire(page, [t2, 'p'], [l, 'i']);
+  const led = page.locator(`.canvas [data-part="${l}"] circle.led`);
+  await clickPart(page, i);
+  await expect(led).toHaveClass(/v1/); // both tunnels start out named N1
+  await clickPart(page, t2);
+  const name = page.locator('.field', { hasText: '名字' }).locator('input');
+  await name.fill('别的');
+  await name.press('Enter');
+  await expect(page.locator(`.canvas [data-part="${t2}"] .tunnel-text`)).toHaveText('别的');
+  await expect(led).toHaveClass(/vz/);
+});

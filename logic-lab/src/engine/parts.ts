@@ -59,6 +59,7 @@ export const KIND_NAME: Record<PartKind, string> = {
   rom: 'ROM',
   ram: 'RAM',
   reg: '寄存器',
+  tunnel: '标签',
   chip: '芯片',
   text: '文字'
 };
@@ -251,6 +252,10 @@ export function partSpec(part: Part, project?: Project): PartSpec {
     case 'text': {
       const { w, h } = textSize(part.text ?? '');
       return { w, h, pins: [] };
+    }
+    case 'tunnel': {
+      const len = [...(part.label ?? '')].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? 1.6 : 0.9), 0);
+      return { w: Math.max(3, Math.ceil(len * 0.6) + 2), h: 2, pins: [{ name: 'p', dir: 'in', x: 0, y: 1, side: 'W' }] };
     }
   }
 }

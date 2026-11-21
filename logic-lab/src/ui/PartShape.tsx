@@ -282,6 +282,14 @@ function PartViewImpl({ part, spec, selected, vals, pressed, chipName, missing, 
         </>
       );
       break;
+    case 'tunnel':
+      body = <path className="body tunnel" d={`M0.2 1 L1.1 0.2 H${w - 0.2} V1.8 H1.1 Z`} />;
+      upright = (
+        <text className="tunnel-text" x={part.rot === 2 ? W / 2 - 0.4 : part.rot % 2 ? W / 2 : W / 2 + 0.45} y={H / 2 + 0.33}>
+          {part.label}
+        </text>
+      );
+      break;
     case 'text':
       upright = (
         <text className="note" x={0} y={1.2}>
@@ -295,7 +303,7 @@ function PartViewImpl({ part, spec, selected, vals, pressed, chipName, missing, 
       break;
   }
 
-  const showLabel = part.label && k !== 'chip' && k !== 'text';
+  const showLabel = part.label && k !== 'chip' && k !== 'text' && k !== 'tunnel';
   const transform = rotationTransform(part.rot, w, h);
   return (
     <g

@@ -3,7 +3,7 @@ import { GATE_KINDS } from './parts.ts';
 import type { Circuit, Part, PartKind, Project, Rot, Wire } from './types.ts';
 
 const KINDS = new Set<string>([
-  'in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7', ...GATE_KINDS, 'tri', 'mux', 'dff', 'jkff', 'tff', 'rom', 'ram', 'reg', 'chip', 'text'
+  'in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7', ...GATE_KINDS, 'tri', 'mux', 'dff', 'jkff', 'tff', 'rom', 'ram', 'reg', 'tunnel', 'chip', 'text'
 ]);
 
 export class ProjectError extends Error {}

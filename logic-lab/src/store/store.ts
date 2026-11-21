@@ -305,6 +305,7 @@ export function defaultProps(kind: PartKind): Partial<Part> {
   if (kind === 'const') return { value: 1 };
   if (kind === 'led') return { color: 'red' };
   if (kind === 'text') return { text: '双击编辑文字' };
+  if (kind === 'tunnel') return { label: 'N1' };
   if (kind === 'rom') return { abits: 4, dbits: 4, data: Array.from({ length: 16 }, (_, i) => i) };
   if (kind === 'ram') return { abits: 4, dbits: 4 };
   if (kind === 'reg') return { dbits: 4 };

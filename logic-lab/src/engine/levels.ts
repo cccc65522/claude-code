@@ -326,7 +326,7 @@ export function checkLevel(level: Level, circuit: Circuit): CheckResult {
 
   const banned = new Set<PartKind>();
   for (const p of circuit.parts) {
-    if (p.kind === 'text') continue;
+    if (p.kind === 'text' || p.kind === 'tunnel') continue;
     if (p.locked && (p.kind === 'in' || p.kind === 'out')) continue;
     if (!level.palette.includes(p.kind)) banned.add(p.kind);
   }

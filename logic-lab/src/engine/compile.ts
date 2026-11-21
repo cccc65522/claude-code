@@ -109,10 +109,22 @@ export function compile(project: Project, rootId: string = MAIN_ID): Netlist {
   const flatten = (circuit: Circuit, prefix: string, stack: string[]): void => {
     const depth = stack.length - 1;
     const partById = new Map<string, Part>();
+    // Tunnels with the same label are one connection (within this circuit only).
+    const tunnels = new Map<string, number>();
     for (const part of circuit.parts) {
       partById.set(part.id, part);
       const key = (p: string) => `${prefix}${part.id}:${p}`;
       if (part.kind === 'text') continue;
+      if (part.kind === 'tunnel') {
+        const me = pin(key('p'));
+        const name = part.label?.trim();
+        if (name) {
+          const first = tunnels.get(name);
+          if (first === undefined) tunnels.set(name, me);
+          else uf.union(first, me);
+        }
+        continue;
+      }
       if (part.kind === 'chip') {
         const def = part.chip ? chipById.get(part.chip) : undefined;
         if (!def) {

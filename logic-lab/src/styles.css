@@ -1592,3 +1592,15 @@ pre.code.preview {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   min-height: 70px;
 }
+
+.body.tunnel {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+}
+.tunnel-text {
+  font-size: 0.9px;
+  font-weight: 700;
+  text-anchor: middle;
+  fill: var(--accent);
+  pointer-events: none;
+}

@@ -24,6 +24,7 @@ export type PartKind =
   | 'rom' // read-only memory, contents edited in the inspector
   | 'ram' // read/write memory, written on the rising clock edge
   | 'reg' // n-bit register
+  | 'tunnel' // named connection: tunnels with the same label in a circuit are joined
   | 'chip' // instance of a user-defined circuit
   | 'text'; // annotation
 
