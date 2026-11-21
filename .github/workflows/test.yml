@@ -1,5 +1,6 @@
 # Runs every app's tests on pull requests and on pushes to the default branch.
-# Each app is its own npm project, so each gets its own job.
+# Each app is its own npm project, so each gets its own job. On the default branch,
+# once they all pass, the deploy job publishes the site to GitHub Pages.
 name: test
 
 on:
@@ -61,3 +62,40 @@ jobs:
       - name: End-to-end tests
         if: matrix.e2e
         run: npm run test:e2e -- --trace off
+
+  # After every app's tests pass on the default branch, publish the site to gh-pages
+  # (GitHub Pages serves that branch). scripts/build-site.sh decides what goes where.
+  deploy:
+    needs: app
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: deploy-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the site
+        run: scripts/build-site.sh "$RUNNER_TEMP/site"
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+      - name: Publish to gh-pages
+        working-directory: pages
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -r "$RUNNER_TEMP/site/." .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The published site is already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Publish ${GITHUB_SHA::7} from ${GITHUB_REF_NAME}"
+          git push origin HEAD:gh-pages
