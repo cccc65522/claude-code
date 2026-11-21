@@ -11,7 +11,7 @@
 | 复习本 | [打开](https://cccc65522.github.io/claude-code/) | 导入题库、刷题、错题重练、学习记录 | 是 |
 | 格算 | [打开](https://cccc65522.github.io/claude-code/sheet/) | 电子表格，公式引擎自己写的，能导入导出 Excel | 是 |
 | 弈 | [打开](https://cccc65522.github.io/claude-code/xiangqi/) | 和电脑下中国象棋，有残局练习 | 是 |
-| 方块小镇 | [打开](https://cccc65522.github.io/claude-code/voxel-world/) | 3D 方块世界，挖、放、合成、种地，有生存和创造模式 | 否 |
+| 方块小镇 | [打开](https://cccc65522.github.io/claude-code/voxel-world/) | 3D 方块世界，挖、放、合成、种地，有生存和创造模式 | 是 |
 | 造物 | [打开](https://cccc65522.github.io/claude-code/physics/) | 2D 物理沙盒，画东西、连机关、倒水，还能闯关 | 是 |
 | 门道 | [打开](https://cccc65522.github.io/claude-code/logic-lab/) | 数字电路实验台：逻辑门、触发器、自定义芯片、真值表、波形 | 是 |
 

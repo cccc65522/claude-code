@@ -13,7 +13,12 @@ npm run dev       # 开发模式，打开终端里显示的地址
 npm run build     # 打包到 dist/，可以放到任何静态网站托管上
 npm run preview   # 本地预览打包结果
 npm test          # 单元测试（地形、网格、射线、碰撞）
+npm run test:e2e  # 打包后在浏览器里测试：开始游戏、手机触屏按钮、离线（需要 Playwright 的 Chromium）
 ```
+
+## 离线和添加到主屏幕
+
+打包后的版本带一个 service worker（`public/sw.js`）：打开过一次以后，没有网络也能玩。iPhone 上用 Safari 打开，点“分享 → 添加到主屏幕”，就会有一个草方块图标，从图标打开没有浏览器的地址栏和工具栏。存档本来就在浏览器里，离线时照样自动保存。
 
 ## 世界大小
 

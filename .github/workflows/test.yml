@@ -37,8 +37,8 @@ jobs:
             check: npm test
             e2e: true
           - app: voxel-world
-            check: npm test && npm run build
-            e2e: false
+            check: npm test
+            e2e: true
           - app: logic-lab
             check: npm run typecheck && npm test && npm run build
             e2e: true
