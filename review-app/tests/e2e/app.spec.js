@@ -249,6 +249,15 @@ test('settings persist, and threshold 1 clears a wrong question after one right 
   await page.goto('/#/data');
   await page.locator('#set-threshold').selectOption('1');
   await page.locator('#set-instant').uncheck();
+  // A reload aborts a write that is still in flight, so wait until both changes are stored.
+  await expect.poll(() => page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('review-app');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const get = open.result.transaction('meta').objectStore('meta').get('settings');
+      get.onsuccess = () => { const v = get.result?.value; open.result.close(); resolve(v && [v.masterThreshold, v.instantSingle]); };
+    };
+  }))).toEqual([1, false]);
   await page.reload();
   await expect(page.locator('#set-threshold')).toHaveValue('1');
   await expect(page.locator('#set-instant')).not.toBeChecked();
@@ -307,6 +316,24 @@ test('works offline after the first visit (service worker)', async ({ page, cont
   await expect(page.getByRole('heading', { name: '今日复习' })).toBeVisible();
   await page.getByRole('link', { name: '题库', exact: true }).tap();
   await expect(page.getByTestId('bank-list').locator('li')).toHaveCount(1);
+  await context.setOffline(false);
+});
+
+test('the service worker leaves the other apps on the site alone', async ({ page, context }) => {
+  // Other apps (格算 under sheet/, 弈 under xiangqi/, ...) share the origin's Cache Storage.
+  await page.goto('/manifest.webmanifest');
+  await page.evaluate(async () => {
+    for (const name of ['gesuan-v1', 'yi-xiangqi-v1', 'review-app-v0']) await (await caches.open(name)).put('/x-' + name, new Response('x'));
+  });
+  await loadSample(page);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  const keys = await page.evaluate(() => caches.keys());
+  expect(keys.sort()).toEqual(['gesuan-v1', 'review-app-v1', 'yi-xiangqi-v1']);
+  // Offline, a page in another app's folder must not be answered with 复习本's index.html.
+  await context.setOffline(true);
+  await expect(page.goto('/other-app/')).rejects.toThrow();
   await context.setOffline(false);
 });
 
