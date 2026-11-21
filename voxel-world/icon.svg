@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#a8d8ff"/>
+  <g transform="translate(256 266) scale(0.88) translate(-256 -276)" stroke="#2f2a24" stroke-width="6" stroke-linejoin="round">
+    <polygon points="80,186 256,276 256,456 80,366" fill="#866043"/>
+    <polygon points="256,276 432,186 432,366 256,456" fill="#a0714d"/>
+    <polygon points="80,186 256,276 256,318 80,228" fill="#4f9a38" stroke="none"/>
+    <polygon points="256,276 432,186 432,228 256,318" fill="#5fae45" stroke="none"/>
+    <polygon points="256,96 432,186 256,276 80,186" fill="#7cc95a"/>
+    <g stroke="none">
+      <polygon points="124,262 154,277 154,301 124,286" fill="#6e4f37"/>
+      <polygon points="190,330 220,345 220,369 190,354" fill="#6e4f37"/>
+      <polygon points="300,346 330,331 330,355 300,370" fill="#8a603f"/>
+      <polygon points="372,270 402,255 402,279 372,294" fill="#8a603f"/>
+      <polygon points="256,140 290,157 256,174 222,157" fill="#93d873"/>
+      <polygon points="170,186 204,203 170,220 136,203" fill="#93d873"/>
+      <polygon points="330,196 364,213 330,230 296,213" fill="#68b548"/>
+    </g>
+    <polygon points="80,186 256,276 256,456 80,366" fill="none"/>
+    <polygon points="256,276 432,186 432,366 256,456" fill="none"/>
+    <polygon points="256,96 432,186 256,276 80,186" fill="none"/>
+  </g>
+</svg>
