@@ -8,6 +8,7 @@
   --dim: #5f6b7a;
   --accent: #2563eb;
   --accent-soft: #dbe7ff;
+  --on-accent: #fff;
   --danger: #dc2626;
   --ok: #15803d;
   --warn: #b45309;
@@ -39,6 +40,7 @@
     --dim: #93a1b2;
     --accent: #60a5fa;
     --accent-soft: #1d3557;
+    --on-accent: #0b1220;
     --danger: #f87171;
     --ok: #4ade80;
     --warn: #fbbf24;
@@ -67,6 +69,7 @@
   --dim: #93a1b2;
   --accent: #60a5fa;
   --accent-soft: #1d3557;
+  --on-accent: #0b1220;
   --danger: #f87171;
   --ok: #4ade80;
   --warn: #fbbf24;
@@ -228,7 +231,7 @@ kbd {
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .btn.primary:hover:not(:disabled) {
   filter: brightness(1.08);
@@ -295,7 +298,7 @@ kbd {
 }
 .seg button.on {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .sim-controls {
   display: flex;

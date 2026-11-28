@@ -8,7 +8,8 @@
   --text: #1C1C1E;
   --muted: #6E6E73;
   --line: #E5E5EA;
-  --accent: #007AFF;
+  --accent: #0062CC; /* deeper than iOS blue: text in this color needs 4.5:1 on --bg and the soft fill */
+  --accent-fill: #0062CC; /* behind white text */
   --accent-soft: rgba(0, 122, 255, .12);
   --seg-on: #FFFFFF;
   --ok: #248A3D;
@@ -34,7 +35,8 @@
     --text: #F2F2F7;
     --muted: #98989F;
     --line: #38383A;
-    --accent: #0A84FF;
+    --accent: #4DA3FF; /* text on the dark cards and fills */
+    --accent-fill: #0062CC;
     --accent-soft: rgba(10, 132, 255, .2);
     --seg-on: #636366;
     --ok: #30D158;
@@ -143,7 +145,7 @@ h1, h2, p { margin: 0; }
 .btn:active { opacity: .7; }
 .btn:disabled { opacity: .4; cursor: default; }
 .btn.block { display: flex; width: 100%; }
-.btn.primary { background: var(--accent); color: #fff; }
+.btn.primary { background: var(--accent-fill); color: #fff; }
 .btn.danger { background: var(--bad-line); color: #fff; }
 .btn.success { background: var(--ok-line); color: #fff; }
 .btn.danger-text { color: var(--bad); }
@@ -331,7 +333,7 @@ body.immersive .view { padding-bottom: 0; }
 .opt-key { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--fill); font-size: 15px; font-weight: 700; flex: none; }
 .opt-text { padding-top: 1px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .option.picked { border-color: var(--accent); background: var(--accent-soft); }
-.option.picked .opt-key { background: var(--accent); color: #fff; }
+.option.picked .opt-key { background: var(--accent-fill); color: #fff; }
 .option.right { border-color: var(--ok-line); background: var(--ok-bg); }
 .option.right .opt-key { background: var(--ok-line); color: #fff; }
 .option.wrong { border-color: var(--bad-line); background: var(--bad-bg); }
