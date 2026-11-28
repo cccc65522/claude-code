@@ -4,8 +4,9 @@
 // functions can tell "a cell holding text" from "a text literal" exactly like Excel.
 // Operators and scalar parameters dereference them with implicit intersection.
 //
-// Array mode: arguments of SUMPRODUCT (and friends) are evaluated element-wise,
-// so =SUMPRODUCT((A1:A9>5)*B1:B9) works the way it does in Excel.
+// Array mode: arguments that take a range or array (SUM, MAX, OR, MATCH's lookup array,
+// SUMPRODUCT, …) are evaluated element-wise, as in Excel 365, so =SUMPRODUCT((A1:A9>5)*B1:B9)
+// and =SUM((A1:A9>5)*B1:B9) both work. A formula's own result is still a single value.
 
 import { ERR, FormulaError, ArrayValue, isError, isMatrix, errorFromCode, toNumber, toText, compareValues, MISSING } from './values.js';
 import { RangeMatrix, toScalar } from './range.js';
@@ -47,6 +48,13 @@ function mapMatrix(m, fn) {
 
 const finite = n => (Number.isFinite(n) ? n : ERR.NUM);
 
+// Excel compares numbers at 15 significant digits, the precision it shows, so =0.1+0.2=0.3 is
+// TRUE although the binary sum is 0.30000000000000004.
+const at15 = x => (x === 0 || !Number.isFinite(x) ? x : Number(x.toPrecision(15)));
+function compareOperands(a, b) {
+  return typeof a === 'number' && typeof b === 'number' ? compareValues(at15(a), at15(b)) : compareValues(a, b);
+}
+
 function binaryScalar(op, a, b) {
   if (isError(a)) return a;
   if (isError(b)) return b;
@@ -66,12 +74,12 @@ function binaryScalar(op, a, b) {
         return finite(x ** y);
       }
       case '&': return toText(a) + toText(b);
-      case '=': return compareValues(a, b) === 0;
-      case '<>': return compareValues(a, b) !== 0;
-      case '<': return compareValues(a, b) < 0;
-      case '>': return compareValues(a, b) > 0;
-      case '<=': return compareValues(a, b) <= 0;
-      case '>=': return compareValues(a, b) >= 0;
+      case '=': return compareOperands(a, b) === 0;
+      case '<>': return compareOperands(a, b) !== 0;
+      case '<': return compareOperands(a, b) < 0;
+      case '>': return compareOperands(a, b) > 0;
+      case '<=': return compareOperands(a, b) <= 0;
+      case '>=': return compareOperands(a, b) >= 0;
     }
   } catch (e) {
     if (e instanceof FormulaError) return e;
@@ -187,7 +195,10 @@ function callFunction(node, ctx, arrayMode) {
       const ev = (n, mode = inner) => evaluate(n, ctx, mode);
       return spec.fn(node.args, ev, ctx, arrayMode);
     }
-    const raw = node.args.map(a => evaluate(a, ctx, inner));
+    // As in Excel 365, an argument that takes a range or array ('r': SUM, MAX, OR, MATCH's
+    // lookup array, …) is evaluated as an array, so =SUM((A2:A9="苹果")*C2:C9) adds up every row
+    // instead of taking the one row the formula sits on (implicit intersection).
+    const raw = node.args.map((a, i) => evaluate(a, ctx, inner || paramType(spec, i) === 'r'));
 
     // Lift scalar parameters over arrays when evaluating element-wise.
     if (arrayMode && !spec.arrayArgs) {
