@@ -93,6 +93,46 @@ test('SUMPRODUCT evaluates its arguments element-wise', () => {
   ]);
 });
 
+test('arguments that take a range are evaluated as arrays, as in Excel 365', () => {
+  // The formulas sit in column Z, rows 1–n: under implicit intersection most would pick one
+  // row (or none) of A2:C6 and give a wrong answer.
+  check([
+    ['SUM(B2:B4*C2:C4)', 10 * 3.5 + 20 * 2 + 5 * 4],
+    ['SUM((A2:A6="苹果")*C2:C6)', 7.5],
+    ['SUM(--(C2:C6>3))', 4],
+    ['SUM(LEN(A2:A6))', 10],
+    ['SUM(IF(A2:A6="苹果",1,0))', 2],
+    ['MAX(IF(A2:A6="苹果",C2:C6))', 4],
+    ['MIN(IF(C2:C6>3,C2:C6))', 3.5],
+    ['AVERAGE(IF(A2:A6="苹果",C2:C6))', 3.75],
+    ['COUNT(IF(C2:C6>3,1))', 4],
+    ['OR(A2:A6="葡萄")', true],
+    ['AND(C2:C6>1)', true],
+    ['TEXTJOIN(",",TRUE,IF(C2:C6>5,A2:A6,""))', '橙子,葡萄'],
+    ['INDEX(C2:C6,MATCH(1,(A2:A6="苹果")*(C2:C6>3.5),0))', 4],
+    ['ROWS(A2:A6&"")', 5]
+  ]);
+});
+
+test('comparisons use 15 significant digits, like Excel', () => {
+  check([
+    ['(0.1+0.2)=0.3', true],
+    ['0.1+0.2>0.3', false],
+    ['1+1E-16=1', true],
+    ['1.0000000001=1', false]
+  ]);
+});
+
+test('date text counts as its serial number in arithmetic', () => {
+  check([
+    ['"2026-01-05"+1', 46028],
+    ['"2026-03-01"-"2026-02-01"', 28],
+    ['ROUND("2026-01-05 12:00",0)', 46028],
+    ['"苹果"+1', '#VALUE!'],
+    ['"2026-02-30"+1', '#VALUE!']
+  ]);
+});
+
 test('implicit intersection picks the value in the formula row', () => {
   const wb = book({ A1: '1', A2: '2', A3: '3', B2: '=A1:A3*10', B5: '=A1:A3' });
   assert.equal(val(wb, 'B2'), 20);
