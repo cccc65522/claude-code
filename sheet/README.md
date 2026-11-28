@@ -31,7 +31,7 @@
 | 日期 | 19 | DATE DATEDIF DATEVALUE DAY DAYS EDATE EOMONTH HOUR MINUTE MONTH NETWORKDAYS NOW SECOND TIME TODAY WEEKDAY WEEKNUM WORKDAY YEAR |
 | 信息 | 14 | ERROR.TYPE ISBLANK ISERR ISERROR ISEVEN ISLOGICAL ISNA ISNONTEXT ISNUMBER ISODD ISTEXT N NA T |
 
-每个函数在“fx 函数”面板里都有中文说明和参数格式。条件函数支持 `">5"`、`"<>苹果"`、`"张*"`、`"?子"` 这类条件和通配符；`SUMPRODUCT` 的参数按数组逐个元素计算，所以 `=SUMPRODUCT((A2:A9="苹果")*(B2:B9>3)*C2:C9)` 这种写法可以用。
+每个函数在“fx 函数”面板里都有中文说明和参数格式。条件函数支持 `">5"`、`"<>苹果"`、`"张*"`、`"?子"` 这类条件和通配符。和 Excel 365 一样，接受区域的参数（`SUM`、`MAX`、`OR`、`MATCH` 的查找范围、`SUMPRODUCT` 等）按数组逐个元素计算，所以 `=SUM((A2:A9="苹果")*C2:C9)`、`=MAX(IF(A2:A9="苹果",C2:C9))`、`=SUMPRODUCT((A2:A9="苹果")*(B2:B9>3)*C2:C9)` 这些写法都可以用，不用按 Ctrl+Shift+Enter。比较数字时按 15 位有效数字，所以 `=0.1+0.2=0.3` 是 TRUE；像 `"2026-01-05"` 这样的日期文字参与运算时按日期序列号算。
 
 ## 运行方法
 
@@ -60,7 +60,7 @@ npm start            # 等同于 node scripts/serve.js，默认端口 8080
   AST  ───────────► rewrite.js   复制平移、插删行列、剪切移动、重命名工作表时改写 AST 里的引用
    │  evaluator.js  遍历求值。引用求值成“区域视图”（单个单元格是 1×1 区域），
    │                函数因此能区分“单元格里的文字”和“直接写的文字”，跟 Excel 的计算规则一致；
-   │                运算符对区域做隐式交集；SUMPRODUCT 等函数的参数按数组逐元素计算
+   │                接受区域的函数参数按数组逐元素计算；公式本身的结果对区域做隐式交集
    ▼
  value
 ```
@@ -122,7 +122,7 @@ npm run test:e2e         # 电脑和 iPhone 两种尺寸
 ## 已知限制
 
 - 不支持合并单元格、图表、条件格式、数据验证、冻结窗格、批注。
-- 公式结果是数组时不会“溢出”到相邻单元格（Excel 365 的动态数组），只取对应位置的一个值（隐式交集）。
+- 公式本身的结果是数组时不会“溢出”到相邻单元格（Excel 365 的动态数组），只取对应位置的一个值（隐式交集），比如 `=A1:A3*10` 写在第 2 行得到 `A2*10`。函数参数里的数组运算不受影响，见上面的“公式”。
 - 打开 xlsx 时会忽略上面这些不支持的内容，以及定义名称；超过 4 GB 的 ZIP64 文件打不开。
 - 日期从 1900-03-01 起与 Excel 完全一致，更早的日期序列号与 Excel 差一天（Excel 把 1900 年当成闰年）。
 - 数据只在当前设备的浏览器里，换设备请用“文件 → 导出”。

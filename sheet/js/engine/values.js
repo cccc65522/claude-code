@@ -4,6 +4,8 @@
 // Coercion helpers throw a FormulaError; the evaluator catches it at the nearest
 // function call or operator, so function bodies can be written without plumbing.
 
+import { parseDateText } from './dates.js';
+
 export class FormulaError {
   constructor(code) {
     this.code = code;
@@ -82,8 +84,11 @@ export function toNumber(v) {
   if (typeof v === 'string') {
     if (v === '') return 0;
     const n = textToNumber(v);
-    if (n === null) throw ERR.VALUE;
-    return n;
+    if (n !== null) return n;
+    // Like Excel, date and time text counts as its serial number: ="2026-01-05"+1 is 46028.
+    const d = parseDateText(v);
+    if (d) return d.serial;
+    throw ERR.VALUE;
   }
   if (isError(v)) throw v;
   throw ERR.VALUE;
