@@ -3,7 +3,7 @@
   --muted: #5b6475;
   --panel: rgba(255, 255, 255, 0.92);
   --panel-solid: #f7f8fa;
-  --accent: #3f8f3a;
+  --accent: #378032; /* white text on it needs 4.5:1 */
   --accent-ink: #ffffff;
   --slot: rgba(20, 24, 32, 0.55);
   --slot-border: rgba(255, 255, 255, 0.35);
@@ -474,7 +474,7 @@ kbd {
   cursor: pointer;
   border: 2px solid rgba(63, 143, 58, 0.45);
 }
-.bag-item.pick.current { border-color: var(--accent); background: rgba(63, 143, 58, 0.18); }
+.bag-item.pick.current { border-color: var(--accent); background: rgba(55, 128, 50, 0.18); }
 .panel .food button + button { margin-left: 4px; }
 .panel .food button:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
 

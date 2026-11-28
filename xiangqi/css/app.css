@@ -14,6 +14,7 @@
   --red: #b3261e;
   --black: #1f1d1a;
   --ok: #2e7d32;
+  --ok-text: #256a29; /* --ok as text on its own tint needs to be a bit darker */
   --blue: #1a73e8;
   --shadow: 0 2px 8px rgba(60, 40, 10, 0.18), 0 10px 28px rgba(60, 40, 10, 0.12);
   --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
@@ -116,7 +117,7 @@ button { cursor: pointer; }
 .dot.black { background: var(--black); outline: 1px solid var(--muted); }
 .player .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status { font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
-.status.turn { background: rgba(46, 125, 50, 0.14); color: var(--ok); }
+.status.turn { background: rgba(46, 125, 50, 0.14); color: var(--ok-text); }
 .status.thinking { background: rgba(26, 115, 232, 0.12); color: var(--blue); }
 .status.thinking::after { content: ""; display: inline-block; width: 1.2em; text-align: left; animation: dots 1.2s steps(4) infinite; }
 @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
