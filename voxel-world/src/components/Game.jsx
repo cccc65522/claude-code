@@ -1211,9 +1211,13 @@ function WorldScene(props) {
   );
 }
 
-export default function Game({ onCanvas, ...props }) {
+// While the start or pause menu covers the game nothing in the world moves (time, weather and
+// the player only advance while playing), so stop redrawing: 'demand' keeps the last frame and
+// only redraws on a resize. That spares a phone's battery while it sits on the menu.
+export default function Game({ onCanvas, idle = false, ...props }) {
   return (
     <Canvas
+      frameloop={idle ? 'demand' : 'always'}
       dpr={[1, 2]}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       camera={{ fov: 75, near: 0.05, far: 260 }}

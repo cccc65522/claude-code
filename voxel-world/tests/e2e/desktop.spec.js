@@ -20,6 +20,21 @@ test('the world loads and the game starts', async ({ page }) => {
   expect(h).toBeGreaterThan(0);
 });
 
+test('the start menu does not keep redrawing the 3D view', async ({ page }) => {
+  // CPU time the page spends over two seconds on the menu, as a share of one core. Drawing the
+  // world every frame keeps a core busy (here the GPU is emulated in software); a still frame
+  // costs next to nothing.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Performance.enable');
+  const taskTime = async () => (await cdp.send('Performance.getMetrics')).metrics.find((m) => m.name === 'TaskDuration').value;
+  await page.goto('./');
+  await expect(page.getByRole('heading', { name: '方块小镇' })).toBeVisible();
+  await page.waitForTimeout(1500);
+  const before = await taskTime();
+  await page.waitForTimeout(2000);
+  expect((await taskTime()) - before).toBeLessThan(0.5);
+});
+
 test('installable: manifest, icons and service worker', async ({ page }) => {
   await page.goto('./');
   const manifest = await (await page.request.get('./manifest.webmanifest')).json();

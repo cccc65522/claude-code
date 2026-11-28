@@ -148,6 +148,8 @@ export default function App() {
   const panelOpen = bagOpen || chestOpen !== null || mapOpen;
   const [health, setHealth] = useState(session.player.health);
   const [dead, setDead] = useState(null); // 死了的话是死因
+  // The start or pause menu covers the game: the 3D view can stop redrawing (see Game).
+  const menuShown = (!started || paused) && !panelOpen && !dead && !sleeping;
   const [air, setAir] = useState(MAX_AIR);
   const [hunger, setHunger] = useState(session.player.hunger);
   const [, setInvVersion] = useState(0); // 背包变化时刷新界面
@@ -578,6 +580,7 @@ export default function App() {
   return (
     <div className="app">
       <Game
+        idle={menuShown}
         key={session.id}
         world={session.world}
         sim={session.sim}
