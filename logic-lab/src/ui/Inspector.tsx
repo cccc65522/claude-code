@@ -3,6 +3,7 @@ import { circuitStats } from '../engine/analyze.ts';
 import { findCircuit } from '../engine/compile.ts';
 import { clampInputs, isMultiInputGate, KIND_NAME, MAX_INPUTS, MEM_LIMITS, memBits, MIN_INPUTS } from '../engine/parts.ts';
 import type { Part } from '../engine/types.ts';
+import { VAL_NAME } from '../engine/values.ts';
 import { MAIN_ID } from '../engine/types.ts';
 import { simctl, useSimVersion } from '../store/simctl.ts';
 import {
@@ -10,6 +11,8 @@ import {
   currentCircuit,
   deleteSelection,
   enterCircuit,
+  enterInstance,
+  livePrefix,
   packageSelection,
   renameCircuit,
   setWireBend,
@@ -79,7 +82,7 @@ function MemoryProps({ part }: { part: Part }) {
   const text = Array.from({ length: words }, (_, i) => hex(part.data?.[i] ?? 0, digits))
     .join(' ')
     .replace(/((?:\S+ ){7}\S+) /g, '$1\n');
-  const live = simctl.sim.memory(part.id);
+  const live = simctl.sim.memory(livePrefix() + part.id);
   return (
     <>
       {k !== 'reg' && (
@@ -110,7 +113,7 @@ function MemoryProps({ part }: { part: Part }) {
           />
         </label>
       )}
-      {k === 'ram' && live && store.get().editing === MAIN_ID && (
+      {k === 'ram' && live && (
         <div className="mem-view" data-testid="ram-view">
           {Array.from({ length: words }, (_, w) => {
             let v = 0;
@@ -129,7 +132,7 @@ function MemoryProps({ part }: { part: Part }) {
           })}
         </div>
       )}
-      {k === 'reg' && live && store.get().editing === MAIN_ID && (
+      {k === 'reg' && live && (
         <p className="tip">
           当前值 <b className="mono">{[...live].some((b) => b > 1) ? 'X' : hex([...live].reduce((s, b, i) => s | (b << i), 0), digits)}</b>（十六进制）
         </p>
@@ -222,7 +225,9 @@ function PartProps({ part }: { part: Part }) {
       )}
       {k === 'in' && (
         <p className="tip">
-          当前值 <b>{simctl.sim.getInput(part.id) ?? 0}</b>。点击画布上的引脚切换。{project.chips.length > 0 || store.get().editing !== MAIN_ID ? '在芯片内部，输入引脚就是芯片的输入接口。' : ''}
+          当前值 <b>{VAL_NAME[simctl.pinValue(livePrefix() + part.id, 'o')]}</b>。
+          {store.get().live ? '这是芯片的输入接口，值来自外面的电路。' : '点击画布上的引脚切换。'}
+          {!store.get().live && (project.chips.length > 0 || store.get().editing !== MAIN_ID) ? '在芯片内部，输入引脚就是芯片的输入接口。' : ''}
         </p>
       )}
       {k === 'button' && <p className="tip">按住为 1，松开为 0。</p>}
@@ -250,9 +255,13 @@ function PartProps({ part }: { part: Part }) {
           <p className="tip">
             芯片“{def.name}”，{def.parts.filter((p) => p.kind === 'in').length} 个输入、{def.parts.filter((p) => p.kind === 'out').length} 个输出。
           </p>
-          <button className="btn wide" onClick={() => enterCircuit(def.id)}>
-            查看内部
+          <button className="btn wide" onClick={() => enterInstance(part.id)} data-testid="view-instance">
+            查看内部（实时信号）
           </button>
+          <button className="btn wide" onClick={() => enterCircuit(def.id)}>
+            单独编辑芯片定义
+          </button>
+          <p className="tip">“查看内部”显示这个实例此刻的信号；“单独编辑”把芯片拿出来，用它自己的输入单独仿真。</p>
         </>
       )}
       {k === 'chip' && !def && <p className="tip warn">这个芯片的定义已经被删除了。</p>}
@@ -278,7 +287,9 @@ function PartProps({ part }: { part: Part }) {
 function WireProps({ id, bent }: { id: string; bent: boolean }) {
   useSimVersion();
   const probed = simctl.isProbed(id);
-  const v = simctl.wireValue(id);
+  const live = useEditor((s) => s.live);
+  const wire = currentCircuit().wires.find((w) => w.id === id);
+  const v = wire ? simctl.pinValue(livePrefix() + wire.a.part, wire.a.pin) : simctl.wireValue(id);
   return (
     <div className="props">
       <h2>导线</h2>
@@ -288,6 +299,8 @@ function WireProps({ id, bent }: { id: string; bent: boolean }) {
       <button
         className={`btn wide${probed ? ' on' : ''}`}
         data-testid="probe"
+        disabled={!!live}
+        title={live ? '实时查看芯片内部时不能加探针；请回到外层电路' : undefined}
         onClick={() => {
           simctl.toggleProbe(id);
           if (!probed) store.set({ waveOpen: true });
@@ -314,7 +327,9 @@ function CircuitInfo() {
   const workspace = useEditor((s) => s.workspace);
   useSimVersion();
   const c = findCircuit(project, editing) ?? project.main;
-  const stats = circuitStats(project, editing, simctl.nl);
+  // The running netlist belongs to the simulated circuit, which differs while looking inside an instance.
+  const live = useEditor((s) => s.live);
+  const stats = circuitStats(project, editing, live ? undefined : simctl.nl);
   return (
     <div className="props">
       <h2>{editing === MAIN_ID ? (workspace.mode === 'level' ? '闯关电路' : '主电路') : '芯片'}</h2>

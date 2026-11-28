@@ -39,7 +39,7 @@ export interface Netlist {
   /** Driver slot → net. */
   slotNet: number[];
   slotCount: number;
-  /** Net of each pin of the root circuit, keyed "partId:pin". */
+  /** Net of every pin, keyed "partId:pin" for the root circuit and "inst/…/partId:pin" inside chips. */
   pinNet: Map<string, number>;
   /** Net of each wire of the root circuit. */
   wireNet: Map<string, number>;
@@ -202,7 +202,7 @@ export function compile(project: Project, rootId: string = MAIN_ID): Netlist {
   }
 
   const pinNet = new Map<string, number>();
-  for (const [key, idx] of pinIndex) if (!key.includes('/')) pinNet.set(key, netOf(idx));
+  for (const [key, idx] of pinIndex) pinNet.set(key, netOf(idx));
   const wireNet = new Map<string, number>();
   if (root) {
     for (const w of root.wires) {

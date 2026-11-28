@@ -11,7 +11,8 @@ import {
   addChipInstance,
   addPart,
   connect,
-  enterCircuit,
+  enterInstance,
+  livePrefix,
   fitView,
   movePartsBy,
   select,
@@ -54,6 +55,8 @@ export function Canvas() {
   const selParts = useEditor((s) => s.selParts);
   const selWires = useEditor((s) => s.selWires);
   const pendingPin = useEditor((s) => s.pendingPin);
+  /** Netlist path prefix when looking inside a chip instance of the running circuit. */
+  const prefix = useEditor(livePrefix);
   const views = useEditor((s) => s.views);
   useSimVersion();
   const circuit = findCircuit(project, editing) ?? project.main;
@@ -190,7 +193,7 @@ export function Canvas() {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     svgRef.current?.setPointerCapture(e.pointerId);
     if (pointers.current.size === 2) {
-      if (inter.current.type === 'button') simctl.setButton(inter.current.id, false);
+      if (inter.current.type === 'button') simctl.setButton(prefix + inter.current.id, false);
       setPressed(null);
       startPinch();
       return;
@@ -216,7 +219,7 @@ export function Canvas() {
       const wasSelected = selPartSet.has(partId);
       if (!wasSelected) select([partId], [], additive);
       if (part.kind === 'button') {
-        simctl.setButton(partId, true);
+        simctl.setButton(prefix + partId, true);
         setPressed(partId);
         inter.current = { type: 'button', id: partId, sx: e.clientX, sy: e.clientY };
         return;
@@ -316,7 +319,7 @@ export function Canvas() {
         if (it.moved && drag) {
           movePartsBy([...drag.ids], drag.dx, drag.dy);
         } else if (part) {
-          if (part.kind === 'in') simctl.toggleInput(part.id);
+          if (part.kind === 'in') simctl.toggleInput(prefix + part.id);
           if (it.additive && it.wasSelected) select([part.id], [], true);
           else if (!it.additive) select([part.id]);
         }
@@ -324,7 +327,7 @@ export function Canvas() {
         return;
       }
       case 'button':
-        simctl.setButton(it.id, false);
+        simctl.setButton(prefix + it.id, false);
         setPressed(null);
         return;
       case 'bend':
@@ -387,7 +390,7 @@ export function Canvas() {
     }
     const id = hit?.getAttribute('data-part');
     const part = id ? circuit.parts.find((p) => p.id === id) : undefined;
-    if (part?.kind === 'chip' && part.chip) enterCircuit(part.chip);
+    if (part?.kind === 'chip' && part.chip) enterInstance(part.id);
     else if (part?.kind === 'text') {
       store.set({ tab: 'props', sheetOpen: true, selParts: [part.id], selWires: [] });
       setTimeout(() => (document.querySelector('#prop-text') as HTMLTextAreaElement | null)?.focus(), 50);
@@ -421,8 +424,10 @@ export function Canvas() {
       bend += bendAxis([a.wx, a.wy], a.wside, [b.wx, b.wy], b.wside) === 'x' ? drag.dx : drag.dy;
     }
     const pts = route([a.wx, a.wy], a.wside, [b.wx, b.wy], b.wside, bend);
-    const val = sim.wireValue(wire.id);
-    const net = sim.netOfWire(wire.id);
+    // Both ends of a wire are on the same net; read it through the first end so this
+    // also works inside a chip instance (prefixed netlist paths).
+    const val = sim.pinValue(prefix + wire.a.part, wire.a.pin);
+    const net = sim.nl.pinNet.get(`${prefix}${wire.a.part}:${wire.a.pin}`);
     const osc = net !== undefined && unstable.has(net);
     const sel = selWireSet.has(wire.id);
     const d = pathD(pts);
@@ -437,7 +442,7 @@ export function Canvas() {
 
   const partViews = circuit.parts.map((part) => {
     const spec = specOf(part, project);
-    const vals: Val[] = spec.pins.map((p) => sim.pinValue(part.id, p.name));
+    const vals: Val[] = spec.pins.map((p) => sim.pinValue(prefix + part.id, p.name));
     const def = part.kind === 'chip' ? project.chips.find((c) => c.id === part.chip) : undefined;
     const moving = drag?.ids.has(part.id);
     return (
@@ -447,7 +452,7 @@ export function Canvas() {
         spec={spec}
         selected={selPartSet.has(part.id)}
         vals={vals}
-        pressed={pressed === part.id || (part.kind === 'button' && sim.sim.getInput(part.id) === 1)}
+        pressed={pressed === part.id || (part.kind === 'button' && sim.sim.getInput(prefix + part.id) === 1)}
         chipName={def?.name}
         missing={part.kind === 'chip' && !def}
         dx={moving ? drag!.dx : 0}
@@ -459,7 +464,7 @@ export function Canvas() {
 
   const pinViews: ReactElement[] = [];
   for (const [key, p] of pins) {
-    const val = sim.pinValue(p.part.id, p.name);
+    const val = sim.pinValue(prefix + p.part.id, p.name);
     const isPending = pendingPin && `${pendingPin.part}:${pendingPin.pin}` === key;
     const isFrom = wireFrom && `${wireFrom.part}:${wireFrom.pin}` === key;
     pinViews.push(

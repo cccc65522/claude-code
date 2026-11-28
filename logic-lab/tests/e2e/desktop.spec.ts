@@ -577,3 +577,31 @@ test('tunnels with the same name are connected without a wire', async ({ page })
   await expect(page.locator(`.canvas [data-part="${t2}"] .tunnel-text`)).toHaveText('别的');
   await expect(led).toHaveClass(/vz/);
 });
+
+test('looking inside a chip instance shows its live signals', async ({ page }) => {
+  await fresh(page);
+  await openExample(page, 'adder4');
+  await clickPart(page, await partByLabel(page, 'in', 'A1'));
+  // Open the second full adder (bit 1) from the inspector.
+  await clickPart(page, 'F1');
+  await page.getByTestId('view-instance').click();
+  const crumb = page.getByTestId('breadcrumb');
+  await expect(crumb).toContainText('全加器');
+  await expect(crumb).toHaveClass(/live/);
+  // Inside: A = 1, B = 0, Cin = 0 → S = 1, Cout = 0.
+  await expect(readout(page, 'A')).toHaveText('1');
+  await expect(readout(page, 'S')).toHaveText('1');
+  await expect(readout(page, 'Co')).toHaveText('0');
+  // Interface pins can't be toggled from inside: their value comes from outside.
+  await clickPart(page, 'B');
+  await expect(readout(page, 'B')).toHaveText('0');
+  // Back out, change an input, double-click straight into the same instance.
+  await crumb.getByRole('button', { name: '主电路' }).click();
+  await clickPart(page, await partByLabel(page, 'in', 'B1'));
+  await page.locator('.canvas [data-part="F1"]').dblclick();
+  await expect(readout(page, 'S')).toHaveText('0');
+  await expect(readout(page, 'Co')).toHaveText('1');
+  // The standalone editor is still available from the chips tab.
+  await crumb.getByRole('button', { name: '← 返回上一层' }).click();
+  await expect(page.getByTestId('breadcrumb')).toHaveCount(0);
+});

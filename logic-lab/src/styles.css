@@ -1604,3 +1604,19 @@ pre.code.preview {
   fill: var(--accent);
   pointer-events: none;
 }
+
+.breadcrumb.live {
+  background: color-mix(in srgb, var(--w1) 14%, var(--panel));
+}
+.breadcrumb .crumb {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--w1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--w1) 30%, transparent);
+}

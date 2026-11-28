@@ -552,3 +552,19 @@ test('tunnels: same label connects, different label or different circuit does no
   assert.equal(sim.pinValue('l3', 'i'), VZ, 'different label: floating');
   assert.equal(sim.pinValue('l4', 'i'), VZ, "the chip's BUS is its own: its input X is unconnected");
 });
+
+test('values inside chip instances can be read through their path', async () => {
+  const { EXAMPLES } = await import('../../src/engine/examples.ts');
+  const p = EXAMPLES.find((e) => e.id === 'adder4')!.build();
+  const sim = new Simulator(compile(p));
+  sim.setInput('A1', 1);
+  sim.setInput('B2', 1);
+  sim.settle();
+  // Inside the second full adder: its first XOR sees A1 ⊕ B1 = 1.
+  assert.equal(sim.pinValue('F1/x1', 'o'), 1);
+  assert.equal(sim.pinValue('F1/A', 'o'), 1, "the instance's interface pin carries the outside signal");
+  assert.equal(sim.pinValue('F2/x1', 'o'), 1);
+  assert.equal(sim.pinValue('F3/x1', 'o'), 0);
+  assert.equal(sim.pinValue('F0/S', 'i'), 0);
+  assert.equal(sim.pinValue('F1/S', 'i'), 1);
+});
