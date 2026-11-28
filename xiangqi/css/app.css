@@ -31,6 +31,8 @@
     --line: #3a352e;
     --accent: #e0675d;
     --accent-ink: #1c1a17;
+    --ok-text: #81c784;
+    --danger-text: #f28b82;
     --wood-1: #c9a467;
     --wood-2: #b38d52;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.35);
@@ -92,7 +94,7 @@ button { cursor: pointer; }
 .btn.ghost { background: transparent; border-color: transparent; }
 .btn.ghost:hover { background: rgba(122, 106, 88, 0.12); }
 .btn.icon { min-width: 40px; padding: 8px; }
-.btn.danger-text { color: var(--red); }
+.btn.danger-text { color: var(--danger-text, var(--red)); }
 .btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ---------- layout ---------- */
