@@ -63,10 +63,31 @@ jobs:
         if: matrix.e2e
         run: npm run test:e2e -- --trace off
 
+  # The apps' own suites run in Chromium. This builds the site as it will be published and opens
+  # every app in WebKit (Safari's engine) at iPhone size: see smoke/smoke.spec.js.
+  safari:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the site
+        run: scripts/build-site.sh .site/claude-code
+      - name: Install Playwright and WebKit
+        working-directory: smoke
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+      - name: Smoke test in WebKit
+        working-directory: smoke
+        run: npx playwright test
+
   # After every app's tests pass on the default branch, publish the site to gh-pages
   # (GitHub Pages serves that branch). scripts/build-site.sh decides what goes where.
   deploy:
-    needs: app
+    needs: [app, safari]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15

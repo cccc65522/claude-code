@@ -52,8 +52,15 @@ npm run test:e2e   # 浏览器端到端测试（需要 Playwright 的 Chromium�
 
 原生 JavaScript 的项目（复习本、格算、弈、造物）不用构建，`npm start` 启动一个本地静态服务器就能打开。
 
+各应用自己的测试在 Chromium 里跑。[`smoke/`](smoke/) 是一个 Safari 冒烟测试：把整个网站按发布时的样子构建好，用 WebKit（Safari 的内核）模拟 iPhone 13 逐个打开六个应用，检查能正常启动、点得动、不横向溢出、没有报错：
+
+```bash
+scripts/build-site.sh .site/claude-code
+cd smoke && npm install && npx playwright install webkit && npx playwright test
+```
+
 ## 发布
 
-合并到默认分支后，GitHub Actions 先跑完所有应用的测试，全部通过就自动发布：[`scripts/build-site.sh`](scripts/build-site.sh) 把整个网站组装好，放进 `gh-pages` 分支，GitHub Pages 再把它发布出去，一般几分钟内就能在线上看到。
+合并到默认分支后，GitHub Actions 先跑完所有应用的测试和 Safari 冒烟测试，全部通过就自动发布：[`scripts/build-site.sh`](scripts/build-site.sh) 把整个网站组装好，放进 `gh-pages` 分支，GitHub Pages 再把它发布出去，一般几分钟内就能在线上看到。
 
 `gh-pages` 分支的结构：根目录是复习本，其他应用各占一个子文件夹。原生 JavaScript 的项目只复制运行需要的文件（`index.html`、`css/`、`js/`、`icons/`、`manifest.webmanifest`、`sw.js`），Vite 项目复制 `npm run build` 生成的 `dist/`。想在本地看看发布出去会是什么样，运行 `scripts/build-site.sh 某个目录`。
