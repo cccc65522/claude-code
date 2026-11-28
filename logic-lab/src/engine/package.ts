@@ -6,7 +6,7 @@ import { partBounds, partSpec, placedPins } from './parts.ts';
 import type { Circuit, Part, PartKind, PinRef, Project, Wire } from './types.ts';
 
 /** Switches, lamps and displays stay outside: they are how you use a chip, not part of it. */
-const STAYS_OUTSIDE: ReadonlySet<PartKind> = new Set(['in', 'out', 'button', 'clock', 'led', 'hex', 'seg7', 'text', 'tunnel']);
+const STAYS_OUTSIDE: ReadonlySet<PartKind> = new Set(['in', 'out', 'button', 'clock', 'led', 'hex', 'seg7', 'text', 'tunnel', 'bin', 'num', 'split']);
 
 export interface PackageResult {
   project: Project;

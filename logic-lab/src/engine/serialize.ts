@@ -3,7 +3,7 @@ import { GATE_KINDS } from './parts.ts';
 import type { Circuit, Part, PartKind, Project, Rot, Wire } from './types.ts';
 
 const KINDS = new Set<string>([
-  'in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7', ...GATE_KINDS, 'tri', 'mux', 'dff', 'jkff', 'tff', 'rom', 'ram', 'reg', 'tunnel', 'chip', 'text'
+  'in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7', ...GATE_KINDS, 'tri', 'mux', 'dff', 'jkff', 'tff', 'rom', 'ram', 'reg', 'tunnel', 'bin', 'num', 'split', 'chip', 'text'
 ]);
 
 export class ProjectError extends Error {}
@@ -45,6 +45,8 @@ function cleanPart(raw: unknown): Part | null {
   if (text !== undefined) part.text = text;
   if (r.locked === true) part.locked = true;
   if (typeof r.key === 'string' && isBindableKey(r.key)) part.key = r.key;
+  const num = int(r.num, 0, 255);
+  if (num !== undefined) part.num = num;
   const abits = int(r.abits, 1, 6);
   if (abits !== undefined) part.abits = abits;
   const dbits = int(r.dbits, 1, 8);

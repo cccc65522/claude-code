@@ -605,3 +605,35 @@ test('looking inside a chip instance shows its live signals', async ({ page }) =
   await crumb.getByRole('button', { name: '← 返回上一层' }).click();
   await expect(page.getByTestId('breadcrumb')).toHaveCount(0);
 });
+
+test('buses: number inputs, splitters and a number display', async ({ page }) => {
+  await fresh(page);
+  await openExample(page, 'adder-bus');
+  const shown = page.locator('.canvas [data-part="S"] .num-hex');
+  await expect(shown).toHaveText('8'); // 5 + 3
+  await clickPart(page, 'A'); // click counts up: 6 + 3
+  await expect(shown).toHaveText('9');
+  await expect(page.locator('.canvas .wire.bus .bus-label').first()).toBeVisible();
+  // Type a value in the inspector: 0xF + 3 = 18 = 0x12.
+  const field = page.locator('#bin-value');
+  await field.fill('0xF');
+  await field.press('Enter');
+  await expect(shown).toHaveText('12');
+  await expect(page.locator('.canvas [data-part="S"] .num-dec')).toHaveText('18');
+  await field.fill('99');
+  await field.press('Enter');
+  await expect(page.getByTestId('toast')).toContainText('0 到 15');
+  // Shift+click counts down.
+  await page.locator('.canvas [data-part="B"]').click({ modifiers: ['Shift'] });
+  await expect(shown).toHaveText('11');
+
+  // A bus can't be wired straight to a 1-bit pin.
+  await newBlank(page);
+  await page.locator('.palette-item[data-kind="bin"]').click();
+  await page.locator('.palette-item[data-kind="led"]').click();
+  const [n] = await partIds(page, 'bin');
+  const [l] = await partIds(page, 'led');
+  await dragWire(page, [n, 'o'], [l, 'i']);
+  await expect(page.getByTestId('toast')).toContainText('位宽不同');
+  expect(await wireCount(page)).toBe(0);
+});

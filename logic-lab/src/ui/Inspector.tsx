@@ -3,7 +3,7 @@ import { circuitStats } from '../engine/analyze.ts';
 import { findCircuit } from '../engine/compile.ts';
 import { clampInputs, isMultiInputGate, KIND_NAME, MAX_INPUTS, MEM_LIMITS, memBits, MIN_INPUTS } from '../engine/parts.ts';
 import type { Part } from '../engine/types.ts';
-import { VAL_NAME } from '../engine/values.ts';
+import { busNumber, VAL_NAME } from '../engine/values.ts';
 import { MAIN_ID } from '../engine/types.ts';
 import { simctl, useSimVersion } from '../store/simctl.ts';
 import {
@@ -146,6 +146,54 @@ function MemoryProps({ part }: { part: Part }) {
   );
 }
 
+function BusProps({ part }: { part: Part }) {
+  useSimVersion();
+  const { d } = memBits(part);
+  const k = part.kind;
+  const path = livePrefix() + part.id;
+  const value = k === 'bin' ? simctl.sim.getInput(path) ?? part.num ?? 0 : null;
+  const shown = k === 'num' ? busNumber(simctl.sim.busValue(path, 'i', d)) : null;
+  return (
+    <>
+      <label className="field">
+        <span>位宽</span>
+        <Stepper value={d} min={k === 'split' ? 2 : 1} max={MEM_LIMITS.dbits[1]} label="位宽" onChange={(v) => updatePart(part.id, { dbits: v })} />
+      </label>
+      {k === 'bin' && value !== null && (
+        <label className="field">
+          <span>数值（十进制，或 0x 开头的十六进制，0–{(1 << d) - 1}）</span>
+          <LazyInput
+            id="bin-value"
+            value={String(value)}
+            onCommit={(v) => {
+              const t = v.trim();
+              const n = /^0x[0-9a-f]+$/i.test(t) ? parseInt(t, 16) : /^\d+$/.test(t) ? parseInt(t, 10) : NaN;
+              if (!Number.isFinite(n) || n >= 1 << d) toast(`请输入 0 到 ${(1 << d) - 1} 之间的整数`, 'error');
+              else simctl.setNumber(path, n);
+            }}
+          />
+        </label>
+      )}
+      {k === 'bin' && value !== null && (
+        <p className="tip mono">
+          二进制 {value.toString(2).padStart(d, '0')} · 十六进制 {value.toString(16).toUpperCase()}
+        </p>
+      )}
+      {k === 'num' && (
+        <p className="tip">
+          当前 {shown === null ? '有未知位（X/Z/E）' : <b className="mono">{`${shown}（0x${shown.toString(16).toUpperCase()}，${shown.toString(2).padStart(d, '0')}）`}</b>}
+        </p>
+      )}
+      <p className="tip">
+        {k === 'bin' && '输出一根总线。点一下加 1，Shift 或 Alt 加点一下减 1。'}
+        {k === 'num' && '读一根总线，显示十六进制和十进制。'}
+        {k === 'split' && '左边一根总线，右边每一位一根线（0 是最低位）。拆分和合并都用它，可以旋转。'}
+        总线只能和同样位宽的引脚相连。
+      </p>
+    </>
+  );
+}
+
 function PartProps({ part }: { part: Part }) {
   const project = useEditor((s) => s.project);
   useSimVersion();
@@ -248,6 +296,7 @@ function PartProps({ part }: { part: Part }) {
       )}
       {(k === 'dff' || k === 'jkff' || k === 'tff') && <p className="tip">在时钟输入的上升沿（0→1）动作。底部的 R 是异步清零端，接 1 时 Q 立即变 0，可以不接。</p>}
       {(k === 'rom' || k === 'ram' || k === 'reg') && <MemoryProps part={part} />}
+      {(k === 'bin' || k === 'num' || k === 'split') && <BusProps part={part} />}
       {k === 'tri' && <p className="tip">EN=1 时输出等于输入；EN=0 时输出高阻（Z），不影响导线上的其他信号。</p>}
       {k === 'mux' && <p className="tip">S=0 选输入 0，S=1 选输入 1。</p>}
       {k === 'chip' && def && (

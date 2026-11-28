@@ -13,7 +13,11 @@ export interface PinSpec {
   side: Side;
   /** Short text drawn next to the pin (flip-flop D/C/Q, chip pin labels …). */
   label?: string;
+  /** Bus pins carry several bits (default 1). Wires only join pins of equal width. */
+  width?: number;
 }
+
+export const pinWidth = (p: { width?: number }): number => p.width ?? 1;
 
 export interface PartSpec {
   w: number;
@@ -60,6 +64,9 @@ export const KIND_NAME: Record<PartKind, string> = {
   ram: 'RAM',
   reg: '寄存器',
   tunnel: '标签',
+  bin: '数值输入',
+  num: '数值显示',
+  split: '分线器',
   chip: '芯片',
   text: '文字'
 };
@@ -257,6 +264,21 @@ export function partSpec(part: Part, project?: Project): PartSpec {
     case 'text': {
       const { w, h } = textSize(part.text ?? '');
       return { w, h, pins: [] };
+    }
+    case 'bin':
+      return { w: 4, h: 2, pins: [{ name: 'o', dir: 'out', x: 4, y: 1, side: 'E', width: memBits(part).d }] };
+    case 'num':
+      return { w: 6, h: 2, pins: [{ name: 'i', dir: 'in', x: 0, y: 1, side: 'W', width: memBits(part).d }] };
+    case 'split': {
+      const { d } = memBits(part);
+      return {
+        w: 2,
+        h: d + 1,
+        pins: [
+          { name: 'bus', dir: 'in', x: 0, y: 1, side: 'W', width: d },
+          ...Array.from({ length: d }, (_, i) => ({ name: `b${i}`, dir: 'out' as const, x: 2, y: 1 + i, side: 'E' as const, label: String(i) }))
+        ]
+      };
     }
     case 'tunnel': {
       const len = [...(part.label ?? '')].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? 1.6 : 0.9), 0);

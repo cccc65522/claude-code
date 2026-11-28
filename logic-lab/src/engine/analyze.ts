@@ -1,5 +1,5 @@
 // Circuit analysis: truth tables, combinational feedback loops, statistics.
-import { compile, findCircuit, type Netlist } from './compile.ts';
+import { compile, findCircuit, isFatal, type Netlist } from './compile.ts';
 import { chipInterface, isGate, pinLabel, STATEFUL_KINDS } from './parts.ts';
 import { minimize, minimizePOS, type Implicant } from './qm.ts';
 import { Simulator } from './sim.ts';
@@ -95,7 +95,7 @@ export function truthTable(project: Project, circuitId: string, maxInputs = MAX_
   if (outputs.length === 0) return { ok: false, error: '电路里没有“输出引脚”，无法生成真值表。' };
   if (inputs.length > maxInputs) return { ok: false, error: `输入引脚有 ${inputs.length} 个，最多支持 ${maxInputs} 个。` };
   const nl = compile(project, circuitId);
-  if (nl.errors.some((e) => e.kind !== 'dangling-wire')) return { ok: false, error: nl.errors[0].message };
+  if (nl.errors.some(isFatal)) return { ok: false, error: nl.errors.find(isFatal)!.message };
   const notes: string[] = [];
   const loops = combinationalLoops(nl);
   const stateful = nl.comps.filter((c) => STATEFUL_KINDS.has(c.kind) && c.kind !== 'button');
@@ -259,7 +259,7 @@ export function stateTable(project: Project, circuitId: string): StateResult {
   const circuit = findCircuit(project, circuitId);
   if (!circuit) return { ok: false, error: '找不到电路' };
   const nl = compile(project, circuitId);
-  if (nl.errors.some((e) => e.kind !== 'dangling-wire')) return { ok: false, error: nl.errors[0].message };
+  if (nl.errors.some(isFatal)) return { ok: false, error: nl.errors.find(isFatal)!.message };
   // State bits: flip-flops of this circuit top to bottom, then those inside chips.
   const flops = nl.comps
     .map((c, i) => ({ c, i }))

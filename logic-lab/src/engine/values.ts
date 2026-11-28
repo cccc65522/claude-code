@@ -75,3 +75,21 @@ export function resolve(drivers: readonly Val[]): Val {
   if (seenX) return VX;
   return seen1 ? V1 : V0;
 }
+
+/** One value summarising a bus: E if any bit is shorted, X if any is unknown/floating, else 1 if any bit is 1. */
+export function busSummary(bits: readonly Val[]): Val {
+  if (bits.some((v) => v === VE)) return VE;
+  if (bits.every((v) => v === VZ)) return VZ;
+  if (bits.some((v) => v !== V0 && v !== V1)) return VX;
+  return bits.some((v) => v === V1) ? V1 : V0;
+}
+
+/** Number on a bus (bit 0 first), or null if any bit is not a clean 0/1. */
+export function busNumber(bits: readonly Val[]): number | null {
+  let n = 0;
+  for (let i = 0; i < bits.length; i++) {
+    if (bits[i] !== V0 && bits[i] !== V1) return null;
+    n |= bits[i] << i;
+  }
+  return n;
+}

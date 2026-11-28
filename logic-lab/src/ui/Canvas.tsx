@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent as RPointerEvent, type ReactElement } from 'react';
 import { findCircuit } from '../engine/compile.ts';
 import { bendAxis, pathD, route, type Pt } from '../engine/geometry.ts';
-import { partBounds, partSpec, placedPins, type PartSpec, type PlacedPin } from '../engine/parts.ts';
+import { memBits, partBounds, partSpec, pinWidth, placedPins, type PartSpec, type PlacedPin } from '../engine/parts.ts';
 import type { Part, PartKind, PinRef, Project } from '../engine/types.ts';
-import type { Val } from '../engine/values.ts';
+import { busNumber, busSummary, type Val } from '../engine/values.ts';
 import { simctl, useSimVersion } from '../store/simctl.ts';
 import {
   addChipInstance,
@@ -320,6 +320,12 @@ export function Canvas() {
           movePartsBy([...drag.ids], drag.dx, drag.dy);
         } else if (part) {
           if (part.kind === 'in') simctl.toggleInput(prefix + part.id);
+          if (part.kind === 'bin') {
+            // Click counts up; Shift+click (or Alt+click) counts down.
+            const size = 1 << memBits(part).d;
+            const cur = simctl.sim.getInput(prefix + part.id) ?? 0;
+            simctl.setNumber(prefix + part.id, (cur + (e.shiftKey || e.altKey ? size - 1 : 1)) % size);
+          }
           if (it.additive && it.wasSelected) select([part.id], [], true);
           else if (!it.additive) select([part.id]);
         }
@@ -424,25 +430,42 @@ export function Canvas() {
       bend += bendAxis([a.wx, a.wy], a.wside, [b.wx, b.wy], b.wside) === 'x' ? drag.dx : drag.dy;
     }
     const pts = route([a.wx, a.wy], a.wside, [b.wx, b.wy], b.wside, bend);
-    // Both ends of a wire are on the same net; read it through the first end so this
+    // Both ends of a wire are on the same net(s); read it through the first end so this
     // also works inside a chip instance (prefixed netlist paths).
-    const val = sim.pinValue(prefix + wire.a.part, wire.a.pin);
-    const net = sim.nl.pinNet.get(`${prefix}${wire.a.part}:${wire.a.pin}`);
+    const width = pinWidth(a);
+    const bits = sim.pinBits(prefix + wire.a.part, wire.a.pin, width);
+    const val = width > 1 ? busSummary(bits) : bits[0];
+    const net = sim.nl.pinNet.get(`${prefix}${wire.a.part}:${wire.a.pin}${width > 1 ? '#0' : ''}`);
     const osc = net !== undefined && unstable.has(net);
     const sel = selWireSet.has(wire.id);
     const d = pathD(pts);
+    const word = width > 1 ? busNumber(bits) : null;
     return (
-      <g key={wire.id} className={`wire ${valClass(val)}${sel ? ' selected' : ''}${osc ? ' osc' : ''}`} data-wire-id={wire.id}>
+      <g key={wire.id} className={`wire ${valClass(val)}${width > 1 ? ' bus' : ''}${sel ? ' selected' : ''}${osc ? ' osc' : ''}`} data-wire-id={wire.id}>
         <path className="wire-hit" d={d} data-wire={wire.id} />
         {sel && <path className="wire-halo" d={d} />}
         <path className="wire-line" d={d} />
+        {width > 1 && (
+          <text className="bus-label" x={(pts[0][0] + pts[1][0]) / 2} y={(pts[0][1] + pts[1][1]) / 2 - 0.35}>
+            {word === null ? `${width}位` : word.toString(16).toUpperCase()}
+          </text>
+        )}
       </g>
     );
   });
 
   const partViews = circuit.parts.map((part) => {
     const spec = specOf(part, project);
-    const vals: Val[] = spec.pins.map((p) => sim.pinValue(prefix + part.id, p.name));
+    const vals: Val[] = spec.pins.map((p) => {
+      const bits = sim.pinBits(prefix + part.id, p.name, pinWidth(p));
+      return bits.length > 1 ? busSummary(bits) : bits[0];
+    });
+    let word: string | undefined;
+    if (part.kind === 'bin') word = (sim.sim.getInput(prefix + part.id) ?? part.num ?? 0).toString(16).toUpperCase();
+    else if (part.kind === 'num') {
+      const n = busNumber(sim.pinBits(prefix + part.id, 'i', pinWidth(spec.pins[0])));
+      word = n === null ? '' : `${n.toString(16).toUpperCase()}|${n}`;
+    }
     const def = part.kind === 'chip' ? project.chips.find((c) => c.id === part.chip) : undefined;
     const moving = drag?.ids.has(part.id);
     return (
@@ -455,6 +478,7 @@ export function Canvas() {
         pressed={pressed === part.id || (part.kind === 'button' && sim.sim.getInput(prefix + part.id) === 1)}
         chipName={def?.name}
         missing={part.kind === 'chip' && !def}
+        word={word}
         dx={moving ? drag!.dx : 0}
         dy={moving ? drag!.dy : 0}
         dragging={moving}
@@ -464,11 +488,12 @@ export function Canvas() {
 
   const pinViews: ReactElement[] = [];
   for (const [key, p] of pins) {
-    const val = sim.pinValue(prefix + p.part.id, p.name);
+    const pbits = sim.pinBits(prefix + p.part.id, p.name, pinWidth(p));
+    const val = pbits.length > 1 ? busSummary(pbits) : pbits[0];
     const isPending = pendingPin && `${pendingPin.part}:${pendingPin.pin}` === key;
     const isFrom = wireFrom && `${wireFrom.part}:${wireFrom.pin}` === key;
     pinViews.push(
-      <g key={key} className={`pin ${p.dir} ${valClass(val)}${connected.has(key) ? ' connected' : ''}${isPending || isFrom ? ' active' : ''}`}>
+      <g key={key} className={`pin ${p.dir} ${valClass(val)}${pinWidth(p) > 1 ? ' bus' : ''}${connected.has(key) ? ' connected' : ''}${isPending || isFrom ? ' active' : ''}`}>
         <circle className="pin-dot" cx={p.wx} cy={p.wy} r={0.2} />
         <circle className="pin-hit" cx={p.wx} cy={p.wy} r={0.6} data-pin={key}>
           <title>{p.label ? `${p.label}（${p.dir === 'in' ? '输入' : '输出'}）` : p.dir === 'in' ? '输入引脚' : '输出引脚'}</title>

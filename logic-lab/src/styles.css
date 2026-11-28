@@ -1620,3 +1620,84 @@ pre.code.preview {
   background: var(--w1);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--w1) 30%, transparent);
 }
+
+/* buses */
+:root {
+  --bus: #0e7490;
+}
+:root[data-theme='dark'] {
+  --bus: #22d3ee;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bus: #22d3ee;
+  }
+}
+.wire.bus .wire-line,
+.wire.bus.v0 .wire-line,
+.wire.bus.v1 .wire-line {
+  stroke: var(--bus);
+  stroke-width: 0.38;
+}
+.wire.bus.vx .wire-line {
+  stroke: var(--wx);
+  stroke-width: 0.38;
+}
+.wire.bus.vz .wire-line {
+  stroke: var(--wz);
+  stroke-width: 0.38;
+}
+.wire.bus.ve .wire-line {
+  stroke: var(--we);
+  stroke-width: 0.42;
+}
+.bus-label {
+  font: 700 0.75px ui-monospace, Menlo, monospace;
+  text-anchor: middle;
+  fill: var(--bus);
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--canvas);
+  stroke-width: 0.25px;
+}
+.pin.bus .pin-dot {
+  r: 0.28px;
+}
+.pin.bus.connected .pin-dot {
+  fill: var(--bus);
+}
+.bus-stub,
+.split-bar {
+  stroke: var(--bus);
+  stroke-width: 0.32;
+  stroke-linecap: round;
+}
+.split-bit {
+  font-size: 0.5px;
+}
+.body.io.bin,
+.body.io.bin.v1 {
+  fill: var(--panel-2);
+  stroke: var(--bus);
+}
+.word-text {
+  font: 700 1px ui-monospace, Menlo, monospace;
+  text-anchor: middle;
+  fill: var(--bus);
+  pointer-events: none;
+}
+.num-hex {
+  font: 700 1.15px ui-monospace, Menlo, monospace;
+  text-anchor: middle;
+  fill: var(--seg-on);
+  pointer-events: none;
+}
+.num-hex.unknown {
+  fill: var(--warn);
+}
+.num-dec {
+  font: 0.6px ui-monospace, Menlo, monospace;
+  text-anchor: end;
+  fill: #94a3b8;
+  pointer-events: none;
+}

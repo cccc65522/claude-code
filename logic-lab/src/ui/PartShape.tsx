@@ -79,6 +79,8 @@ export interface PartViewProps {
   dragging?: boolean;
   dx?: number;
   dy?: number;
+  /** Number shown by a number input / display ("hex|dec" for displays). */
+  word?: string;
 }
 
 function hexDigit(vals: Val[]): string {
@@ -86,7 +88,7 @@ function hexDigit(vals: Val[]): string {
   return (vals[0] + 2 * vals[1] + 4 * vals[2] + 8 * vals[3]).toString(16).toUpperCase();
 }
 
-function PartViewImpl({ part, spec, selected, vals, pressed, chipName, missing, dx = 0, dy = 0, dragging }: PartViewProps) {
+function PartViewImpl({ part, spec, selected, vals, pressed, chipName, missing, dx = 0, dy = 0, dragging, word }: PartViewProps) {
   const { w, h } = spec;
   const W = part.rot % 2 ? h : w;
   const H = part.rot % 2 ? w : h;
@@ -282,6 +284,56 @@ function PartViewImpl({ part, spec, selected, vals, pressed, chipName, missing, 
         </>
       );
       break;
+    case 'bin':
+      body = <rect className={`body io bin ${valClass(outVal)}`} x={0.2} y={0.2} width={3.4} height={1.6} rx={0.3} />;
+      upright = (
+        <text className="word-text" x={W / 2 - (part.rot === 0 ? 0.2 : part.rot === 2 ? -0.2 : 0)} y={H / 2 + 0.35}>
+          {word ?? '0'}
+        </text>
+      );
+      break;
+    case 'num': {
+      const [hexText, decText] = (word ?? '').split('|');
+      body = (
+        <>
+          <line className="stub bus-stub" x1={0} y1={1} x2={0.5} y2={1} />
+          <rect className="display" x={0.5} y={0.2} width={w - 0.7} height={1.6} rx={0.25} />
+        </>
+      );
+      upright = word ? (
+        <>
+          <text className="num-hex" x={part.rot % 2 ? W / 2 : W / 2 - 0.5} y={H / 2 + 0.4}>
+            {hexText}
+          </text>
+          {part.rot % 2 === 0 && (
+            <text className="num-dec" x={W - 0.45} y={H / 2 + 0.3}>
+              {decText}
+            </text>
+          )}
+        </>
+      ) : (
+        <text className="num-hex unknown" x={W / 2} y={H / 2 + 0.4}>
+          ?
+        </text>
+      );
+      break;
+    }
+    case 'split':
+      body = (
+        <>
+          <line className="stub bus-stub" x1={0} y1={1} x2={1} y2={1} />
+          <line className="split-bar" x1={1} y1={0.55} x2={1} y2={h - 0.55} />
+          {spec.pins.slice(1).map((p) => (
+            <g key={p.name}>
+              <line className="stub" x1={1} y1={p.y} x2={2} y2={p.y} />
+              <text className="pin-label split-bit" x={1.55} y={p.y - 0.12}>
+                {p.label}
+              </text>
+            </g>
+          ))}
+        </>
+      );
+      break;
     case 'tunnel':
       body = <path className="body tunnel" d={`M0.2 1 L1.1 0.2 H${w - 0.2} V1.8 H1.1 Z`} />;
       upright = (
@@ -339,7 +391,7 @@ function PartViewImpl({ part, spec, selected, vals, pressed, chipName, missing, 
 
 export const PartView = memo(PartViewImpl, (a, b) => {
   if (a.part !== b.part || a.spec !== b.spec || a.selected !== b.selected || a.pressed !== b.pressed) return false;
-  if (a.chipName !== b.chipName || a.missing !== b.missing || a.dx !== b.dx || a.dy !== b.dy || a.dragging !== b.dragging) return false;
+  if (a.chipName !== b.chipName || a.missing !== b.missing || a.dx !== b.dx || a.dy !== b.dy || a.dragging !== b.dragging || a.word !== b.word) return false;
   if (a.vals.length !== b.vals.length) return false;
   for (let i = 0; i < a.vals.length; i++) if (a.vals[i] !== b.vals[i]) return false;
   return true;
