@@ -96,10 +96,15 @@ function gateInputs(n: number, h: number): PinSpec[] {
   return pins;
 }
 
+/**
+ * Estimated size of a note in grid units. Notes are drawn at 0.95 units per em: a CJK
+ * character is one em wide, other characters about half that. The estimate errs about
+ * 10% wide; it decides the selection box and how far "fit to screen" zooms out.
+ */
 export function textSize(text: string): { w: number; h: number } {
   const lines = (text || ' ').split('\n');
-  const longest = Math.max(...lines.map((l) => [...l].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? 2 : 1.1), 0)));
-  return { w: Math.max(2, Math.ceil(longest * 0.65) + 1), h: Math.max(2, lines.length * 2) };
+  const longest = Math.max(...lines.map((l) => [...l].reduce((s, ch) => s + (ch.charCodeAt(0) > 0x2e80 ? 1 : 0.6), 0)));
+  return { w: Math.max(2, Math.ceil(longest) + 1), h: Math.max(2, lines.length * 2) };
 }
 
 /**

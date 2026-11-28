@@ -20,6 +20,22 @@ test('fits the phone screen without horizontal scrolling', async ({ page }) => {
   await expect(page.locator('.palette-item[data-kind="and"]')).toBeInViewport();
 });
 
+test('the first circuit and its note fit across the phone screen', async ({ page }) => {
+  await fresh(page);
+  const canvas = (await page.getByTestId('canvas').boundingBox())!;
+  const items = page.locator('.canvas text.note, .canvas [data-part]');
+  expect(await items.count()).toBeGreaterThan(5);
+  for (const el of await items.all()) {
+    const b = (await el.boundingBox())!;
+    expect(b.x).toBeGreaterThanOrEqual(canvas.x - 1);
+    expect(b.x + b.width).toBeLessThanOrEqual(canvas.x + canvas.width + 1);
+  }
+  // Fitted to the real canvas, not a guessed size: the circuit uses a good part of the width.
+  const parts = await page.locator('.canvas [data-part]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+  const span = Math.max(...parts.map((r) => r.right)) - Math.min(...parts.map((r) => r.left));
+  expect(span).toBeGreaterThan(canvas.width * 0.6);
+});
+
 test('tap a switch in the half adder', async ({ page }) => {
   await fresh(page);
   const a = await partByLabel(page, 'in', 'A');

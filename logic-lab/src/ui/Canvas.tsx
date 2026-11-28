@@ -58,7 +58,9 @@ export function Canvas() {
   useSimVersion();
   const circuit = findCircuit(project, editing) ?? project.main;
   const svgRef = useRef<SVGSVGElement>(null);
-  const [size, setSize] = useState({ w: 800, h: 600 });
+  // 0 until the ResizeObserver has measured the canvas: fitting the first view to a guessed
+  // size made it too big on phones and too small on wide screens.
+  const [size, setSize] = useState({ w: 0, h: 0 });
   const view = views[editing] ?? null;
   const v: View = view ?? { x: size.w * 0.3, y: size.h * 0.3, zoom: 18 };
 
