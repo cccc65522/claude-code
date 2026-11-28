@@ -14,6 +14,8 @@
   --accent: #e2622a;
   --accent-soft: rgba(226, 98, 42, 0.14);
   --accent-ink: #ffffff;
+  /* Behind white text (the 播放 button): darker than --accent for 4.5:1 contrast. */
+  --accent-strong: #c2501c;
   --goal: #16a05a;
   --water: #2f86e0;
   --nodraw: #d43d3d;
@@ -46,6 +48,7 @@
     --accent: #ff7a3d;
     --accent-soft: rgba(255, 122, 61, 0.18);
     --accent-ink: #1a1208;
+    --accent-strong: #ff7a3d;
     --goal: #3ccf7f;
     --water: #3e9cff;
     --nodraw: #ff6b6b;
@@ -71,6 +74,7 @@
   --accent: #ff7a3d;
   --accent-soft: rgba(255, 122, 61, 0.18);
   --accent-ink: #1a1208;
+  --accent-strong: #ff7a3d;
   --goal: #3ccf7f;
   --water: #3e9cff;
   --nodraw: #ff6b6b;
@@ -136,8 +140,8 @@ button, input, select { font: inherit; color: inherit; }
 .btn.icon { padding: 0; width: 40px; }
 .btn.small { height: 34px; font-size: 14px; padding: 0 9px; }
 .btn.small svg { width: 18px; height: 18px; }
-.btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+.btn.primary { background: var(--accent-strong, var(--accent)); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); background: var(--accent-strong, var(--accent)); }
 .btn.toggle[aria-pressed="true"], .btn.active { background: var(--accent-soft); color: var(--accent); }
 .btn.danger { color: var(--nodraw); }
 .btn.wide { width: 100%; justify-content: flex-start; }
