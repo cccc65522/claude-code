@@ -67,6 +67,7 @@ export class Simulator {
 
     nl.comps.forEach((c, i) => {
       if (c.kind === 'in') this.q[i] = c.part.value === 1 ? 1 : 0;
+      if (c.kind === 'bin') this.q[i] = (c.part.num ?? 0) & ((1 << c.outs.length) - 1);
       if (c.kind === 'reg' || c.kind === 'ram') this.mem.set(i, new Uint8Array(memSize(c)));
       const old = carry ? carry.nl.compByPath.get(c.path) : undefined;
       if (carry && old !== undefined && carry.nl.comps[old].kind === c.kind) {
@@ -88,7 +89,7 @@ export class Simulator {
   /** Clear all state: flip-flops to 0, clocks to the start of their cycle, gates unknown. */
   reset(): void {
     this.nl.comps.forEach((c, i) => {
-      if (c.kind !== 'in') this.q[i] = 0;
+      if (c.kind !== 'in' && c.kind !== 'bin') this.q[i] = 0;
       this.prevClk[i] = VX;
       this.cnt[i] = 0;
     });
@@ -107,6 +108,7 @@ export class Simulator {
     this.nl.comps.forEach((c, i) => {
       if (c.kind === 'in' || c.kind === 'button' || c.kind === 'clock') this.slotVal[c.outBase] = this.q[i];
       else if (c.kind === 'const') this.slotVal[c.outBase] = c.part.value === 1 ? V1 : V0;
+      else if (c.kind === 'bin') for (let k = 0; k < c.outs.length; k++) this.slotVal[c.outBase + k] = (this.q[i] >> k) & 1;
     });
   }
 
@@ -136,12 +138,13 @@ export class Simulator {
     return this.nl.compByPath.get(path);
   }
 
-  /** Set an input switch (or press/release a button). Does not settle. */
-  setInput(path: string, v: 0 | 1): boolean {
+  /** Set an input switch, press/release a button, or set a number input. Does not settle. */
+  setInput(path: string, value: number): boolean {
     const i = this.nl.compByPath.get(path);
     if (i === undefined) return false;
     const c = this.nl.comps[i];
-    if (c.kind !== 'in' && c.kind !== 'button') return false;
+    if (c.kind !== 'in' && c.kind !== 'button' && c.kind !== 'bin') return false;
+    const v = c.kind === 'bin' ? value & ((1 << c.outs.length) - 1) : value ? 1 : 0;
     if (this.q[i] !== v) {
       this.q[i] = v;
       this.schedule(i);
@@ -149,16 +152,16 @@ export class Simulator {
     return true;
   }
 
-  getInput(path: string): 0 | 1 | undefined {
+  getInput(path: string): number | undefined {
     const i = this.nl.compByPath.get(path);
-    return i === undefined ? undefined : (this.q[i] as 0 | 1);
+    return i === undefined ? undefined : this.q[i];
   }
 
-  /** Values of all root-level input switches, keyed by part id. */
-  inputValues(): Record<string, 0 | 1> {
-    const out: Record<string, 0 | 1> = {};
+  /** Values of all root-level input switches and number inputs, keyed by part id. */
+  inputValues(): Record<string, number> {
+    const out: Record<string, number> = {};
     this.nl.comps.forEach((c, i) => {
-      if (c.root && c.kind === 'in') out[c.part.id] = this.q[i] as 0 | 1;
+      if (c.root && (c.kind === 'in' || c.kind === 'bin')) out[c.part.id] = this.q[i];
     });
     return out;
   }
@@ -166,6 +169,14 @@ export class Simulator {
   pinValue(partId: string, pin: string): Val {
     const n = this.nl.pinNet.get(`${partId}:${pin}`);
     return n === undefined ? VZ : (this.netVal[n] as Val);
+  }
+
+  /** Values of the bits of a bus pin, bit 0 first. */
+  busValue(partId: string, pin: string, width: number): Val[] {
+    return Array.from({ length: width }, (_, i) => {
+      const n = this.nl.pinNet.get(`${partId}:${pin}#${i}`);
+      return n === undefined ? VZ : (this.netVal[n] as Val);
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -367,10 +378,14 @@ export class Simulator {
         for (let k = 0; k < d; k++) this.out(c, k, addr < 0 ? VX : (m[addr * d + k] as Val), touched);
         return;
       }
+      case 'bin':
+        for (let k = 0; k < c.outs.length; k++) this.out(c, k, ((this.q[i] >> k) & 1) as Val, touched);
+        return;
       case 'out':
       case 'led':
       case 'hex':
       case 'seg7':
+      case 'num':
         return;
     }
   }

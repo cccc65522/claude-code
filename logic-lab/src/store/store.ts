@@ -7,7 +7,7 @@ import { boundsOf } from '../engine/expr.ts';
 import { checkLevel, levelById, levelCircuit, type CheckResult } from '../engine/levels.ts';
 import { bendAxis } from '../engine/geometry.ts';
 import { packageParts, PackageError } from '../engine/package.ts';
-import { clampInputs, isMultiInputGate, partBounds, partSpec, placedPins } from '../engine/parts.ts';
+import { clampInputs, isMultiInputGate, partBounds, partSpec, pinWidth, placedPins } from '../engine/parts.ts';
 import { parseProject, projectToJSON } from '../engine/serialize.ts';
 import type { Circuit, Part, PartKind, PinRef, Project, Rot, Wire } from '../engine/types.ts';
 import { MAIN_ID } from '../engine/types.ts';
@@ -51,6 +51,12 @@ export interface EditorState {
   pendingPin: PinRef | null;
   /** Bumped whenever a different document is opened (resets the simulation). */
   doc: number;
+  /**
+   * Looking inside a chip instance while the circuit it sits in keeps running:
+   * `root` is the simulated circuit, `path` the chain of instance ids down to the one
+   * shown. `editing` is then that instance's chip definition. Null when not live.
+   */
+  live: { root: string; path: string[] } | null;
 }
 
 export const DEFAULT_ZOOM = 18;
@@ -154,7 +160,8 @@ function initialState(): EditorState {
     toast: null,
     dialog: null,
     pendingPin: null,
-    doc: 0
+    doc: 0,
+    live: null
   };
 }
 
@@ -305,6 +312,9 @@ export function defaultProps(kind: PartKind): Partial<Part> {
   if (kind === 'const') return { value: 1 };
   if (kind === 'led') return { color: 'red' };
   if (kind === 'text') return { text: '双击编辑文字' };
+  if (kind === 'tunnel') return { label: 'N1' };
+  if (kind === 'bin') return { dbits: 4, num: 0 };
+  if (kind === 'num' || kind === 'split') return { dbits: 4 };
   if (kind === 'rom') return { abits: 4, dbits: 4, data: Array.from({ length: 16 }, (_, i) => i) };
   if (kind === 'ram') return { abits: 4, dbits: 4 };
   if (kind === 'reg') return { dbits: 4 };
@@ -421,8 +431,14 @@ export function updatePart(id: string, patch: Partial<Part>): void {
     let wires = c.wires;
     // Shrinking a gate drops wires on pins that no longer exist.
     if (patch.n !== undefined || patch.chip !== undefined || patch.abits !== undefined || patch.dbits !== undefined) {
+      // Drop wires on pins that no longer exist, or whose width no longer matches the other end.
+      const after = { ...c, parts: c.parts.map((p) => (p.id === id ? next : p)) };
       const pins = new Set(partSpec(next, store.get().project).pins.map((p) => p.name));
-      wires = wires.filter((w) => !((w.a.part === id && !pins.has(w.a.pin)) || (w.b.part === id && !pins.has(w.b.pin))));
+      wires = wires.filter(
+        (w) =>
+          !((w.a.part === id && !pins.has(w.a.pin)) || (w.b.part === id && !pins.has(w.b.pin))) &&
+          ((w.a.part !== id && w.b.part !== id) || pinWidthOf(after, w.a) === pinWidthOf(after, w.b))
+      );
     }
     return { ...c, parts: c.parts.map((p) => (p.id === id ? next : p)), wires };
   });
@@ -480,9 +496,22 @@ export function connect(a: PinRef, b: PinRef): boolean {
     toast('这两个引脚已经连上了');
     return false;
   }
+  const wa = pinWidthOf(c, a);
+  const wb = pinWidthOf(c, b);
+  if (wa !== wb) {
+    toast(`位宽不同，不能直接相连：一边 ${wa} 位，一边 ${wb} 位。可以用分线器转换`, 'error');
+    store.set({ pendingPin: null });
+    return false;
+  }
   const id = newId('w');
   editCircuit((cc) => ({ ...cc, wires: [...cc.wires, { id, a, b }] }), { pendingPin: null, selWires: [], selParts: [] });
   return true;
+}
+
+export function pinWidthOf(c: Circuit, r: PinRef): number {
+  const part = c.parts.find((p) => p.id === r.part);
+  const spec = part ? partSpec(part, store.get().project).pins.find((p) => p.name === r.pin) : undefined;
+  return spec ? pinWidth(spec) : 1;
 }
 
 export function select(parts: string[], wires: string[] = [], additive = false): void {
@@ -574,7 +603,61 @@ export function chipUsage(project: Project, chipId: string): string[] {
 export function enterCircuit(id: string): void {
   const s = store.get();
   if (!findCircuit(s.project, id)) return;
-  store.set({ editing: id, selParts: [], selWires: [], pendingPin: null, tab: id === MAIN_ID ? s.tab : s.tab === 'levels' ? 'props' : s.tab });
+  store.set({ editing: id, live: null, selParts: [], selWires: [], pendingPin: null, tab: id === MAIN_ID ? s.tab : s.tab === 'levels' ? 'props' : s.tab });
+}
+
+/** The circuit being simulated (the top of the live chain, or the circuit being edited). */
+export function simRoot(s: EditorState = store.get()): string {
+  return s.live?.root ?? s.editing;
+}
+
+/** Prefix of netlist paths for the circuit on screen ("" unless viewing inside an instance). */
+export function livePrefix(s: EditorState = store.get()): string {
+  return s.live && s.live.path.length ? s.live.path.join('/') + '/' : '';
+}
+
+/** Look inside a chip instance of the circuit on screen, keeping the simulation running. */
+export function enterInstance(instanceId: string): void {
+  const s = store.get();
+  const part = currentCircuit(s).parts.find((p) => p.id === instanceId);
+  if (!part || part.kind !== 'chip' || !part.chip || !findCircuit(s.project, part.chip)) return;
+  const live = s.live ? { root: s.live.root, path: [...s.live.path, instanceId] } : { root: s.editing, path: [instanceId] };
+  store.set({ editing: part.chip, live, selParts: [], selWires: [], pendingPin: null });
+}
+
+/** Go back up the live chain to `depth` instances deep (0 = the simulated circuit itself). */
+export function leaveInstance(depth: number): void {
+  const s = store.get();
+  if (!s.live) return;
+  const path = s.live.path.slice(0, depth);
+  let circuit = findCircuit(s.project, s.live.root);
+  for (const id of path) circuit = findCircuit(s.project, circuit?.parts.find((p) => p.id === id)?.chip ?? '');
+  if (!circuit) return enterCircuit(s.live.root);
+  store.set({ editing: circuit.id, live: path.length ? { root: s.live.root, path } : null, selParts: [], selWires: [], pendingPin: null });
+}
+
+/** The live chain as (instance label, circuit) steps, or null if it no longer matches the project. */
+export function liveChain(s: EditorState): { id: string; label: string; circuit: Circuit }[] | null {
+  if (!s.live) return [];
+  let circuit = findCircuit(s.project, s.live.root);
+  const steps: { id: string; label: string; circuit: Circuit }[] = [];
+  for (const id of s.live.path) {
+    const part = circuit?.parts.find((p) => p.id === id);
+    const next = part?.kind === 'chip' && part.chip ? findCircuit(s.project, part.chip) : undefined;
+    if (!part || !next) return null;
+    steps.push({ id, label: part.label || next.name, circuit: next });
+    circuit = next;
+  }
+  return circuit?.id === s.editing ? steps : null;
+}
+
+/** After an edit, undo or redo, drop a live view whose instances no longer exist. */
+export function validateLive(): void {
+  const s = store.get();
+  if (s.live && liveChain(s) === null) {
+    const root = findCircuit(s.project, s.live.root) ? s.live.root : MAIN_ID;
+    store.set({ live: null, editing: root, selParts: [], selWires: [] });
+  }
 }
 
 function uniqueChipName(project: Project, base: string): string {
@@ -644,7 +727,7 @@ export function loadProject(p: Project, message?: string): void {
     toast('闯关模式下不能打开项目，先切换到“自由实验”', 'error');
     return;
   }
-  commit(p, { editing: MAIN_ID, selParts: [], selWires: [], views: {}, pendingPin: null, doc: s.doc + 1 });
+  commit(p, { editing: MAIN_ID, live: null, selParts: [], selWires: [], views: {}, pendingPin: null, doc: s.doc + 1 });
   if (message) toast(message, 'ok');
 }
 
@@ -672,6 +755,7 @@ export function switchWorkspace(ws: Workspace, saveCurrent: () => void): void {
     check: null,
     pendingPin: null,
     doc: store.get().doc + 1,
+    live: null,
     tab: ws.mode === 'level' ? 'levels' : store.get().tab === 'levels' ? 'props' : store.get().tab
   });
   saveUI();
@@ -702,16 +786,22 @@ export function runCheck(): CheckResult | null {
 }
 
 /** Save the current project (with the live values of input switches) to local storage. */
-export function saveProject(inputs: Record<string, 0 | 1>): void {
+export function saveProject(inputs: Record<string, number>): void {
   const s = store.get();
-  const p = withInputValues(s.project, s.editing, inputs);
+  const p = withInputValues(s.project, simRoot(s), inputs);
   writeLS(s.workspace.mode === 'level' ? LS.level(s.workspace.id) : LS.free, projectToJSON(p));
 }
 
-export function withInputValues(p: Project, circuitId: string, inputs: Record<string, 0 | 1>): Project {
+/** Write the live values of switches and number inputs back into the document (for saving). */
+export function withInputValues(p: Project, circuitId: string, inputs: Record<string, number>): Project {
   const c = findCircuit(p, circuitId);
-  if (!c || !c.parts.some((x) => x.kind === 'in' && inputs[x.id] !== undefined && (x.value ?? 0) !== inputs[x.id])) return p;
-  return replaceCircuit(p, { ...c, parts: c.parts.map((x) => (x.kind === 'in' && inputs[x.id] !== undefined ? { ...x, value: inputs[x.id] } : x)) });
+  const stale = (x: Part) =>
+    inputs[x.id] !== undefined && ((x.kind === 'in' && (x.value ?? 0) !== inputs[x.id]) || (x.kind === 'bin' && (x.num ?? 0) !== inputs[x.id]));
+  if (!c || !c.parts.some(stale)) return p;
+  return replaceCircuit(p, {
+    ...c,
+    parts: c.parts.map((x) => (!stale(x) ? x : x.kind === 'in' ? { ...x, value: inputs[x.id] ? 1 : 0 } : { ...x, num: inputs[x.id] }))
+  });
 }
 
 export function saveUI(): void {

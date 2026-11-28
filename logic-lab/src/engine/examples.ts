@@ -75,6 +75,32 @@ function adder4(): Project {
   return p;
 }
 
+function adderBus(): Project {
+  const fa = fullAdderChip();
+  const p = emptyProject();
+  p.chips = [fa];
+  const b = new CircuitBuilder('main', '4 位加法器（总线版）', { project: p });
+  b.add('text', 0, -7, { text: '用总线代替一根根导线：两个“数值输入”各是一根 4 位总线，分线器把它拆成 4 根线送进全加器，\n再把 4 位和与进位合成一根 5 位总线送到“数值显示”。点一下数值输入就加 1，也可以在属性里直接输入数值。' });
+  b.add('bin', 0, 2, { id: 'A', label: 'A', dbits: 4, num: 5 });
+  b.add('bin', 0, 12, { id: 'B', label: 'B', dbits: 4, num: 3 });
+  b.add('split', 8, 2, { id: 'sA', dbits: 4 });
+  b.add('split', 8, 12, { id: 'sB', dbits: 4 });
+  b.add('const', 14, -2, { id: 'zero', value: 0 });
+  for (let i = 0; i < 4; i++) b.add('chip', 18, i * 9, { id: `F${i}`, chip: 'fa' });
+  b.add('split', 36, 8, { id: 'sS', dbits: 5, rot: 2 });
+  b.add('num', 42, 12, { id: 'S', label: 'A+B', dbits: 5 });
+  b.wire('A.o', 'sA.bus').wire('B.o', 'sB.bus').wire('zero', 'F0.Ci');
+  // Each bit wire gets its own vertical run, ordered so that runs cross but never overlap.
+  const bendA = [15, 14.5, 14, 13.5];
+  const bendB = [15.5, 16, 17, 16.5];
+  const bendS = [33.5, 32, 30, 34.5];
+  for (let i = 0; i < 4; i++) b.wire(`sA.b${i}`, `F${i}.A`, bendA[i]).wire(`sB.b${i}`, `F${i}.B`, bendB[i]).wire(`F${i}.S`, `sS.b${i}`, bendS[i]);
+  for (let i = 0; i < 3; i++) b.wire(`F${i}.Co`, `F${i + 1}.Ci`);
+  b.wire('F3.Co', 'sS.b4', 29).wire('sS.bus', 'S.i');
+  p.main = b.build();
+  return p;
+}
+
 function srLatch(): Project {
   const b = new CircuitBuilder('main', 'SR 锁存器');
   b.add('text', 0, -9, { text: '两个或非门交叉耦合：按一下 S 置 1，\n按一下 R 清 0，松开后状态保持。\n两个都按住再同时松开，理想电路会振荡\n（状态栏会提示）。' });
@@ -313,6 +339,7 @@ function hazard(): Project {
 export const EXAMPLES: Example[] = [
   { id: 'half-adder', title: '半加器', desc: '异或门和与门：最简单的加法电路', build: halfAdder },
   { id: 'adder4', title: '4 位加法器', desc: '自定义芯片：四个全加器串成行波进位加法器', build: adder4 },
+  { id: 'adder-bus', title: '4 位加法器（总线版）', desc: '数值输入、分线器、数值显示：用总线连线', build: adderBus },
   { id: 'sr-latch', title: 'SR 锁存器', desc: '交叉耦合的或非门，电路有了记忆', build: srLatch },
   { id: 'counter4', title: '4 位计数器', desc: 'T 触发器 + 时钟 + 十六进制显示 + 波形图', build: counter4 },
   { id: 'decimal', title: '十进制计数器', desc: '异步清零 + 自动生成的 BCD 七段译码器', build: decimalCounter },

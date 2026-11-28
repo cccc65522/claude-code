@@ -3,15 +3,16 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent as RPointerEvent, type ReactElement } from 'react';
 import { findCircuit } from '../engine/compile.ts';
 import { bendAxis, pathD, route, type Pt } from '../engine/geometry.ts';
-import { partBounds, partSpec, placedPins, type PartSpec, type PlacedPin } from '../engine/parts.ts';
+import { memBits, partBounds, partSpec, pinWidth, placedPins, type PartSpec, type PlacedPin } from '../engine/parts.ts';
 import type { Part, PartKind, PinRef, Project } from '../engine/types.ts';
-import type { Val } from '../engine/values.ts';
+import { busNumber, busSummary, type Val } from '../engine/values.ts';
 import { simctl, useSimVersion } from '../store/simctl.ts';
 import {
   addChipInstance,
   addPart,
   connect,
-  enterCircuit,
+  enterInstance,
+  livePrefix,
   fitView,
   movePartsBy,
   select,
@@ -54,6 +55,8 @@ export function Canvas() {
   const selParts = useEditor((s) => s.selParts);
   const selWires = useEditor((s) => s.selWires);
   const pendingPin = useEditor((s) => s.pendingPin);
+  /** Netlist path prefix when looking inside a chip instance of the running circuit. */
+  const prefix = useEditor(livePrefix);
   const views = useEditor((s) => s.views);
   useSimVersion();
   const circuit = findCircuit(project, editing) ?? project.main;
@@ -190,7 +193,7 @@ export function Canvas() {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     svgRef.current?.setPointerCapture(e.pointerId);
     if (pointers.current.size === 2) {
-      if (inter.current.type === 'button') simctl.setButton(inter.current.id, false);
+      if (inter.current.type === 'button') simctl.setButton(prefix + inter.current.id, false);
       setPressed(null);
       startPinch();
       return;
@@ -216,7 +219,7 @@ export function Canvas() {
       const wasSelected = selPartSet.has(partId);
       if (!wasSelected) select([partId], [], additive);
       if (part.kind === 'button') {
-        simctl.setButton(partId, true);
+        simctl.setButton(prefix + partId, true);
         setPressed(partId);
         inter.current = { type: 'button', id: partId, sx: e.clientX, sy: e.clientY };
         return;
@@ -316,7 +319,13 @@ export function Canvas() {
         if (it.moved && drag) {
           movePartsBy([...drag.ids], drag.dx, drag.dy);
         } else if (part) {
-          if (part.kind === 'in') simctl.toggleInput(part.id);
+          if (part.kind === 'in') simctl.toggleInput(prefix + part.id);
+          if (part.kind === 'bin') {
+            // Click counts up; Shift+click (or Alt+click) counts down.
+            const size = 1 << memBits(part).d;
+            const cur = simctl.sim.getInput(prefix + part.id) ?? 0;
+            simctl.setNumber(prefix + part.id, (cur + (e.shiftKey || e.altKey ? size - 1 : 1)) % size);
+          }
           if (it.additive && it.wasSelected) select([part.id], [], true);
           else if (!it.additive) select([part.id]);
         }
@@ -324,7 +333,7 @@ export function Canvas() {
         return;
       }
       case 'button':
-        simctl.setButton(it.id, false);
+        simctl.setButton(prefix + it.id, false);
         setPressed(null);
         return;
       case 'bend':
@@ -387,7 +396,7 @@ export function Canvas() {
     }
     const id = hit?.getAttribute('data-part');
     const part = id ? circuit.parts.find((p) => p.id === id) : undefined;
-    if (part?.kind === 'chip' && part.chip) enterCircuit(part.chip);
+    if (part?.kind === 'chip' && part.chip) enterInstance(part.id);
     else if (part?.kind === 'text') {
       store.set({ tab: 'props', sheetOpen: true, selParts: [part.id], selWires: [] });
       setTimeout(() => (document.querySelector('#prop-text') as HTMLTextAreaElement | null)?.focus(), 50);
@@ -421,23 +430,42 @@ export function Canvas() {
       bend += bendAxis([a.wx, a.wy], a.wside, [b.wx, b.wy], b.wside) === 'x' ? drag.dx : drag.dy;
     }
     const pts = route([a.wx, a.wy], a.wside, [b.wx, b.wy], b.wside, bend);
-    const val = sim.wireValue(wire.id);
-    const net = sim.netOfWire(wire.id);
+    // Both ends of a wire are on the same net(s); read it through the first end so this
+    // also works inside a chip instance (prefixed netlist paths).
+    const width = pinWidth(a);
+    const bits = sim.pinBits(prefix + wire.a.part, wire.a.pin, width);
+    const val = width > 1 ? busSummary(bits) : bits[0];
+    const net = sim.nl.pinNet.get(`${prefix}${wire.a.part}:${wire.a.pin}${width > 1 ? '#0' : ''}`);
     const osc = net !== undefined && unstable.has(net);
     const sel = selWireSet.has(wire.id);
     const d = pathD(pts);
+    const word = width > 1 ? busNumber(bits) : null;
     return (
-      <g key={wire.id} className={`wire ${valClass(val)}${sel ? ' selected' : ''}${osc ? ' osc' : ''}`} data-wire-id={wire.id}>
+      <g key={wire.id} className={`wire ${valClass(val)}${width > 1 ? ' bus' : ''}${sel ? ' selected' : ''}${osc ? ' osc' : ''}`} data-wire-id={wire.id}>
         <path className="wire-hit" d={d} data-wire={wire.id} />
         {sel && <path className="wire-halo" d={d} />}
         <path className="wire-line" d={d} />
+        {width > 1 && (
+          <text className="bus-label" x={(pts[0][0] + pts[1][0]) / 2} y={(pts[0][1] + pts[1][1]) / 2 - 0.35}>
+            {word === null ? `${width}位` : word.toString(16).toUpperCase()}
+          </text>
+        )}
       </g>
     );
   });
 
   const partViews = circuit.parts.map((part) => {
     const spec = specOf(part, project);
-    const vals: Val[] = spec.pins.map((p) => sim.pinValue(part.id, p.name));
+    const vals: Val[] = spec.pins.map((p) => {
+      const bits = sim.pinBits(prefix + part.id, p.name, pinWidth(p));
+      return bits.length > 1 ? busSummary(bits) : bits[0];
+    });
+    let word: string | undefined;
+    if (part.kind === 'bin') word = (sim.sim.getInput(prefix + part.id) ?? part.num ?? 0).toString(16).toUpperCase();
+    else if (part.kind === 'num') {
+      const n = busNumber(sim.pinBits(prefix + part.id, 'i', pinWidth(spec.pins[0])));
+      word = n === null ? '' : `${n.toString(16).toUpperCase()}|${n}`;
+    }
     const def = part.kind === 'chip' ? project.chips.find((c) => c.id === part.chip) : undefined;
     const moving = drag?.ids.has(part.id);
     return (
@@ -447,9 +475,10 @@ export function Canvas() {
         spec={spec}
         selected={selPartSet.has(part.id)}
         vals={vals}
-        pressed={pressed === part.id || (part.kind === 'button' && sim.sim.getInput(part.id) === 1)}
+        pressed={pressed === part.id || (part.kind === 'button' && sim.sim.getInput(prefix + part.id) === 1)}
         chipName={def?.name}
         missing={part.kind === 'chip' && !def}
+        word={word}
         dx={moving ? drag!.dx : 0}
         dy={moving ? drag!.dy : 0}
         dragging={moving}
@@ -459,11 +488,12 @@ export function Canvas() {
 
   const pinViews: ReactElement[] = [];
   for (const [key, p] of pins) {
-    const val = sim.pinValue(p.part.id, p.name);
+    const pbits = sim.pinBits(prefix + p.part.id, p.name, pinWidth(p));
+    const val = pbits.length > 1 ? busSummary(pbits) : pbits[0];
     const isPending = pendingPin && `${pendingPin.part}:${pendingPin.pin}` === key;
     const isFrom = wireFrom && `${wireFrom.part}:${wireFrom.pin}` === key;
     pinViews.push(
-      <g key={key} className={`pin ${p.dir} ${valClass(val)}${connected.has(key) ? ' connected' : ''}${isPending || isFrom ? ' active' : ''}`}>
+      <g key={key} className={`pin ${p.dir} ${valClass(val)}${pinWidth(p) > 1 ? ' bus' : ''}${connected.has(key) ? ' connected' : ''}${isPending || isFrom ? ' active' : ''}`}>
         <circle className="pin-dot" cx={p.wx} cy={p.wy} r={0.2} />
         <circle className="pin-hit" cx={p.wx} cy={p.wy} r={0.6} data-pin={key}>
           <title>{p.label ? `${p.label}（${p.dir === 'in' ? '输入' : '输出'}）` : p.dir === 'in' ? '输入引脚' : '输出引脚'}</title>

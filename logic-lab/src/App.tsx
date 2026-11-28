@@ -11,6 +11,8 @@ import {
   deleteSelection,
   duplicateSelection,
   enterCircuit,
+  leaveInstance,
+  liveChain,
   loadProject,
   movePartsBy,
   newProject,
@@ -21,6 +23,7 @@ import {
   saveProject,
   saveUI,
   selectAll,
+  simRoot,
   store,
   switchWorkspace,
   toast,
@@ -172,7 +175,7 @@ function FileMenu() {
   };
   const exportFile = () => {
     const s = store.get();
-    const p = withInputValues(s.project, s.editing, simctl.inputValues());
+    const p = withInputValues(s.project, simRoot(s), simctl.inputValues());
     const blob = new Blob([JSON.stringify(JSON.parse(projectToJSON(p)), null, 1)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -184,7 +187,7 @@ function FileMenu() {
   };
   const share = async () => {
     const s = store.get();
-    const code = await encodeShare(withInputValues(s.project, s.editing, simctl.inputValues()));
+    const code = await encodeShare(withInputValues(s.project, simRoot(s), simctl.inputValues()));
     const url = `${location.origin}${location.pathname}#c=${code}`;
     try {
       await navigator.clipboard.writeText(url);
@@ -313,7 +316,8 @@ function StatusBar() {
       ))}
       <span className="grow" />
       <span className="dim">
-        {c.parts.length} 个元件 · {c.wires.length} 根导线{simctl.nl.comps.length > c.parts.length ? ` · 展开后 ${simctl.nl.comps.length} 个` : ''}
+        {c.parts.length} 个元件 · {c.wires.length} 根导线
+        {!store.get().live && simctl.nl.comps.length > c.parts.length ? ` · 展开后 ${simctl.nl.comps.length} 个` : ''}
       </span>
     </div>
   );
@@ -322,6 +326,35 @@ function StatusBar() {
 function Breadcrumb() {
   const editing = useEditor((s) => s.editing);
   const project = useEditor((s) => s.project);
+  const live = useEditor((s) => s.live);
+  if (live) {
+    const chain = liveChain(store.get()) ?? [];
+    const root = project.chips.find((c) => c.id === live.root)?.name ?? (live.root === MAIN_ID ? '主电路' : '电路');
+    return (
+      <div className="breadcrumb live" data-testid="breadcrumb">
+        <span className="live-dot" aria-hidden />
+        <button className="link" onClick={() => leaveInstance(0)}>
+          {root}
+        </button>
+        {chain.map((step, i) => (
+          <span key={step.id} className="crumb">
+            <span>›</span>
+            {i === chain.length - 1 ? (
+              <b>{step.label}</b>
+            ) : (
+              <button className="link" onClick={() => leaveInstance(i + 1)}>
+                {step.label}
+              </button>
+            )}
+          </span>
+        ))}
+        <span className="tip">实时查看这个实例的内部信号；修改会作用到芯片定义，所有实例一起变</span>
+        <button className="btn small" onClick={() => leaveInstance(chain.length - 1)}>
+          ← 返回上一层
+        </button>
+      </div>
+    );
+  }
   if (editing === MAIN_ID) return null;
   const chip = project.chips.find((c) => c.id === editing);
   return (

@@ -8,11 +8,11 @@ import { addChipInstance, addPart, defaultProps, store, useEditor, viewCenter } 
 import { PartView } from './PartShape.tsx';
 
 const GROUPS: { title: string; kinds: PartKind[] }[] = [
-  { title: '输入输出', kinds: ['in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7'] },
+  { title: '输入输出', kinds: ['in', 'out', 'button', 'clock', 'const', 'led', 'hex', 'seg7', 'bin', 'num'] },
   { title: '逻辑门', kinds: ['and', 'or', 'not', 'xor', 'nand', 'nor', 'xnor', 'buf'] },
   { title: '组合与时序', kinds: ['mux', 'tri', 'dff', 'jkff', 'tff'] },
   { title: '存储', kinds: ['reg', 'rom', 'ram'] },
-  { title: '标注', kinds: ['text'] }
+  { title: '标注与连线', kinds: ['tunnel', 'split', 'text'] }
 ];
 
 const ICON_VALUES: Partial<Record<PartKind, Val[]>> = {
@@ -45,7 +45,7 @@ export function Palette() {
   const project = useEditor((s) => s.project);
   const editing = useEditor((s) => s.editing);
   const level = workspace.mode === 'level' ? levelById(workspace.id) : undefined;
-  const allowed = level ? new Set<PartKind>([...level.palette, 'text']) : null;
+  const allowed = level ? new Set<PartKind>([...level.palette, 'text', 'tunnel']) : null;
   const chips = level ? [] : placeableChips(project, editing);
 
   const place = (kind: PartKind, chip?: string) => {

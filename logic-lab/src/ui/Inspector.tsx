@@ -3,6 +3,7 @@ import { circuitStats } from '../engine/analyze.ts';
 import { findCircuit } from '../engine/compile.ts';
 import { clampInputs, isMultiInputGate, KIND_NAME, MAX_INPUTS, MEM_LIMITS, memBits, MIN_INPUTS } from '../engine/parts.ts';
 import type { Part } from '../engine/types.ts';
+import { busNumber, VAL_NAME } from '../engine/values.ts';
 import { MAIN_ID } from '../engine/types.ts';
 import { simctl, useSimVersion } from '../store/simctl.ts';
 import {
@@ -10,6 +11,8 @@ import {
   currentCircuit,
   deleteSelection,
   enterCircuit,
+  enterInstance,
+  livePrefix,
   packageSelection,
   renameCircuit,
   setWireBend,
@@ -79,7 +82,7 @@ function MemoryProps({ part }: { part: Part }) {
   const text = Array.from({ length: words }, (_, i) => hex(part.data?.[i] ?? 0, digits))
     .join(' ')
     .replace(/((?:\S+ ){7}\S+) /g, '$1\n');
-  const live = simctl.sim.memory(part.id);
+  const live = simctl.sim.memory(livePrefix() + part.id);
   return (
     <>
       {k !== 'reg' && (
@@ -110,7 +113,7 @@ function MemoryProps({ part }: { part: Part }) {
           />
         </label>
       )}
-      {k === 'ram' && live && store.get().editing === MAIN_ID && (
+      {k === 'ram' && live && (
         <div className="mem-view" data-testid="ram-view">
           {Array.from({ length: words }, (_, w) => {
             let v = 0;
@@ -129,7 +132,7 @@ function MemoryProps({ part }: { part: Part }) {
           })}
         </div>
       )}
-      {k === 'reg' && live && store.get().editing === MAIN_ID && (
+      {k === 'reg' && live && (
         <p className="tip">
           当前值 <b className="mono">{[...live].some((b) => b > 1) ? 'X' : hex([...live].reduce((s, b, i) => s | (b << i), 0), digits)}</b>（十六进制）
         </p>
@@ -138,6 +141,54 @@ function MemoryProps({ part }: { part: Part }) {
         {k === 'rom' && '只读存储器：输出地址 A 处的字，相当于一张真值表。'}
         {k === 'ram' && '读出是即时的；WE=1 时，在时钟上升沿把 I 写进地址 A。复位会清空内容。'}
         {k === 'reg' && '时钟上升沿把 D 存进去；EN=0 时保持（EN 不接视为 1）；R=1 立即清零。'}
+      </p>
+    </>
+  );
+}
+
+function BusProps({ part }: { part: Part }) {
+  useSimVersion();
+  const { d } = memBits(part);
+  const k = part.kind;
+  const path = livePrefix() + part.id;
+  const value = k === 'bin' ? simctl.sim.getInput(path) ?? part.num ?? 0 : null;
+  const shown = k === 'num' ? busNumber(simctl.sim.busValue(path, 'i', d)) : null;
+  return (
+    <>
+      <label className="field">
+        <span>位宽</span>
+        <Stepper value={d} min={k === 'split' ? 2 : 1} max={MEM_LIMITS.dbits[1]} label="位宽" onChange={(v) => updatePart(part.id, { dbits: v })} />
+      </label>
+      {k === 'bin' && value !== null && (
+        <label className="field">
+          <span>数值（十进制，或 0x 开头的十六进制，0–{(1 << d) - 1}）</span>
+          <LazyInput
+            id="bin-value"
+            value={String(value)}
+            onCommit={(v) => {
+              const t = v.trim();
+              const n = /^0x[0-9a-f]+$/i.test(t) ? parseInt(t, 16) : /^\d+$/.test(t) ? parseInt(t, 10) : NaN;
+              if (!Number.isFinite(n) || n >= 1 << d) toast(`请输入 0 到 ${(1 << d) - 1} 之间的整数`, 'error');
+              else simctl.setNumber(path, n);
+            }}
+          />
+        </label>
+      )}
+      {k === 'bin' && value !== null && (
+        <p className="tip mono">
+          二进制 {value.toString(2).padStart(d, '0')} · 十六进制 {value.toString(16).toUpperCase()}
+        </p>
+      )}
+      {k === 'num' && (
+        <p className="tip">
+          当前 {shown === null ? '有未知位（X/Z/E）' : <b className="mono">{`${shown}（0x${shown.toString(16).toUpperCase()}，${shown.toString(2).padStart(d, '0')}）`}</b>}
+        </p>
+      )}
+      <p className="tip">
+        {k === 'bin' && '输出一根总线。点一下加 1，Shift 或 Alt 加点一下减 1。'}
+        {k === 'num' && '读一根总线，显示十六进制和十进制。'}
+        {k === 'split' && '左边一根总线，右边每一位一根线（0 是最低位）。拆分和合并都用它，可以旋转。'}
+        总线只能和同样位宽的引脚相连。
       </p>
     </>
   );
@@ -222,7 +273,9 @@ function PartProps({ part }: { part: Part }) {
       )}
       {k === 'in' && (
         <p className="tip">
-          当前值 <b>{simctl.sim.getInput(part.id) ?? 0}</b>。点击画布上的引脚切换。{project.chips.length > 0 || store.get().editing !== MAIN_ID ? '在芯片内部，输入引脚就是芯片的输入接口。' : ''}
+          当前值 <b>{VAL_NAME[simctl.pinValue(livePrefix() + part.id, 'o')]}</b>。
+          {store.get().live ? '这是芯片的输入接口，值来自外面的电路。' : '点击画布上的引脚切换。'}
+          {!store.get().live && (project.chips.length > 0 || store.get().editing !== MAIN_ID) ? '在芯片内部，输入引脚就是芯片的输入接口。' : ''}
         </p>
       )}
       {k === 'button' && <p className="tip">按住为 1，松开为 0。</p>}
@@ -243,6 +296,7 @@ function PartProps({ part }: { part: Part }) {
       )}
       {(k === 'dff' || k === 'jkff' || k === 'tff') && <p className="tip">在时钟输入的上升沿（0→1）动作。底部的 R 是异步清零端，接 1 时 Q 立即变 0，可以不接。</p>}
       {(k === 'rom' || k === 'ram' || k === 'reg') && <MemoryProps part={part} />}
+      {(k === 'bin' || k === 'num' || k === 'split') && <BusProps part={part} />}
       {k === 'tri' && <p className="tip">EN=1 时输出等于输入；EN=0 时输出高阻（Z），不影响导线上的其他信号。</p>}
       {k === 'mux' && <p className="tip">S=0 选输入 0，S=1 选输入 1。</p>}
       {k === 'chip' && def && (
@@ -250,9 +304,13 @@ function PartProps({ part }: { part: Part }) {
           <p className="tip">
             芯片“{def.name}”，{def.parts.filter((p) => p.kind === 'in').length} 个输入、{def.parts.filter((p) => p.kind === 'out').length} 个输出。
           </p>
-          <button className="btn wide" onClick={() => enterCircuit(def.id)}>
-            查看内部
+          <button className="btn wide" onClick={() => enterInstance(part.id)} data-testid="view-instance">
+            查看内部（实时信号）
           </button>
+          <button className="btn wide" onClick={() => enterCircuit(def.id)}>
+            单独编辑芯片定义
+          </button>
+          <p className="tip">“查看内部”显示这个实例此刻的信号；“单独编辑”把芯片拿出来，用它自己的输入单独仿真。</p>
         </>
       )}
       {k === 'chip' && !def && <p className="tip warn">这个芯片的定义已经被删除了。</p>}
@@ -278,7 +336,9 @@ function PartProps({ part }: { part: Part }) {
 function WireProps({ id, bent }: { id: string; bent: boolean }) {
   useSimVersion();
   const probed = simctl.isProbed(id);
-  const v = simctl.wireValue(id);
+  const live = useEditor((s) => s.live);
+  const wire = currentCircuit().wires.find((w) => w.id === id);
+  const v = wire ? simctl.pinValue(livePrefix() + wire.a.part, wire.a.pin) : simctl.wireValue(id);
   return (
     <div className="props">
       <h2>导线</h2>
@@ -288,6 +348,8 @@ function WireProps({ id, bent }: { id: string; bent: boolean }) {
       <button
         className={`btn wide${probed ? ' on' : ''}`}
         data-testid="probe"
+        disabled={!!live}
+        title={live ? '实时查看芯片内部时不能加探针；请回到外层电路' : undefined}
         onClick={() => {
           simctl.toggleProbe(id);
           if (!probed) store.set({ waveOpen: true });
@@ -314,7 +376,9 @@ function CircuitInfo() {
   const workspace = useEditor((s) => s.workspace);
   useSimVersion();
   const c = findCircuit(project, editing) ?? project.main;
-  const stats = circuitStats(project, editing, simctl.nl);
+  // The running netlist belongs to the simulated circuit, which differs while looking inside an instance.
+  const live = useEditor((s) => s.live);
+  const stats = circuitStats(project, editing, live ? undefined : simctl.nl);
   return (
     <div className="props">
       <h2>{editing === MAIN_ID ? (workspace.mode === 'level' ? '闯关电路' : '主电路') : '芯片'}</h2>

@@ -176,6 +176,20 @@ class SimController {
     this.onInputsChanged?.();
   }
 
+  /** Set a number input (masked to its width). */
+  setNumber(partId: string, value: number): void {
+    if (!this.sim.setInput(partId, Math.max(0, Math.floor(value)))) return;
+    this.deltaInTick = 0;
+    this.settleNow();
+    this.notify();
+    this.onInputsChanged?.();
+  }
+
+  /** Bits of a pin of the circuit on screen: one value for a plain pin, one per bit for a bus. */
+  pinBits(path: string, pin: string, width: number): Val[] {
+    return width === 1 ? [this.sim.pinValue(path, pin)] : this.sim.busValue(path, pin, width);
+  }
+
   setButton(partId: string, down: boolean): void {
     if (!this.sim.setInput(partId, down ? 1 : 0)) return;
     this.deltaInTick = 0;
@@ -183,7 +197,7 @@ class SimController {
     this.notify();
   }
 
-  inputValues(): Record<string, 0 | 1> {
+  inputValues(): Record<string, number> {
     return this.sim.inputValues();
   }
 

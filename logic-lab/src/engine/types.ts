@@ -24,6 +24,10 @@ export type PartKind =
   | 'rom' // read-only memory, contents edited in the inspector
   | 'ram' // read/write memory, written on the rising clock edge
   | 'reg' // n-bit register
+  | 'tunnel' // named connection: tunnels with the same label in a circuit are joined
+  | 'bin' // multi-bit number input (drives a bus)
+  | 'num' // multi-bit number display (reads a bus)
+  | 'split' // splitter: one bus pin ↔ one pin per bit
   | 'chip' // instance of a user-defined circuit
   | 'text'; // annotation
 
@@ -57,6 +61,8 @@ export interface Part {
   dbits?: number;
   /** ROM contents, one word per address. */
   data?: number[];
+  /** Number input: current value. */
+  num?: number;
 }
 
 export interface PinRef {

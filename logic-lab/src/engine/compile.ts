@@ -2,7 +2,17 @@
 // primitive components connected by nets. Nets are found with union-find over pins:
 // every wire joins its two pins; a chip instance's pins are joined with the matching
 // interface pins inside the chip definition.
-import { chipInterface, partSpec } from './parts.ts';
+import { chipInterface, partSpec, pinWidth } from './parts.ts';
+
+/** Keys of the bits of a pin: the pin itself, or "pin#0" … "pin#(w-1)" for a bus. */
+export function bitKeys(base: string, width: number): string[] {
+  return width === 1 ? [base] : Array.from({ length: width }, (_, i) => `${base}#${i}`);
+}
+
+/** Errors that make a circuit impossible to simulate (others just leave a wire unconnected). */
+export function isFatal(e: CompileError): boolean {
+  return e.kind === 'missing-chip' || e.kind === 'recursive-chip' || e.kind === 'too-large';
+}
 import type { Circuit, Part, PartKind, Project } from './types.ts';
 import { MAIN_ID } from './types.ts';
 
@@ -24,7 +34,7 @@ export interface Comp {
 }
 
 export interface CompileError {
-  kind: 'missing-chip' | 'recursive-chip' | 'too-large' | 'dangling-wire';
+  kind: 'missing-chip' | 'recursive-chip' | 'too-large' | 'dangling-wire' | 'width-mismatch';
   message: string;
   partId?: string;
 }
@@ -39,7 +49,7 @@ export interface Netlist {
   /** Driver slot → net. */
   slotNet: number[];
   slotCount: number;
-  /** Net of each pin of the root circuit, keyed "partId:pin". */
+  /** Net of every pin, keyed "partId:pin" for the root circuit and "inst/…/partId:pin" inside chips. */
   pinNet: Map<string, number>;
   /** Net of each wire of the root circuit. */
   wireNet: Map<string, number>;
@@ -109,10 +119,22 @@ export function compile(project: Project, rootId: string = MAIN_ID): Netlist {
   const flatten = (circuit: Circuit, prefix: string, stack: string[]): void => {
     const depth = stack.length - 1;
     const partById = new Map<string, Part>();
+    // Tunnels with the same label are one connection (within this circuit only).
+    const tunnels = new Map<string, number>();
     for (const part of circuit.parts) {
       partById.set(part.id, part);
       const key = (p: string) => `${prefix}${part.id}:${p}`;
       if (part.kind === 'text') continue;
+      if (part.kind === 'tunnel') {
+        const me = pin(key('p'));
+        const name = part.label?.trim();
+        if (name) {
+          const first = tunnels.get(name);
+          if (first === undefined) tunnels.set(name, me);
+          else uf.union(first, me);
+        }
+        continue;
+      }
       if (part.kind === 'chip') {
         const def = part.chip ? chipById.get(part.chip) : undefined;
         if (!def) {
@@ -131,10 +153,15 @@ export function compile(project: Project, rootId: string = MAIN_ID): Netlist {
         continue;
       }
       const spec = partSpec(part, project);
-      // Make sure every pin exists, even unconnected ones.
+      if (part.kind === 'split') {
+        // A splitter is pure wiring: bit i of the bus pin is the same net as pin b<i>.
+        spec.pins.forEach((s, i) => i > 0 && uf.union(pin(key(`bus#${i - 1}`)), pin(key(s.name))));
+        continue;
+      }
+      // Make sure every pin exists, even unconnected ones. A bus pin is one pin per bit.
       const ins: number[] = [];
       const outs: number[] = [];
-      for (const s of spec.pins) (s.dir === 'in' ? ins : outs).push(pin(key(s.name)));
+      for (const s of spec.pins) for (const k of bitKeys(key(s.name), pinWidth(s))) (s.dir === 'in' ? ins : outs).push(pin(k));
       // Interface pins of a chip are just connection points.
       if (depth > 0 && (part.kind === 'in' || part.kind === 'out')) continue;
       if (pending.length >= MAX_COMPONENTS) throw new TooLarge();
@@ -147,13 +174,19 @@ export function compile(project: Project, rootId: string = MAIN_ID): Netlist {
         if (depth === 0) errors.push({ kind: 'dangling-wire', message: '有连线的一端没有元件' });
         continue;
       }
-      const okA = partSpec(pa, project).pins.some((s) => s.name === w.a.pin);
-      const okB = partSpec(pb, project).pins.some((s) => s.name === w.b.pin);
-      if (!okA || !okB) {
+      const sa = partSpec(pa, project).pins.find((s) => s.name === w.a.pin);
+      const sb = partSpec(pb, project).pins.find((s) => s.name === w.b.pin);
+      if (!sa || !sb) {
         if (depth === 0) errors.push({ kind: 'dangling-wire', message: '有连线接在已不存在的引脚上（芯片接口改过？）' });
         continue;
       }
-      uf.union(pin(`${prefix}${w.a.part}:${w.a.pin}`), pin(`${prefix}${w.b.part}:${w.b.pin}`));
+      if (pinWidth(sa) !== pinWidth(sb)) {
+        if (depth === 0) errors.push({ kind: 'width-mismatch', message: `有连线两端位宽不同（${pinWidth(sa)} 位和 ${pinWidth(sb)} 位），没有接通` });
+        continue;
+      }
+      const ka = bitKeys(`${prefix}${w.a.part}:${w.a.pin}`, pinWidth(sa));
+      const kb = bitKeys(`${prefix}${w.b.part}:${w.b.pin}`, pinWidth(sb));
+      ka.forEach((k, i) => uf.union(pin(k), pin(kb[i])));
     }
   };
 
@@ -190,7 +223,7 @@ export function compile(project: Project, rootId: string = MAIN_ID): Netlist {
   }
 
   const pinNet = new Map<string, number>();
-  for (const [key, idx] of pinIndex) if (!key.includes('/')) pinNet.set(key, netOf(idx));
+  for (const [key, idx] of pinIndex) pinNet.set(key, netOf(idx));
   const wireNet = new Map<string, number>();
   if (root) {
     for (const w of root.wires) {

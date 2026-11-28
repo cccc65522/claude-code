@@ -523,3 +523,106 @@ test('scale: a 5000-gate chain settles (not mistaken for oscillation), a 64-bit 
   }
   assert.ok(performance.now() - t1 < 2000);
 });
+
+test('tunnels: same label connects, different label or different circuit does not', () => {
+  const chip = new CircuitBuilder('c', 'c');
+  chip.add('in', 0, 0, { id: 'ci', label: 'X' });
+  chip.add('tunnel', 4, 0, { id: 'ct', label: 'BUS' });
+  chip.add('out', 10, 0, { id: 'co', label: 'Y' });
+  chip.add('tunnel', 6, 4, { id: 'ct2', label: 'BUS' });
+  chip.wire('ci', 'ct.p').wire('ct2.p', 'co.i');
+  const p = projectWith(
+    (b) => {
+      b.add('in', 0, 0, { id: 'src' });
+      b.add('tunnel', 4, 0, { id: 't1', label: 'BUS' });
+      b.add('tunnel', 4, 6, { id: 't2', label: 'BUS' });
+      b.add('tunnel', 4, 12, { id: 't3', label: 'OTHER' });
+      b.add('led', 10, 6, { id: 'l2' });
+      b.add('led', 10, 12, { id: 'l3' });
+      b.add('chip', 4, 20, { id: 'inst', chip: 'c' });
+      b.add('led', 20, 20, { id: 'l4' });
+      b.wire('src', 't1.p').wire('t2.p', 'l2.i').wire('t3.p', 'l3.i').wire('inst.co', 'l4.i');
+    },
+    [chip.build()]
+  );
+  const sim = run(p);
+  sim.setInput('src', 1);
+  sim.settle();
+  assert.equal(sim.pinValue('l2', 'i'), 1);
+  assert.equal(sim.pinValue('l3', 'i'), VZ, 'different label: floating');
+  assert.equal(sim.pinValue('l4', 'i'), VZ, "the chip's BUS is its own: its input X is unconnected");
+});
+
+test('values inside chip instances can be read through their path', async () => {
+  const { EXAMPLES } = await import('../../src/engine/examples.ts');
+  const p = EXAMPLES.find((e) => e.id === 'adder4')!.build();
+  const sim = new Simulator(compile(p));
+  sim.setInput('A1', 1);
+  sim.setInput('B2', 1);
+  sim.settle();
+  // Inside the second full adder: its first XOR sees A1 ⊕ B1 = 1.
+  assert.equal(sim.pinValue('F1/x1', 'o'), 1);
+  assert.equal(sim.pinValue('F1/A', 'o'), 1, "the instance's interface pin carries the outside signal");
+  assert.equal(sim.pinValue('F2/x1', 'o'), 1);
+  assert.equal(sim.pinValue('F3/x1', 'o'), 0);
+  assert.equal(sim.pinValue('F0/S', 'i'), 0);
+  assert.equal(sim.pinValue('F1/S', 'i'), 1);
+});
+
+test('buses: number input → splitter → bits → splitter → number display', () => {
+  const p = projectWith((b) => {
+    b.add('bin', 0, 0, { id: 'n', dbits: 4, num: 9 });
+    b.add('split', 6, 0, { id: 's1', dbits: 4 });
+    b.add('not', 10, 0, { id: 'inv' });
+    b.add('split', 16, 0, { id: 's2', dbits: 4 });
+    b.add('num', 20, 0, { id: 'show', dbits: 4 });
+    b.wire('n.o', 's1.bus');
+    // Bits 1..3 straight across, bit 0 through an inverter.
+    b.wire('s1.b0', 'inv.i0').wire('inv.o', 's2.b0');
+    for (let i = 1; i < 4; i++) b.wire(`s1.b${i}`, `s2.b${i}`);
+    b.wire('s2.bus', 'show.i');
+  });
+  const nl = compile(p);
+  assert.deepEqual(nl.errors, []);
+  const sim = new Simulator(nl);
+  sim.settle();
+  const shown = () => sim.busValue('show', 'i', 4).reduce<number>((s, v, i) => s + (v << i), 0);
+  assert.equal(shown(), 8, '9 with bit 0 inverted');
+  sim.setInput('n', 6);
+  sim.settle();
+  assert.equal(shown(), 7);
+  sim.setInput('n', 31);
+  sim.settle();
+  assert.equal(sim.getInput('n'), 15, 'masked to the bus width');
+  assert.deepEqual(sim.inputValues(), { n: 15 });
+});
+
+test('buses: wires between pins of different widths are refused, not half-connected', () => {
+  const p = projectWith((b) => {
+    b.add('bin', 0, 0, { id: 'n', dbits: 4 });
+    b.add('led', 6, 0, { id: 'l' });
+    b.add('num', 6, 4, { id: 'w', dbits: 3 });
+    b.wire('n.o', 'l.i').wire('n.o', 'w.i');
+  });
+  const nl = compile(p);
+  assert.equal(nl.errors.filter((e) => e.kind === 'width-mismatch').length, 2);
+  const sim = new Simulator(nl);
+  sim.setInput('n', 15);
+  sim.settle();
+  assert.equal(sim.pinValue('l', 'i'), VZ);
+});
+
+test('buses: a 4-bit adder fed by number inputs through splitters', async () => {
+  const { EXAMPLES } = await import('../../src/engine/examples.ts');
+  const p = EXAMPLES.find((e) => e.id === 'adder-bus')!.build();
+  const nl = compile(p);
+  assert.deepEqual(nl.errors, []);
+  const sim = new Simulator(nl);
+  for (const [a, b] of [[3, 4], [9, 9], [15, 1], [0, 0], [7, 8]]) {
+    sim.setInput('A', a);
+    sim.setInput('B', b);
+    sim.settle();
+    const sum = sim.busValue('S', 'i', 5).reduce<number>((s, v, i) => s + (v << i), 0);
+    assert.equal(sum, a + b, `${a}+${b}`);
+  }
+});

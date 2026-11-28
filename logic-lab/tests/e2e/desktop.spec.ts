@@ -554,3 +554,86 @@ test('export the circuit as SVG and PNG images', async ({ page }) => {
   expect([...png.subarray(1, 4)].map((c) => String.fromCharCode(c)).join('')).toBe('PNG');
   expect(png.readUInt32BE(16)).toBeGreaterThan(400); // width
 });
+
+test('tunnels with the same name are connected without a wire', async ({ page }) => {
+  await fresh(page);
+  await newBlank(page);
+  await page.locator('.palette-item[data-kind="in"]').click();
+  await page.locator('.palette-item[data-kind="tunnel"]').click();
+  await page.locator('.palette-item[data-kind="tunnel"]').click();
+  await page.locator('.palette-item[data-kind="led"]').click();
+  const [i] = await partIds(page, 'in');
+  const [t1, t2] = await partIds(page, 'tunnel');
+  const [l] = await partIds(page, 'led');
+  await dragWire(page, [i, 'o'], [t1, 'p']);
+  await dragWire(page, [t2, 'p'], [l, 'i']);
+  const led = page.locator(`.canvas [data-part="${l}"] circle.led`);
+  await clickPart(page, i);
+  await expect(led).toHaveClass(/v1/); // both tunnels start out named N1
+  await clickPart(page, t2);
+  const name = page.locator('.field', { hasText: '名字' }).locator('input');
+  await name.fill('别的');
+  await name.press('Enter');
+  await expect(page.locator(`.canvas [data-part="${t2}"] .tunnel-text`)).toHaveText('别的');
+  await expect(led).toHaveClass(/vz/);
+});
+
+test('looking inside a chip instance shows its live signals', async ({ page }) => {
+  await fresh(page);
+  await openExample(page, 'adder4');
+  await clickPart(page, await partByLabel(page, 'in', 'A1'));
+  // Open the second full adder (bit 1) from the inspector.
+  await clickPart(page, 'F1');
+  await page.getByTestId('view-instance').click();
+  const crumb = page.getByTestId('breadcrumb');
+  await expect(crumb).toContainText('全加器');
+  await expect(crumb).toHaveClass(/live/);
+  // Inside: A = 1, B = 0, Cin = 0 → S = 1, Cout = 0.
+  await expect(readout(page, 'A')).toHaveText('1');
+  await expect(readout(page, 'S')).toHaveText('1');
+  await expect(readout(page, 'Co')).toHaveText('0');
+  // Interface pins can't be toggled from inside: their value comes from outside.
+  await clickPart(page, 'B');
+  await expect(readout(page, 'B')).toHaveText('0');
+  // Back out, change an input, double-click straight into the same instance.
+  await crumb.getByRole('button', { name: '主电路' }).click();
+  await clickPart(page, await partByLabel(page, 'in', 'B1'));
+  await page.locator('.canvas [data-part="F1"]').dblclick();
+  await expect(readout(page, 'S')).toHaveText('0');
+  await expect(readout(page, 'Co')).toHaveText('1');
+  // The standalone editor is still available from the chips tab.
+  await crumb.getByRole('button', { name: '← 返回上一层' }).click();
+  await expect(page.getByTestId('breadcrumb')).toHaveCount(0);
+});
+
+test('buses: number inputs, splitters and a number display', async ({ page }) => {
+  await fresh(page);
+  await openExample(page, 'adder-bus');
+  const shown = page.locator('.canvas [data-part="S"] .num-hex');
+  await expect(shown).toHaveText('8'); // 5 + 3
+  await clickPart(page, 'A'); // click counts up: 6 + 3
+  await expect(shown).toHaveText('9');
+  await expect(page.locator('.canvas .wire.bus .bus-label').first()).toBeVisible();
+  // Type a value in the inspector: 0xF + 3 = 18 = 0x12.
+  const field = page.locator('#bin-value');
+  await field.fill('0xF');
+  await field.press('Enter');
+  await expect(shown).toHaveText('12');
+  await expect(page.locator('.canvas [data-part="S"] .num-dec')).toHaveText('18');
+  await field.fill('99');
+  await field.press('Enter');
+  await expect(page.getByTestId('toast')).toContainText('0 到 15');
+  // Shift+click counts down.
+  await page.locator('.canvas [data-part="B"]').click({ modifiers: ['Shift'] });
+  await expect(shown).toHaveText('11');
+
+  // A bus can't be wired straight to a 1-bit pin.
+  await newBlank(page);
+  await page.locator('.palette-item[data-kind="bin"]').click();
+  await page.locator('.palette-item[data-kind="led"]').click();
+  const [n] = await partIds(page, 'bin');
+  const [l] = await partIds(page, 'led');
+  await dragWire(page, [n, 'o'], [l, 'i']);
+  await expect(page.getByTestId('toast')).toContainText('位宽不同');
+  expect(await wireCount(page)).toBe(0);
+});
