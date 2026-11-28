@@ -1,0 +1,12 @@
+{
+  "name": "safari-smoke",
+  "private": true,
+  "description": "Opens every published app in WebKit (Safari's engine) at iPhone size and checks it starts without errors",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
